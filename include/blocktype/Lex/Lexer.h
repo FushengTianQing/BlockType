@@ -40,6 +40,7 @@ class Lexer {
   // Flags
   bool IsAtStartOfLine = true;
   bool IsInPreprocessorDirective = false;
+  bool KeepComments = false;  // B2.7: Option to retain comments as tokens
 
 public:
   /// Constructs a lexer for the given buffer.
@@ -67,6 +68,12 @@ public:
 
   /// Returns true if at the start of a line.
   bool isAtStartOfLine() const { return IsAtStartOfLine; }
+
+  /// Sets whether to keep comments as tokens (B2.7).
+  void setKeepComments(bool Keep) { KeepComments = Keep; }
+
+  /// Returns true if comments are being kept as tokens.
+  bool isKeepingComments() const { return KeepComments; }
 
 private:
   //===--------------------------------------------------------------------===//
@@ -100,6 +107,10 @@ private:
 
   /// Skips a block comment (/* */).
   void skipBlockComment();
+
+  /// Processes an escape sequence starting at BufferPtr.
+  /// Returns true if a valid escape sequence was processed.
+  bool processEscapeSequence();
 
   //===--------------------------------------------------------------------===//
   // Token formation

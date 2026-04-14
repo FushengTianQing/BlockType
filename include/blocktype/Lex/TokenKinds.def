@@ -48,6 +48,12 @@ TOKEN(utf8_string_literal)   // UTF-8 string u8"..." (C++11)
 TOKEN(utf16_string_literal)  // UTF-16 string u"..." (C++11)
 TOKEN(utf32_string_literal)  // UTF-32 string U"..." (C++11)
 
+// User-defined literals (B2.4)
+TOKEN(user_defined_integer_literal)    // Integer literal with suffix: 123_i
+TOKEN(user_defined_floating_literal)   // Floating literal with suffix: 3.14_m
+TOKEN(user_defined_string_literal)     // String literal with suffix: "hello"_s
+TOKEN(user_defined_char_literal)       // Character literal with suffix: 'c'_ch
+
 // Comments (optional, for documentation tools)
 TOKEN(comment)          // Comment token
 

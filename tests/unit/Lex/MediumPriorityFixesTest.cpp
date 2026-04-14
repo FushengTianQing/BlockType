@@ -396,14 +396,153 @@ TEST_F(MediumPriorityFixesTest, UTF8StringLiteral) {
 TEST_F(MediumPriorityFixesTest, KeywordRangeCheck) {
   // Test that isKeyword correctly identifies keywords
   Lexer Lex(SM, *Diags, "int auto return", SM.createMainFileID("test.cpp", "int auto return"));
-  
+
   Token Tok;
   ASSERT_TRUE(Lex.lexToken(Tok));
   EXPECT_TRUE(isKeyword(Tok.getKind())); // int
-  
+
   ASSERT_TRUE(Lex.lexToken(Tok));
   EXPECT_TRUE(isKeyword(Tok.getKind())); // auto
-  
+
   ASSERT_TRUE(Lex.lexToken(Tok));
   EXPECT_TRUE(isKeyword(Tok.getKind())); // return
+}
+
+// Test 31: Line splicing (backslash-newline) - A2.3
+TEST_F(MediumPriorityFixesTest, LineSplicing) {
+  PP->enterSourceFile("test.cpp", "int\\\nx = 1;\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::kw_int);
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::identifier);
+  EXPECT_EQ(Tok.getText(), "x");
+}
+
+// Test 32: User-defined integer literal - B2.4
+TEST_F(MediumPriorityFixesTest, UserDefinedIntegerLiteral) {
+  PP->enterSourceFile("test.cpp", "123_i 42_km\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_integer_literal);
+  EXPECT_EQ(Tok.getText(), "123_i");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_integer_literal);
+  EXPECT_EQ(Tok.getText(), "42_km");
+}
+
+// Test 33: User-defined floating literal - B2.4
+TEST_F(MediumPriorityFixesTest, UserDefinedFloatingLiteral) {
+  PP->enterSourceFile("test.cpp", "3.14_m 2.5e10_s\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_floating_literal);
+  EXPECT_EQ(Tok.getText(), "3.14_m");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_floating_literal);
+  EXPECT_EQ(Tok.getText(), "2.5e10_s");
+}
+
+// Test 34: User-defined string literal - B2.4
+TEST_F(MediumPriorityFixesTest, UserDefinedStringLiteral) {
+  PP->enterSourceFile("test.cpp", "\"hello\"_s \"world\"_str\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_string_literal);
+  EXPECT_EQ(Tok.getText(), "\"hello\"_s");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_string_literal);
+  EXPECT_EQ(Tok.getText(), "\"world\"_str");
+}
+
+// Test 35: User-defined character literal - B2.4
+TEST_F(MediumPriorityFixesTest, UserDefinedCharLiteral) {
+  PP->enterSourceFile("test.cpp", "'x'_ch 'a'_c\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_char_literal);
+  EXPECT_EQ(Tok.getText(), "'x'_ch");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::user_defined_char_literal);
+  EXPECT_EQ(Tok.getText(), "'a'_c");
+}
+
+// Test 36: Escape sequence \e (C++23) - B2.5
+TEST_F(MediumPriorityFixesTest, EscapeSequenceE) {
+  PP->enterSourceFile("test.cpp", "\"\\e\" '\\e'\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::string_literal);
+  EXPECT_EQ(Tok.getText(), "\"\\e\"");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::char_constant);
+  EXPECT_EQ(Tok.getText(), "'\\e'");
+}
+
+// Test 37: Hex escape \xHH - B2.6
+TEST_F(MediumPriorityFixesTest, HexEscape) {
+  PP->enterSourceFile("test.cpp", "\"\\x41\" '\\xFF'\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::string_literal);
+  EXPECT_EQ(Tok.getText(), "\"\\x41\"");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::char_constant);
+  EXPECT_EQ(Tok.getText(), "'\\xFF'");
+}
+
+// Test 38: Octal escape \OOO - B2.6
+TEST_F(MediumPriorityFixesTest, OctalEscape) {
+  PP->enterSourceFile("test.cpp", "\"\\101\" '\\377'\n");
+
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::string_literal);
+  EXPECT_EQ(Tok.getText(), "\"\\101\"");
+
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::char_constant);
+  EXPECT_EQ(Tok.getText(), "'\\377'");
+}
+
+// Test 39: Comment retention option - B2.7
+TEST_F(MediumPriorityFixesTest, CommentRetention) {
+  Lexer Lex(SM, *Diags, "// comment\nint x;", SM.createMainFileID("test.cpp", "// comment\nint x;"));
+  Lex.setKeepComments(true);
+
+  Token Tok;
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::comment);
+  EXPECT_EQ(Tok.getText(), "// comment");
+
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::kw_int);
+}
+
+// Test 40: Block comment retention - B2.7
+TEST_F(MediumPriorityFixesTest, BlockCommentRetention) {
+  Lexer Lex(SM, *Diags, "/* block */ int x;", SM.createMainFileID("test.cpp", "/* block */ int x;"));
+  Lex.setKeepComments(true);
+
+  Token Tok;
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::comment);
+  EXPECT_EQ(Tok.getText(), "/* block */");
+
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::kw_int);
 }

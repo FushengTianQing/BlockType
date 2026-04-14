@@ -84,6 +84,33 @@ bool Lexer::lexToken(Token &Result) {
     IsAtStartOfLine = false;
   }
 
+  // B2.7: Handle comments as tokens if KeepComments is set
+  if (KeepComments && C == '/' && BufferPtr + 1 < BufferEnd) {
+    char Next = *(BufferPtr + 1);
+    if (Next == '/') {
+      // Line comment
+      BufferPtr += 2;
+      while (BufferPtr < BufferEnd && *BufferPtr != '\n') {
+        ++BufferPtr;
+      }
+      return formToken(Result, TokenKind::comment, TokStart);
+    }
+    if (Next == '*') {
+      // Block comment
+      BufferPtr += 2;
+      while (BufferPtr + 1 < BufferEnd) {
+        if (*BufferPtr == '*' && *(BufferPtr + 1) == '/') {
+          BufferPtr += 2;
+          return formToken(Result, TokenKind::comment, TokStart);
+        }
+        ++BufferPtr;
+      }
+      // Unterminated block comment
+      BufferPtr = BufferEnd;
+      return formToken(Result, TokenKind::comment, TokStart);
+    }
+  }
+
   // Dispatch based on first character
   switch (C) {
   // Identifiers and keywords (excluding L, u, U, R which may be literals)
@@ -217,21 +244,44 @@ void Lexer::skipWhitespaceAndComments() {
       break;
     }
 
+    // Line splicing (backslash-newline) - A2.3
+    // This must be handled before other whitespace
+    if (C == '\\') {
+      if (BufferPtr + 1 < BufferEnd && *(BufferPtr + 1) == '\n') {
+        // Remove backslash-newline pair
+        BufferPtr += 2;
+        continue;
+      }
+      // Also handle backslash-CR-LF (Windows line endings)
+      if (BufferPtr + 2 < BufferEnd && *(BufferPtr + 1) == '\r' && *(BufferPtr + 2) == '\n') {
+        BufferPtr += 3;
+        continue;
+      }
+    }
+
     // Whitespace
     if (std::isspace(static_cast<unsigned char>(C))) {
       consumeChar();
       continue;
     }
 
-    // Comments
+    // Comments - B2.7: Skip only if not keeping comments
     if (C == '/') {
       if (BufferPtr + 1 < BufferEnd) {
         char Next = *(BufferPtr + 1);
         if (Next == '/') {
+          // B2.7: If keeping comments, don't skip - let lexToken handle it
+          if (KeepComments) {
+            break;
+          }
           skipLineComment();
           continue;
         }
         if (Next == '*') {
+          // B2.7: If keeping comments, don't skip - let lexToken handle it
+          if (KeepComments) {
+            break;
+          }
           skipBlockComment();
           continue;
         }
@@ -269,6 +319,83 @@ void Lexer::skipBlockComment() {
   // Unterminated block comment
   BufferPtr = BufferEnd;
   Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated block comment");
+}
+
+bool Lexer::processEscapeSequence() {
+  // Assumes BufferPtr points to the character after backslash
+  if (BufferPtr >= BufferEnd) return false;
+
+  char C = *BufferPtr;
+
+  // B2.5: C++23 escape sequence \e (ESC character, 0x1B)
+  if (C == 'e' || C == 'E') {
+    ++BufferPtr;
+    return true;
+  }
+
+  // B2.6: Hex escape \xHH
+  if (C == 'x') {
+    ++BufferPtr;
+    // Must have at least one hex digit
+    if (BufferPtr < BufferEnd && std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+      ++BufferPtr;
+      // Consume remaining hex digits (up to implementation limit)
+      while (BufferPtr < BufferEnd && std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+        ++BufferPtr;
+      }
+      return true;
+    }
+    Diags.report(getSourceLocation(), DiagLevel::Error, 
+                 "invalid hex escape sequence: expected hex digit after \\x");
+    return false;
+  }
+
+  // B2.6: Octal escape \OOO (1-3 octal digits)
+  if (C >= '0' && C <= '7') {
+    ++BufferPtr;
+    // Up to 2 more octal digits
+    int digits = 1;
+    while (digits < 3 && BufferPtr < BufferEnd && 
+           *BufferPtr >= '0' && *BufferPtr <= '7') {
+      ++BufferPtr;
+      ++digits;
+    }
+    return true;
+  }
+
+  // Unicode escape \uXXXX
+  if (C == 'u') {
+    ++BufferPtr;
+    for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
+      if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+        ++BufferPtr;
+      } else {
+        Diags.report(getSourceLocation(), DiagLevel::Error, 
+                     "invalid universal character name: expected 4 hex digits after \\u");
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Unicode escape \UXXXXXXXX
+  if (C == 'U') {
+    ++BufferPtr;
+    for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
+      if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+        ++BufferPtr;
+      } else {
+        Diags.report(getSourceLocation(), DiagLevel::Error, 
+                     "invalid universal character name: expected 8 hex digits after \\U");
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Simple escape sequences: \n, \t, \r, \a, \b, \f, \v, \\, \', \", \?
+  ++BufferPtr;
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -481,17 +608,38 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
     }
   }
 
-  // Suffix
+  // Suffix - B2.4: User-defined literal suffix
+  // Standard suffixes (like ULL, f, L) and user-defined suffixes (starting with _)
+  const char *SuffixStart = BufferPtr;
+  bool HasUserDefinedSuffix = false;
   while (BufferPtr < BufferEnd) {
     char C = *BufferPtr;
     if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+      if (C == '_' && BufferPtr == SuffixStart) {
+        HasUserDefinedSuffix = true;
+      }
       ++BufferPtr;
     } else {
       break;
     }
   }
 
-  return formToken(Result, TokenKind::numeric_constant, Start);
+  // Determine token kind based on suffix
+  TokenKind Kind = TokenKind::numeric_constant;
+  if (HasUserDefinedSuffix) {
+    // Check if it's floating or integer based on whether it has a decimal point or exponent
+    bool IsFloat = false;
+    for (const char *p = Start; p < SuffixStart; ++p) {
+      if (*p == '.' || *p == 'e' || *p == 'E' || *p == 'p' || *p == 'P') {
+        IsFloat = true;
+        break;
+      }
+    }
+    Kind = IsFloat ? TokenKind::user_defined_floating_literal 
+                   : TokenKind::user_defined_integer_literal;
+  }
+
+  return formToken(Result, Kind, Start);
 }
 
 bool Lexer::lexCharConstant(Token &Result, const char *Start) {
@@ -501,36 +649,7 @@ bool Lexer::lexCharConstant(Token &Result, const char *Start) {
   while (BufferPtr < BufferEnd && *BufferPtr != '\'') {
     if (*BufferPtr == '\\') {
       ++BufferPtr; // Skip backslash
-      if (BufferPtr < BufferEnd) {
-        // Handle Unicode escape sequences
-        if (*BufferPtr == 'u') {
-          ++BufferPtr; // Skip 'u'
-          // \uXXXX - exactly 4 hex digits
-          for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
-            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-              ++BufferPtr;
-            } else {
-              Diags.report(getSourceLocation(), DiagLevel::Error, 
-                           "invalid universal character name: expected 4 hex digits after \\u");
-              break;
-            }
-          }
-        } else if (*BufferPtr == 'U') {
-          ++BufferPtr; // Skip 'U'
-          // \UXXXXXXXX - exactly 8 hex digits
-          for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
-            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-              ++BufferPtr;
-            } else {
-              Diags.report(getSourceLocation(), DiagLevel::Error, 
-                           "invalid universal character name: expected 8 hex digits after \\U");
-              break;
-            }
-          }
-        } else {
-          ++BufferPtr; // Skip other escape character
-        }
-      }
+      processEscapeSequence();
     } else if (*BufferPtr == '\n') {
       // Unterminated character constant
       Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
@@ -546,6 +665,19 @@ bool Lexer::lexCharConstant(Token &Result, const char *Start) {
     Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
   }
 
+  // B2.4: Check for user-defined literal suffix
+  if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+    while (BufferPtr < BufferEnd) {
+      char C = *BufferPtr;
+      if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+        ++BufferPtr;
+      } else {
+        break;
+      }
+    }
+    return formToken(Result, TokenKind::user_defined_char_literal, Start);
+  }
+
   return formToken(Result, TokenKind::char_constant, Start);
 }
 
@@ -556,36 +688,7 @@ bool Lexer::lexStringLiteral(Token &Result, const char *Start) {
   while (BufferPtr < BufferEnd && *BufferPtr != '"') {
     if (*BufferPtr == '\\') {
       ++BufferPtr; // Skip backslash
-      if (BufferPtr < BufferEnd) {
-        // Handle Unicode escape sequences
-        if (*BufferPtr == 'u') {
-          ++BufferPtr; // Skip 'u'
-          // \uXXXX - exactly 4 hex digits
-          for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
-            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-              ++BufferPtr;
-            } else {
-              Diags.report(getSourceLocation(), DiagLevel::Error, 
-                           "invalid universal character name: expected 4 hex digits after \\u");
-              break;
-            }
-          }
-        } else if (*BufferPtr == 'U') {
-          ++BufferPtr; // Skip 'U'
-          // \UXXXXXXXX - exactly 8 hex digits
-          for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
-            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-              ++BufferPtr;
-            } else {
-              Diags.report(getSourceLocation(), DiagLevel::Error, 
-                           "invalid universal character name: expected 8 hex digits after \\U");
-              break;
-            }
-          }
-        } else {
-          ++BufferPtr; // Skip other escape character
-        }
-      }
+      processEscapeSequence();
     } else if (*BufferPtr == '\n') {
       // Unterminated string literal
       Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated string literal");
@@ -599,6 +702,19 @@ bool Lexer::lexStringLiteral(Token &Result, const char *Start) {
     ++BufferPtr; // Skip closing quote
   } else {
     Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated string literal");
+  }
+
+  // B2.4: Check for user-defined literal suffix
+  if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+    while (BufferPtr < BufferEnd) {
+      char C = *BufferPtr;
+      if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+        ++BufferPtr;
+      } else {
+        break;
+      }
+    }
+    return formToken(Result, TokenKind::user_defined_string_literal, Start);
   }
 
   return formToken(Result, TokenKind::string_literal, Start);
@@ -643,34 +759,7 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
     while (BufferPtr < BufferEnd && *BufferPtr != '\'') {
       if (*BufferPtr == '\\') {
         ++BufferPtr;
-        if (BufferPtr < BufferEnd) {
-          // Handle Unicode escape sequences
-          if (*BufferPtr == 'u') {
-            ++BufferPtr;
-            for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
-              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-                ++BufferPtr;
-              } else {
-                Diags.report(getSourceLocation(), DiagLevel::Error, 
-                             "invalid universal character name: expected 4 hex digits after \\u");
-                break;
-              }
-            }
-          } else if (*BufferPtr == 'U') {
-            ++BufferPtr;
-            for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
-              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-                ++BufferPtr;
-              } else {
-                Diags.report(getSourceLocation(), DiagLevel::Error, 
-                             "invalid universal character name: expected 8 hex digits after \\U");
-                break;
-              }
-            }
-          } else {
-            ++BufferPtr;
-          }
-        }
+        processEscapeSequence();
       } else if (*BufferPtr == '\n') {
         Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
         break;
@@ -684,7 +773,20 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
     } else {
       Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
     }
-    
+
+    // B2.4: Check for user-defined literal suffix
+    if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+      while (BufferPtr < BufferEnd) {
+        char C = *BufferPtr;
+        if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+          ++BufferPtr;
+        } else {
+          break;
+        }
+      }
+      return formToken(Result, TokenKind::user_defined_char_literal, Start);
+    }
+
     return formToken(Result, Kind, Start);
   }
 
@@ -709,34 +811,7 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
     while (BufferPtr < BufferEnd && *BufferPtr != '"') {
       if (*BufferPtr == '\\') {
         ++BufferPtr;
-        if (BufferPtr < BufferEnd) {
-          // Handle Unicode escape sequences
-          if (*BufferPtr == 'u') {
-            ++BufferPtr;
-            for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
-              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-                ++BufferPtr;
-              } else {
-                Diags.report(getSourceLocation(), DiagLevel::Error, 
-                             "invalid universal character name: expected 4 hex digits after \\u");
-                break;
-              }
-            }
-          } else if (*BufferPtr == 'U') {
-            ++BufferPtr;
-            for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
-              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
-                ++BufferPtr;
-              } else {
-                Diags.report(getSourceLocation(), DiagLevel::Error, 
-                             "invalid universal character name: expected 8 hex digits after \\U");
-                break;
-              }
-            }
-          } else {
-            ++BufferPtr;
-          }
-        }
+        processEscapeSequence();
       } else {
         ++BufferPtr;
       }
@@ -744,6 +819,19 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
 
     if (BufferPtr < BufferEnd && *BufferPtr == '"') {
       ++BufferPtr;
+    }
+
+    // B2.4: Check for user-defined literal suffix
+    if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+      while (BufferPtr < BufferEnd) {
+        char C = *BufferPtr;
+        if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+          ++BufferPtr;
+        } else {
+          break;
+        }
+      }
+      return formToken(Result, TokenKind::user_defined_string_literal, Start);
     }
 
     return formToken(Result, Kind, Start);
