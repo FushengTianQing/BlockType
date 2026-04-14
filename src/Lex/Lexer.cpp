@@ -32,7 +32,7 @@ static const std::unordered_map<std::string, TokenKind> EnglishKeywords = {
 
 // Chinese keyword lookup table
 static const std::unordered_map<std::string, TokenKind> ChineseKeywords = {
-#define KEYWORD_ZH(X, Y) {#X, TokenKind::kw_##X##_zh},
+#define KEYWORD_ZH(X, Y) {#X, TokenKind::Y},
 #include "blocktype/Lex/TokenKinds.def"
 #undef KEYWORD_ZH
 };
@@ -59,6 +59,15 @@ bool Lexer::lexToken(Token &Result) {
   // Skip whitespace and comments
   skipWhitespaceAndComments();
 
+  // In preprocessor directive mode, check for end of directive (newline)
+  if (IsInPreprocessorDirective && BufferPtr < BufferEnd && *BufferPtr == '\n') {
+    consumeChar();  // Consume the newline
+    IsInPreprocessorDirective = false;
+    Result.setKind(TokenKind::eod);
+    Result.setLocation(getSourceLocation());
+    return true;
+  }
+
   // Check for EOF
   if (isEOF()) {
     Result.setKind(TokenKind::eof);
@@ -68,6 +77,12 @@ bool Lexer::lexToken(Token &Result) {
 
   const char *TokStart = BufferPtr;
   char C = *BufferPtr;
+
+  // After skipping whitespace, we're no longer at start of line
+  // (unless we're about to lex a # directive)
+  if (C != '#') {
+    IsAtStartOfLine = false;
+  }
 
   // Dispatch based on first character
   switch (C) {
@@ -136,6 +151,7 @@ Token Lexer::peekNextToken() {
   // Save current state
   const char *SavedPtr = BufferPtr;
   bool SavedAtStartOfLine = IsAtStartOfLine;
+  bool SavedInPreprocessorDirective = IsInPreprocessorDirective;
 
   // Lex the next token
   Token Result;
@@ -144,6 +160,7 @@ Token Lexer::peekNextToken() {
   // Restore state
   BufferPtr = SavedPtr;
   IsAtStartOfLine = SavedAtStartOfLine;
+  IsInPreprocessorDirective = SavedInPreprocessorDirective;
 
   return Result;
 }
@@ -194,6 +211,11 @@ void Lexer::consumeChars(unsigned N) {
 void Lexer::skipWhitespaceAndComments() {
   while (BufferPtr < BufferEnd) {
     char C = *BufferPtr;
+
+    // In preprocessor directive mode, stop at newline
+    if (IsInPreprocessorDirective && C == '\n') {
+      break;
+    }
 
     // Whitespace
     if (std::isspace(static_cast<unsigned char>(C))) {
@@ -272,13 +294,17 @@ bool Lexer::formIdentifierToken(Token &Result, const char *TokStart) {
   Result.setLength(static_cast<unsigned>(BufferPtr - TokStart));
   Result.setLiteralData(TokStart);
 
-  // Set language for keywords
+  // Set language for keywords - check if text contains Chinese characters
   if (isKeyword(Kind)) {
-    if (isChineseKeyword(Kind)) {
-      Result.setSourceLanguage(Language::Chinese);
-    } else {
-      Result.setSourceLanguage(Language::English);
+    // Check if the text contains non-ASCII characters (Chinese)
+    bool hasChinese = false;
+    for (size_t i = 0; i < Text.size(); ++i) {
+      if (static_cast<unsigned char>(Text[i]) >= 0x80) {
+        hasChinese = true;
+        break;
+      }
     }
+    Result.setSourceLanguage(hasChinese ? Language::Chinese : Language::English);
   }
 
   return true;
@@ -478,6 +504,13 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
   char Prefix = *BufferPtr;
   ++BufferPtr;
 
+  // Check for u8 prefix (UTF-8 literal)
+  bool IsUTF8 = false;
+  if (Prefix == 'u' && BufferPtr < BufferEnd && *BufferPtr == '8') {
+    IsUTF8 = true;
+    ++BufferPtr;
+  }
+
   // Check for raw string literal (R"...")
   if (Prefix == 'R' && BufferPtr < BufferEnd && *BufferPtr == '"') {
     return lexRawStringLiteral(Result, Start);
@@ -486,20 +519,7 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
   // Check for prefix followed by quote
   if (BufferPtr < BufferEnd && *BufferPtr == '\'') {
     // Character literal - determine kind and lex
-    switch (Prefix) {
-    case 'L':
-      return lexCharConstant(Result, Start);
-    case 'u':
-      if (BufferPtr + 1 < BufferEnd && *(BufferPtr + 1) == '8') {
-        // u8' - UTF-8 character (C++20)
-        ++BufferPtr;
-      }
-      return lexCharConstant(Result, Start);
-    case 'U':
-      return lexCharConstant(Result, Start);
-    default:
-      return lexCharConstant(Result, Start);
-    }
+    return lexCharConstant(Result, Start);
   }
 
   if (BufferPtr < BufferEnd && *BufferPtr == '"') {
@@ -508,9 +528,7 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
     switch (Prefix) {
     case 'L': Kind = TokenKind::wide_string_literal; break;
     case 'u':
-      if (BufferPtr + 1 < BufferEnd && *(BufferPtr + 1) == '8') {
-        // u8" - UTF-8 string
-        ++BufferPtr;
+      if (IsUTF8) {
         Kind = TokenKind::utf8_string_literal;
       } else {
         Kind = TokenKind::utf16_string_literal;

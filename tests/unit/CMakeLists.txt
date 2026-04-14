@@ -12,3 +12,6 @@ target_link_libraries(blocktype-tests
 )
 
 gtest_discover_tests(blocktype-tests)
+
+# Lex 单元测试
+add_subdirectory(Lex)

@@ -145,7 +145,7 @@ bool Preprocessor::lexToken(Token &Result) {
       StringRef Name = Result.getText();
       if (MacroInfo *MI = getMacroInfo(Name)) {
         if (expandMacro(Result, Name, MI)) {
-          continue;
+          return true;  // Return the expanded token
         }
       }
     }
@@ -218,18 +218,23 @@ std::vector<StringRef> Preprocessor::getMacroNames() const {
 //===----------------------------------------------------------------------===//
 
 void Preprocessor::handleDirective(Token &HashTok) {
+  // Set preprocessor directive mode
+  CurLexer->setInPreprocessorDirective(true);
+
   Token DirectiveTok;
   if (!lexFromLexer(DirectiveTok)) {
+    CurLexer->setInPreprocessorDirective(false);
     Diags.report(HashTok.getLocation(), DiagLevel::Error, "unexpected end of file in directive");
     return;
   }
 
-  if (DirectiveTok.getSourceLanguage() == Language::Chinese) {
+  StringRef DirectiveName = getDirectiveName(DirectiveTok);
+
+  // Check if it's a Chinese directive
+  if (ChineseDirectiveMap.find(DirectiveName.str()) != ChineseDirectiveMap.end()) {
     handleBilingualDirective(DirectiveTok);
     return;
   }
-
-  StringRef DirectiveName = getDirectiveName(DirectiveTok);
 
   if (DirectiveName == "include") {
     handleIncludeDirective(DirectiveTok, false);
@@ -475,6 +480,10 @@ void Preprocessor::handleIfdefDirective(Token &IfdefTok) {
 
   bool IsDefined = isMacroDefined(MacroNameTok.getText());
 
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
+
   ConditionalInfo CI;
   CI.WasSkipping = Skipping;
   CI.FoundNonSkip = IsDefined;
@@ -493,6 +502,10 @@ void Preprocessor::handleIfndefDirective(Token &IfndefTok) {
   }
 
   bool IsNotDefined = !isMacroDefined(MacroNameTok.getText());
+
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
 
   ConditionalInfo CI;
   CI.WasSkipping = Skipping;
@@ -548,6 +561,10 @@ void Preprocessor::handleElseDirective(Token &ElseTok) {
 
   CI.FoundElse = true;
   Skipping = CI.WasSkipping || CI.FoundNonSkip;
+
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
 }
 
 void Preprocessor::handleEndifDirective(Token &EndifTok) {
@@ -559,6 +576,10 @@ void Preprocessor::handleEndifDirective(Token &EndifTok) {
   ConditionalInfo CI = ConditionalStack.back();
   ConditionalStack.pop_back();
   Skipping = CI.WasSkipping;
+
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
 }
 
 bool Preprocessor::evaluateCondition(ArrayRef<Token> Tokens) {
