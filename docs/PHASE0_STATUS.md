@@ -218,3 +218,20 @@ Phase 0 的主要工作已经完成，包括：
 
 **创建时间**: 2026-04-14
 **最后更新**: 2026-04-14
+
+## 更新记录
+
+### 2026-04-14 18:06 - Git 提交完成
+
+- ✅ 已将所有代码提交到 Git 仓库
+- ✅ 已排除 plan 文件夹（内部文档）
+- ✅ 提交信息：`feat: complete Phase 0 - project infrastructure`
+- ✅ 提交统计：52 个文件，2738 行代码
+
+**Git 提交哈希**: `907c996`
+
+**下一步**:
+1. 安装依赖：`brew install cmake llvm@18 icu4c`
+2. 构建项目：`./scripts/build.sh Debug`
+3. 运行测试：`./scripts/test.sh build-debug`
+4. 验证功能：`./build-debug/bin/blocktype --version`
