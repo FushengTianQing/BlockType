@@ -1,9 +1,13 @@
 add_executable(blocktype-tests
   Basic/SourceLocationTest.cpp
+  AI/ResponseCacheTest.cpp
+  AI/CostTrackerTest.cpp
+  AI/AIOrchestratorTest.cpp
 )
 
 target_link_libraries(blocktype-tests
   blocktype-basic
+  blocktype-ai
   GTest::gtest_main
 )
 
