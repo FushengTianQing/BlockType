@@ -77,14 +77,31 @@ private:
   );
 };
 
+/// 批处理错误处理策略
+enum class BatchErrorStrategy {
+  Continue,      // 继续执行剩余请求
+  StopOnFailure, // 遇到失败立即停止
+  RetryFailed    // 重试失败的请求
+};
+
+/// 批处理配置
+struct BatchConfig {
+  ConcurrentConfig Concurrent;
+  BatchErrorStrategy ErrorStrategy = BatchErrorStrategy::Continue;
+  unsigned MaxRetries = 3;              // 最大重试次数
+  std::chrono::milliseconds RetryDelay{1000};  // 重试延迟
+  bool EnableResultCallback = false;    // 启用单个结果回调
+};
+
 /// 请求批处理器
 class RequestBatch {
   std::vector<AIRequest> Requests;
   std::vector<ConcurrentResult> Results;
-  ConcurrentConfig Config;
+  BatchConfig Config;
+  std::atomic<bool> Cancelled{false};
 
 public:
-  RequestBatch(const ConcurrentConfig& Cfg = ConcurrentConfig{})
+  RequestBatch(const BatchConfig& Cfg = BatchConfig{})
     : Config(Cfg) {}
 
   /// 添加请求
@@ -101,10 +118,17 @@ public:
   void clear() {
     Requests.clear();
     Results.clear();
+    Cancelled = false;
   }
 
   /// 获取请求数量
   unsigned size() const { return Requests.size(); }
+
+  /// 取消批处理
+  void cancel() { Cancelled = true; }
+
+  /// 是否已取消
+  bool isCancelled() const { return Cancelled.load(); }
 
   /// 执行批处理
   /// @param Provider AI 提供者
@@ -117,6 +141,22 @@ public:
     std::function<void(unsigned, unsigned)> ProgressCallback
   );
 
+  /// 执行批处理（带结果回调）
+  bool executeWithCallback(
+    AIInterface& Provider,
+    std::function<void(const ConcurrentResult&)> ResultCallback
+  );
+
+  /// 执行批处理（完整版）
+  bool executeFull(
+    AIInterface& Provider,
+    std::function<void(unsigned, unsigned)> ProgressCallback,
+    std::function<void(const ConcurrentResult&)> ResultCallback
+  );
+
+  /// 重试失败的请求
+  bool retryFailed(AIInterface& Provider);
+
   /// 获取结果
   const std::vector<ConcurrentResult>& getResults() const { return Results; }
 
@@ -128,6 +168,20 @@ public:
 
   /// 获取成功率
   double getSuccessRate() const;
+
+  /// 获取配置
+  const BatchConfig& getConfig() const { return Config; }
+
+  /// 设置配置
+  void setConfig(const BatchConfig& Cfg) { Config = Cfg; }
+
+private:
+  /// 执行单个请求并处理重试
+  ConcurrentResult executeWithRetry(
+    AIInterface& Provider,
+    const AIRequest& Request,
+    unsigned RequestId
+  );
 };
 
 } // namespace blocktype
