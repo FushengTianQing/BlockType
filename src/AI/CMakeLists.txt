@@ -2,6 +2,7 @@ add_library(blocktype-ai
   AIOrchestrator.cpp
   ResponseCache.cpp
   CostTracker.cpp
+  HTTPClient.cpp
   OpenAIProvider.cpp
   ClaudeProvider.cpp
   LocalProvider.cpp

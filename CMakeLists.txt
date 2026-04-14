@@ -44,6 +44,7 @@ add_subdirectory(src/Parse)
 add_subdirectory(src/AST)
 add_subdirectory(src/Sema)
 add_subdirectory(src/CodeGen)
+add_subdirectory(src/AI)
 add_subdirectory(tools)
 add_subdirectory(tests)
 

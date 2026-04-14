@@ -1,6 +1,7 @@
 #include "blocktype/AI/ResponseCache.h"
 #include "llvm/Support/SHA1.h"
 #include <sstream>
+#include <iomanip>
 
 namespace blocktype {
 
@@ -15,7 +16,13 @@ std::string ResponseCache::generateKey(const AIRequest& Request) const {
   llvm::SHA1 Hash;
   Hash.update(OSS.str());
   
-  return llvm::toHex(Hash.final());
+  // 将 SHA1 结果转换为十六进制字符串
+  auto Result = Hash.final();
+  std::ostringstream HexSS;
+  for (uint8_t Byte : Result) {
+    HexSS << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(Byte);
+  }
+  return HexSS.str();
 }
 
 std::optional<AIResponse> ResponseCache::find(const AIRequest& Request) {
@@ -62,13 +69,16 @@ void ResponseCache::cleanup() {
   auto Now = std::chrono::steady_clock::now();
   
   // 删除过期条目
-  for (auto It = Cache.begin(); It != Cache.end(); ) {
+  std::vector<std::string> KeysToRemove;
+  for (auto It = Cache.begin(); It != Cache.end(); ++It) {
     auto Age = std::chrono::duration_cast<std::chrono::seconds>(Now - It->second.Timestamp);
     if (Age > TTL) {
-      It = Cache.erase(It);
-    } else {
-      ++It;
+      KeysToRemove.push_back(It->first().str());
     }
+  }
+  
+  for (const auto& Key : KeysToRemove) {
+    Cache.erase(Key);
   }
   
   // 如果仍然超过最大大小，删除最少使用的条目

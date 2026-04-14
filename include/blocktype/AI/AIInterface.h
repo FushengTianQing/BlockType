@@ -1,5 +1,6 @@
 #pragma once
 
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include <string>
@@ -34,6 +35,46 @@ enum class Language {
   English,
   Auto,  // 自动检测
 };
+
+} // namespace blocktype
+
+/// DenseMapInfo 特化 - AIProvider
+namespace llvm {
+template<>
+struct DenseMapInfo<blocktype::AIProvider> {
+  static inline blocktype::AIProvider getEmptyKey() {
+    return static_cast<blocktype::AIProvider>(-1);
+  }
+  static inline blocktype::AIProvider getTombstoneKey() {
+    return static_cast<blocktype::AIProvider>(-2);
+  }
+  static unsigned getHashValue(blocktype::AIProvider Val) {
+    return static_cast<unsigned>(Val);
+  }
+  static bool isEqual(blocktype::AIProvider LHS, blocktype::AIProvider RHS) {
+    return LHS == RHS;
+  }
+};
+
+/// DenseMapInfo 特化 - AITaskType
+template<>
+struct DenseMapInfo<blocktype::AITaskType> {
+  static inline blocktype::AITaskType getEmptyKey() {
+    return static_cast<blocktype::AITaskType>(-1);
+  }
+  static inline blocktype::AITaskType getTombstoneKey() {
+    return static_cast<blocktype::AITaskType>(-2);
+  }
+  static unsigned getHashValue(blocktype::AITaskType Val) {
+    return static_cast<unsigned>(Val);
+  }
+  static bool isEqual(blocktype::AITaskType LHS, blocktype::AITaskType RHS) {
+    return LHS == RHS;
+  }
+};
+} // namespace llvm
+
+namespace blocktype {
 
 /// AI 请求
 struct AIRequest {
