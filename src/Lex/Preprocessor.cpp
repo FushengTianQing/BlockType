@@ -18,6 +18,8 @@
 #include "blocktype/Basic/FileManager.h"
 #include "blocktype/Basic/FileEntry.h"
 #include <unordered_map>
+#include <ctime>
+#include <sstream>
 
 namespace blocktype {
 
@@ -99,16 +101,42 @@ void Preprocessor::initializePredefinedMacros() {
   definePredefinedMacro("__cpp_pack_indexing", "202411L");
   definePredefinedMacro("__STDC_HOSTED__", "1");
   definePredefinedMacro("__BLOCKTYPE__", "1");
-  
+
+  // B3.8: __DATE__ and __TIME__ predefined macros
+  // Get current time
+  std::time_t Now = std::time(nullptr);
+  std::tm *Tm = std::localtime(&Now);
+
+  // __DATE__: "Mmm dd yyyy"
+  char DateBuf[16];
+  std::strftime(DateBuf, sizeof(DateBuf), "\"%b %d %Y\"", Tm);
+  definePredefinedMacro("__DATE__", DateBuf);  // Include quotes
+
+  // __TIME__: "hh:mm:ss"
+  char TimeBuf[16];
+  std::strftime(TimeBuf, sizeof(TimeBuf), "\"%H:%M:%S\"", Tm);
+  definePredefinedMacro("__TIME__", TimeBuf);  // Include quotes
+
   // Register __FILE__ and __LINE__ as special macros
   // They are handled specially in expandMacro()
   auto FileMI = std::make_unique<MacroInfo>(SourceLocation());
   FileMI->setPredefined(true);
   Macros["__FILE__"] = std::move(FileMI);
-  
+
   auto LineMI = std::make_unique<MacroInfo>(SourceLocation());
   LineMI->setPredefined(true);
   Macros["__LINE__"] = std::move(LineMI);
+
+  // A3.4/A3.5: Register __has_include and __has_embed as function-like macros
+  auto HasIncludeMI = std::make_unique<MacroInfo>(SourceLocation());
+  HasIncludeMI->setPredefined(true);
+  HasIncludeMI->setFunctionLike(true);
+  Macros["__has_include"] = std::move(HasIncludeMI);
+
+  auto HasEmbedMI = std::make_unique<MacroInfo>(SourceLocation());
+  HasEmbedMI->setPredefined(true);
+  HasEmbedMI->setFunctionLike(true);
+  Macros["__has_embed"] = std::move(HasEmbedMI);
 }
 
 void Preprocessor::definePredefinedMacro(StringRef Name, StringRef Value) {
@@ -116,7 +144,12 @@ void Preprocessor::definePredefinedMacro(StringRef Name, StringRef Value) {
   MI->setPredefined(true);
 
   Token T;
-  T.setKind(TokenKind::numeric_constant);
+  // Determine if value is a string literal (starts with ")
+  if (Value.startswith("\"")) {
+    T.setKind(TokenKind::string_literal);
+  } else {
+    T.setKind(TokenKind::numeric_constant);
+  }
   T.setLiteralData(Value.data());
   T.setLength(static_cast<unsigned>(Value.size()));
   MI->addToken(T);
@@ -301,6 +334,8 @@ void Preprocessor::handleDirective(Token &HashTok) {
 
   if (DirectiveName == "include") {
     handleIncludeDirective(DirectiveTok, false);
+  } else if (DirectiveName == "include_next") {
+    handleIncludeNextDirective(DirectiveTok, false);
   } else if (DirectiveName == "define") {
     handleDefineDirective(DirectiveTok);
   } else if (DirectiveName == "undef") {
@@ -494,7 +529,7 @@ void Preprocessor::handleIncludeDirective(Token &IncludeTok, bool IsAngled) {
   // Check for circular inclusion
   for (const auto &Entry : IncludeStack) {
     if (Entry.Filename == Filename) {
-      Diags.report(IncludeTok.getLocation(), DiagLevel::Error, 
+      Diags.report(IncludeTok.getLocation(), DiagLevel::Error,
                    "circular inclusion detected: " + Filename.str());
       return;
     }
@@ -502,14 +537,30 @@ void Preprocessor::handleIncludeDirective(Token &IncludeTok, bool IsAngled) {
 
   // Try to find the file
   if (!Headers || !FileMgr) {
-    Diags.report(IncludeTok.getLocation(), DiagLevel::Warning, 
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Warning,
                  "#include not fully implemented: missing HeaderSearch or FileManager");
     return;
   }
 
-  const FileEntry *FE = Headers->lookupHeader(Filename, IsAngled);
+  // B3.5: Try relative path first (from current file directory)
+  const FileEntry *FE = nullptr;
+  if (!IsAngled && !IncludeStack.empty()) {
+    StringRef CurrentDir = IncludeStack.back().Filename;
+    // Find directory part
+    size_t LastSlash = CurrentDir.rfind('/');
+    if (LastSlash != StringRef::npos) {
+      std::string RelativePath = CurrentDir.substr(0, LastSlash + 1).str() + Filename.str();
+      FE = Headers->lookupHeader(RelativePath, false);
+    }
+  }
+
+  // Try system search paths
   if (!FE) {
-    Diags.report(IncludeTok.getLocation(), DiagLevel::Error, 
+    FE = Headers->lookupHeader(Filename, IsAngled);
+  }
+
+  if (!FE) {
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Error,
                  "file not found: " + Filename.str());
     return;
   }
@@ -517,7 +568,7 @@ void Preprocessor::handleIncludeDirective(Token &IncludeTok, bool IsAngled) {
   // Read the file content
   auto Buffer = FileMgr->getBuffer(FE->getPath());
   if (!Buffer) {
-    Diags.report(IncludeTok.getLocation(), DiagLevel::Error, 
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Error,
                  "cannot read file: " + Filename.str());
     return;
   }
@@ -534,11 +585,69 @@ void Preprocessor::handleIncludeDirective(Token &IncludeTok, bool IsAngled) {
   Entry.Filename = Filename;
   IncludeStack.push_back(std::move(Entry));
   CurLexer = IncludeStack.back().Lex.get();
-  
+
   // Update current filename for __FILE__
   CurrentFilename = Filename;
-  
+  CurrentLine = 1;  // Reset line number
+
   // Mark as included for #pragma once
+  Headers->markIncluded(Filename);
+}
+
+// A3.1: #include_next (GNU extension)
+void Preprocessor::handleIncludeNextDirective(Token &IncludeTok, bool IsAngled) {
+  Token FilenameTok;
+  if (!lexFromLexer(FilenameTok)) {
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Error, "expected filename after #include_next");
+    return;
+  }
+
+  StringRef Filename;
+  if (FilenameTok.isStringLiteral()) {
+    Filename = FilenameTok.getText();
+    if (Filename.size() >= 2) {
+      Filename = Filename.substr(1, Filename.size() - 2);
+    }
+  } else {
+    Diags.report(FilenameTok.getLocation(), DiagLevel::Error, "expected filename string");
+    return;
+  }
+
+  if (!Headers || !FileMgr) {
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Warning,
+                 "#include_next not fully implemented: missing HeaderSearch or FileManager");
+    return;
+  }
+
+  // #include_next starts searching from the next directory in the search path
+  // after the one where the current file was found
+  const FileEntry *FE = Headers->lookupHeaderNext(Filename, CurrentFilename);
+  if (!FE) {
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Error,
+                 "file not found: " + Filename.str());
+    return;
+  }
+
+  auto Buffer = FileMgr->getBuffer(FE->getPath());
+  if (!Buffer) {
+    Diags.report(IncludeTok.getLocation(), DiagLevel::Error,
+                 "cannot read file: " + Filename.str());
+    return;
+  }
+
+  StringRef Content = Buffer->getBuffer();
+  SourceLocation IncludeLoc = SM.createFileID(Filename, Content);
+  auto Lex = std::make_unique<Lexer>(SM, Diags, Content, IncludeLoc);
+
+  IncludeStackEntry Entry;
+  Entry.Lex = std::move(Lex);
+  Entry.IncludeLoc = IncludeTok.getLocation();
+  Entry.Filename = Filename;
+  IncludeStack.push_back(std::move(Entry));
+  CurLexer = IncludeStack.back().Lex.get();
+
+  CurrentFilename = Filename;
+  CurrentLine = 1;
   Headers->markIncluded(Filename);
 }
 
@@ -553,7 +662,112 @@ void Preprocessor::handleEmbedDirective(Token &EmbedTok) {
     return;
   }
 
-  Diags.report(EmbedTok.getLocation(), DiagLevel::Warning, "#embed not implemented yet");
+  StringRef Filename;
+  if (FilenameTok.isStringLiteral()) {
+    Filename = FilenameTok.getText();
+    if (Filename.size() >= 2) {
+      Filename = Filename.substr(1, Filename.size() - 2);
+    }
+  } else {
+    Diags.report(FilenameTok.getLocation(), DiagLevel::Error, "expected filename string");
+    return;
+  }
+
+  // A3.2: Parse optional parameters: limit(n), suffix(s)
+  unsigned Limit = 0;  // 0 means no limit
+  std::string Suffix;
+
+  while (true) {
+    Token Tok;
+    if (!lexFromLexer(Tok) || Tok.is(TokenKind::eod) || Tok.is(TokenKind::eof)) {
+      break;
+    }
+
+    if (Tok.is(TokenKind::identifier)) {
+      StringRef ParamName = Tok.getText();
+
+      if (ParamName == "limit") {
+        // Parse limit(n)
+        if (!lexFromLexer(Tok) || !Tok.is(TokenKind::l_paren)) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected '(' after limit");
+          return;
+        }
+        if (!lexFromLexer(Tok) || !Tok.is(TokenKind::numeric_constant)) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected number in limit()");
+          return;
+        }
+        Limit = std::stoul(Tok.getText().str());
+        if (!lexFromLexer(Tok) || !Tok.is(TokenKind::r_paren)) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected ')' after limit value");
+          return;
+        }
+      } else if (ParamName == "suffix") {
+        // Parse suffix(s)
+        if (!lexFromLexer(Tok) || !Tok.is(TokenKind::l_paren)) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected '(' after suffix");
+          return;
+        }
+        if (!lexFromLexer(Tok) || !Tok.isStringLiteral()) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected string in suffix()");
+          return;
+        }
+        Suffix = Tok.getText().str();
+        if (Suffix.size() >= 2) {
+          Suffix = Suffix.substr(1, Suffix.size() - 2);  // Remove quotes
+        }
+        if (!lexFromLexer(Tok) || !Tok.is(TokenKind::r_paren)) {
+          Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "expected ')' after suffix value");
+          return;
+        }
+      }
+    }
+  }
+
+  // Find and read the file
+  if (!Headers || !FileMgr) {
+    Diags.report(EmbedTok.getLocation(), DiagLevel::Warning,
+                 "#embed not fully implemented: missing HeaderSearch or FileManager");
+    return;
+  }
+
+  const FileEntry *FE = Headers->lookupHeader(Filename, false);
+  if (!FE) {
+    Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "file not found: " + Filename.str());
+    return;
+  }
+
+  auto Buffer = FileMgr->getBuffer(FE->getPath());
+  if (!Buffer) {
+    Diags.report(EmbedTok.getLocation(), DiagLevel::Error, "cannot read file: " + Filename.str());
+    return;
+  }
+
+  StringRef Content = Buffer->getBuffer();
+  if (Limit > 0 && Content.size() > Limit) {
+    Content = Content.substr(0, Limit);
+  }
+
+  // Generate braced-init-list of bytes
+  // e.g., #embed "data.bin" -> { 0x48, 0x65, 0x6c, 0x6c, 0x6f }
+  std::string EmbedData = "{ ";
+  for (size_t i = 0; i < Content.size(); ++i) {
+    if (i > 0) EmbedData += ", ";
+    EmbedData += "0x" + std::to_string(static_cast<unsigned char>(Content[i]));
+  }
+  EmbedData += " }";
+
+  // Append suffix if specified
+  if (!Suffix.empty()) {
+    EmbedData += " " + Suffix;
+  }
+
+  // Store the embed data as a token sequence
+  // For simplicity, we'll create a string and lex it
+  // In a real implementation, we'd push tokens directly
+  // TODO: Implement proper token generation for embed data
+
+  Diags.report(EmbedTok.getLocation(), DiagLevel::Warning,
+               "#embed partially implemented: generated " + std::to_string(Content.size()) + " bytes");
 }
 
 //===----------------------------------------------------------------------===//
@@ -798,17 +1012,82 @@ bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI
     Result.setLength(static_cast<unsigned>(FileBuffer.size()));
     return true;
   }
-  
+
   if (MacroName == "__LINE__") {
     Result.setKind(TokenKind::numeric_constant);
-    // Get line number from current token location
-    // For now, use a simple line number
-    // TODO: Integrate with SourceManager for accurate line numbers
-    unsigned Line = 1;
+    // B3.7: Get line number from SourceManager
+    auto LineAndCol = SM.getLineAndColumn(Result.getLocation());
+    unsigned Line = LineAndCol.first;
+    if (Line == 0) Line = CurrentLine;  // Fallback
     static std::string LineBuffer;
     LineBuffer = std::to_string(Line);
     Result.setLiteralData(LineBuffer.c_str());
     Result.setLength(static_cast<unsigned>(LineBuffer.size()));
+    return true;
+  }
+
+  // A3.4: __has_include(filename)
+  if (MacroName == "__has_include") {
+    Token NextTok = CurLexer->peekNextToken();
+    if (!NextTok.is(TokenKind::l_paren)) {
+      MI->setBeingExpanded(false);
+      return false;
+    }
+
+    auto Args = parseMacroArguments(MI);
+    bool HasInclude = false;
+
+    if (!Args.empty() && Args[0].size() >= 1) {
+      Token &ArgTok = Args[0][0];
+      if (ArgTok.isStringLiteral()) {
+        StringRef Filename = ArgTok.getText();
+        if (Filename.size() >= 2) {
+          Filename = Filename.substr(1, Filename.size() - 2);
+        }
+        if (Headers) {
+          HasInclude = (Headers->lookupHeader(Filename, false) != nullptr);
+        }
+      }
+    }
+
+    Result.setKind(TokenKind::numeric_constant);
+    static std::string HasIncludeBuffer;
+    HasIncludeBuffer = HasInclude ? "1" : "0";
+    Result.setLiteralData(HasIncludeBuffer.c_str());
+    Result.setLength(static_cast<unsigned>(HasIncludeBuffer.size()));
+    return true;
+  }
+
+  // A3.5: __has_embed(filename) (C++26)
+  if (MacroName == "__has_embed") {
+    Token NextTok = CurLexer->peekNextToken();
+    if (!NextTok.is(TokenKind::l_paren)) {
+      MI->setBeingExpanded(false);
+      return false;
+    }
+
+    auto Args = parseMacroArguments(MI);
+    bool HasEmbed = false;
+
+    if (!Args.empty() && Args[0].size() >= 1) {
+      Token &ArgTok = Args[0][0];
+      if (ArgTok.isStringLiteral()) {
+        StringRef Filename = ArgTok.getText();
+        if (Filename.size() >= 2) {
+          Filename = Filename.substr(1, Filename.size() - 2);
+        }
+        if (Headers && FileMgr) {
+          const FileEntry *FE = Headers->lookupHeader(Filename, false);
+          HasEmbed = (FE != nullptr);
+        }
+      }
+    }
+
+    Result.setKind(TokenKind::numeric_constant);
+    static std::string HasEmbedBuffer;
+    HasEmbedBuffer = HasEmbed ? "1" : "0";
+    Result.setLiteralData(HasEmbedBuffer.c_str());
+    Result.setLength(static_cast<unsigned>(HasEmbedBuffer.size()));
     return true;
   }
 
@@ -821,7 +1100,7 @@ bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI
   MI->setBeingExpanded(true);
 
   bool Success = false;
-  
+
   if (MI->isFunctionLike()) {
     Token NextTok = CurLexer->peekNextToken();
     if (!NextTok.is(TokenKind::l_paren)) {

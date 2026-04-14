@@ -123,6 +123,10 @@ class Preprocessor {
 
   // Current file context for __FILE__ and __LINE__
   StringRef CurrentFilename;
+  unsigned CurrentLine = 1;  // B3.7: Current line number for __LINE__
+
+  // Include search paths for relative includes (B3.5)
+  std::vector<std::string> IncludeSearchPaths;
 
   // Token buffer for lookahead (simple implementation)
   std::vector<Token> TokenBuffer;
@@ -190,8 +194,17 @@ public:
   /// Handles #include directive.
   void handleIncludeDirective(Token &IncludeTok, bool IsAngled);
 
+  /// Handles #include_next directive (GNU extension).
+  void handleIncludeNextDirective(Token &IncludeTok, bool IsAngled);
+
   /// Handles #embed directive (C++26).
   void handleEmbedDirective(Token &EmbedTok);
+
+  /// Handles __has_include expression.
+  void handleHasInclude(Token &Result);
+
+  /// Handles __has_embed expression (C++26).
+  void handleHasEmbed(Token &Result);
 
   //===--------------------------------------------------------------------===//
   // Conditional compilation

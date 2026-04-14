@@ -62,6 +62,45 @@ bool HeaderSearch::headerExists(StringRef Filename, bool IsAngled) {
   return lookupHeader(Filename, IsAngled) != nullptr;
 }
 
+const FileEntry *HeaderSearch::lookupHeaderNext(StringRef Filename, StringRef CurrentFile) {
+  // Find the search path where the current file was found
+  size_t CurrentPathIndex = 0;
+  bool FoundCurrent = false;
+
+  for (size_t i = 0; i < SearchPaths.size(); ++i) {
+    std::string FullPath = joinPath(SearchPaths[i].Path, CurrentFile);
+    if (FileMgr.getFile(FullPath)) {
+      CurrentPathIndex = i;
+      FoundCurrent = true;
+      break;
+    }
+  }
+
+  // If current file not found in search paths, start from beginning
+  if (!FoundCurrent) {
+    CurrentPathIndex = 0;
+  } else {
+    // Start from next path after current
+    CurrentPathIndex++;
+  }
+
+  // Search starting from next path
+  for (size_t i = CurrentPathIndex; i < SearchPaths.size(); ++i) {
+    const auto &SP = SearchPaths[i];
+    const FileEntry *FE = nullptr;
+    if (SP.IsFramework) {
+      FE = searchFramework(SP.Path, Filename);
+    } else {
+      FE = searchInPath(SP.Path, Filename);
+    }
+    if (FE) {
+      return FE;
+    }
+  }
+
+  return nullptr;
+}
+
 void HeaderSearch::markIncluded(StringRef Filename) {
   IncludedFiles.insert(Filename.str());
 }

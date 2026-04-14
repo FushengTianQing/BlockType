@@ -52,6 +52,11 @@ public:
 
   const FileEntry *lookupHeader(StringRef Filename, bool IsAngled,
                                 StringRef IncludeDir = StringRef());
+
+  /// Looks up a header starting from the next search path after the current file.
+  /// Used for #include_next (GNU extension).
+  const FileEntry *lookupHeaderNext(StringRef Filename, StringRef CurrentFile);
+
   bool headerExists(StringRef Filename, bool IsAngled);
 
   void markIncluded(StringRef Filename);
