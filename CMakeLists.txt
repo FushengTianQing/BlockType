@@ -46,7 +46,8 @@ add_subdirectory(src/Sema)
 add_subdirectory(src/CodeGen)
 add_subdirectory(src/AI)
 add_subdirectory(tools)
-add_subdirectory(tests)
+add_subdirectory(tests/unit)
+add_subdirectory(tests/integration)
 
 # 安装配置
 install(DIRECTORY include/blocktype
