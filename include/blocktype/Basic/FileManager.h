@@ -1,6 +1,8 @@
 #pragma once
 
 #include "blocktype/Basic/FileEntry.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include <memory>
 #include <map>
 

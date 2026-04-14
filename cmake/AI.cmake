@@ -10,14 +10,26 @@ else()
 endif()
 
 # nlohmann/json (JSON 解析)
-include(FetchContent)
+# 优先使用本地安装的版本
+find_package(nlohmann_json QUIET)
 
-FetchContent_Declare(
-  json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3
-)
-
-FetchContent_MakeAvailable(json)
+if(nlohmann_json_FOUND)
+  message(STATUS "Found nlohmann_json: ${nlohmann_json_INCLUDE_DIRS}")
+else()
+  # 如果本地没有，尝试从 GitHub 下载
+  message(STATUS "nlohmann_json not found locally, fetching from GitHub...")
+  
+  include(FetchContent)
+  
+  FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+  )
+  
+  FetchContent_MakeAvailable(json)
+endif()
 
 message(STATUS "nlohmann/json configured")

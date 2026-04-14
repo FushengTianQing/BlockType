@@ -1,4 +1,5 @@
 #include "blocktype/Basic/Unicode.h"
+#include "llvm/ADT/StringRef.h"
 
 namespace blocktype {
 

@@ -3,8 +3,8 @@
 function(blocktype_add_compile_options target)
   target_compile_options(${target} PRIVATE
     # 警告
-    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra -Wpedantic -Werror>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic -Werror>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra -Wpedantic -Werror -Wno-deprecated-declarations -Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic -Werror -Wno-deprecated-declarations -Wno-unused-parameter>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
     
     # 调试符号
