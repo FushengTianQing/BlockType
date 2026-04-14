@@ -170,7 +170,7 @@ e963fe8 feat(phase0.6): implement AI infrastructure foundation
 
 ## 下一步行动
 
-### Stage 0.6.5 - AI 功能集成（进行中）
+### Stage 0.6.5 - AI 功能集成 ✅ (100%)
 
 #### Task 0.6.5.1 - AI 模块单元测试 ✅
 
@@ -190,14 +190,18 @@ e963fe8 feat(phase0.6): implement AI infrastructure foundation
 - [ ] Mock HTTP 服务器测试
 - [ ] 端到端测试
 
-#### Task 0.6.5.3 - 集成到编译器驱动
+#### Task 0.6.5.3 - 集成到编译器驱动 ✅
 
-**待完成内容**:
-- [ ] 在 `tools/driver.cpp` 中集成 AI 功能
-- [ ] 添加命令行选项 `--ai-assist`
-- [ ] 添加命令行选项 `--ai-provider`
-- [ ] 添加命令行选项 `--ai-cache`
-- [ ] 错误诊断集成
+**已完成内容**:
+- ✅ 在 `tools/driver.cpp` 中集成 AI 功能
+- ✅ 添加命令行选项 `--ai-assist`
+- ✅ 添加命令行选项 `--ai-provider`
+- ✅ 添加命令行选项 `--ai-cache`
+- ✅ 添加命令行选项 `--ai-cost-limit`
+- ✅ 添加命令行选项 `--ai-model`
+- ✅ 添加命令行选项 `--ollama-endpoint`
+- ✅ 支持环境变量配置（OPENAI_API_KEY, ANTHROPIC_API_KEY, QWEN_API_KEY）
+- ✅ 编译器驱动测试通过
 
 ### Stage 0.6.6 - AI 功能优化（待完成）
 

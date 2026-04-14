@@ -5,6 +5,7 @@ add_executable(blocktype
 target_link_libraries(blocktype PRIVATE
   blocktype-basic
   blocktype-codegen
+  blocktype-ai
   ${LLVM_LIBS}
 )
 
