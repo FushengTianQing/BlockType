@@ -181,4 +181,40 @@ std::vector<AITaskType> QwenProvider::getSupportedTasks() const {
   };
 }
 
+// ========== 流式请求支持 ==========
+
+std::string QwenProvider::buildStreamingPrompt(const AIRequest& Request) {
+  json Prompt = json::parse(buildPrompt(Request));
+  Prompt["parameters"]["incremental_output"] = true;
+  return Prompt.dump();
+}
+
+llvm::Expected<AIResponse> QwenProvider::parseStreamingChunk(const std::string& JSON) {
+  AIResponse Response;
+  Response.Success = false;
+  Response.Provider = "Qwen";
+
+  try {
+    auto Data = json::parse(JSON);
+    if (Data.contains("output") && Data["output"].contains("text")) {
+      Response.Success = true;
+      Response.Content = Data["output"]["text"].get<std::string>();
+    }
+  } catch (...) {}
+
+  return Response;
+}
+
+llvm::Expected<AIResponse> QwenProvider::sendStreamingRequest(
+  const AIRequest& Request,
+  StreamCallback Callback
+) {
+  auto Response = sendRequest(Request);
+  if (Response && Callback) {
+    Callback(Response->Content, false);
+    Callback("", true);
+  }
+  return Response;
+}
+
 } // namespace blocktype

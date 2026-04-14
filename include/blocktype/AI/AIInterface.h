@@ -99,6 +99,11 @@ struct AIResponse {
   std::vector<std::string> Suggestions;  // 建议列表
 };
 
+/// 流式响应回调类型
+/// @param Chunk 收到的文本片段
+/// @param Done 是否完成
+using StreamCallback = std::function<void(llvm::StringRef Chunk, bool Done)>;
+
 /// AI 配置
 struct AIConfig {
   AIProvider DefaultProvider = AIProvider::OpenAI;
@@ -130,6 +135,15 @@ public:
   
   /// 发送请求
   virtual llvm::Expected<AIResponse> sendRequest(const AIRequest& Request) = 0;
+  
+  /// 发送流式请求（SSE）
+  /// @param Request 请求内容
+  /// @param Callback 流式回调函数
+  /// @return 最终响应（在流结束后）
+  virtual llvm::Expected<AIResponse> sendStreamingRequest(
+    const AIRequest& Request,
+    StreamCallback Callback
+  ) = 0;
   
   /// 异步发送请求
   virtual void sendRequestAsync(

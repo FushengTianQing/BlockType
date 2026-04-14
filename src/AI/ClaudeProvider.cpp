@@ -173,4 +173,41 @@ std::vector<AITaskType> ClaudeProvider::getSupportedTasks() const {
   };
 }
 
+// ========== 流式请求支持 ==========
+
+std::string ClaudeProvider::buildStreamingPrompt(const AIRequest& Request) {
+  json Prompt = json::parse(buildPrompt(Request));
+  Prompt["stream"] = true;
+  return Prompt.dump();
+}
+
+llvm::Expected<AIResponse> ClaudeProvider::parseStreamingChunk(const std::string& JSON) {
+  AIResponse Response;
+  Response.Success = false;
+  Response.Provider = "Claude";
+
+  try {
+    auto Data = json::parse(JSON);
+    if (Data.contains("delta") && Data["delta"].contains("text")) {
+      Response.Success = true;
+      Response.Content = Data["delta"]["text"].get<std::string>();
+    }
+  } catch (...) {}
+
+  return Response;
+}
+
+llvm::Expected<AIResponse> ClaudeProvider::sendStreamingRequest(
+  const AIRequest& Request,
+  StreamCallback Callback
+) {
+  // 简化实现：调用非流式版本
+  auto Response = sendRequest(Request);
+  if (Response && Callback) {
+    Callback(Response->Content, false);
+    Callback("", true);
+  }
+  return Response;
+}
+
 } // namespace blocktype

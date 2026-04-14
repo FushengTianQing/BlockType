@@ -3,6 +3,8 @@ add_library(blocktype-ai
   ResponseCache.cpp
   CostTracker.cpp
   HTTPClient.cpp
+  ConnectionPool.cpp
+  ConcurrentRequest.cpp
   OpenAIProvider.cpp
   ClaudeProvider.cpp
   LocalProvider.cpp

@@ -26,7 +26,19 @@ public:
     Response.LatencyMs = 50;
     return Response;
   }
-  
+
+  llvm::Expected<AIResponse> sendStreamingRequest(
+    const AIRequest& Request,
+    StreamCallback Callback
+  ) override {
+    auto Response = sendRequest(Request);
+    if (Response && Callback) {
+      Callback(Response->Content, false);
+      Callback("", true);
+    }
+    return Response;
+  }
+
   void sendRequestAsync(
     const AIRequest& Request,
     std::function<void(llvm::Expected<AIResponse>)> Callback

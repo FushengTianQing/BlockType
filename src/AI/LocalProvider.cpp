@@ -177,4 +177,40 @@ std::vector<AITaskType> LocalProvider::getSupportedTasks() const {
   };
 }
 
+// ========== 流式请求支持 ==========
+
+std::string LocalProvider::buildStreamingPrompt(const AIRequest& Request) {
+  json Prompt = json::parse(buildPrompt(Request));
+  Prompt["stream"] = true;
+  return Prompt.dump();
+}
+
+llvm::Expected<AIResponse> LocalProvider::parseStreamingChunk(const std::string& JSON) {
+  AIResponse Response;
+  Response.Success = false;
+  Response.Provider = "Local";
+
+  try {
+    auto Data = json::parse(JSON);
+    if (Data.contains("message") && Data["message"].contains("content")) {
+      Response.Success = true;
+      Response.Content = Data["message"]["content"].get<std::string>();
+    }
+  } catch (...) {}
+
+  return Response;
+}
+
+llvm::Expected<AIResponse> LocalProvider::sendStreamingRequest(
+  const AIRequest& Request,
+  StreamCallback Callback
+) {
+  auto Response = sendRequest(Request);
+  if (Response && Callback) {
+    Callback(Response->Content, false);
+    Callback("", true);
+  }
+  return Response;
+}
+
 } // namespace blocktype
