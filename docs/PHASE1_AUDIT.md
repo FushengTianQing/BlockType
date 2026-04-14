@@ -9,13 +9,13 @@
 
 | 类别 | 数量 |
 |------|------|
-| 遗漏的功能特性 | 5 |
-| 不完善的功能特性 | 11 |
+| 遗漏的功能特性 | 2 |
+| 不完善的功能特性 | 6 |
 | 隐含相关的扩展功能 | 5 |
-| **总计** | **21** |
+| **总计** | **13** |
 
 > **更新日期：** 2026-04-15
-> **已修复：** Digraphs, 十六进制浮点数, `__VA_ARGS__`, `__VA_OPT__`, Token 缓冲区, UAX #31, 错误恢复
+> **已修复：** Digraphs, 十六进制浮点数, `__VA_ARGS__`, `__VA_OPT__`, Token 缓冲区, UAX #31, 错误恢复, Unicode 转义序列, UTF-8 字符字面量, 关键字范围标记
 
 ---
 
@@ -34,16 +34,16 @@
 
 | 编号 | 功能 | 规划位置 | 说明 |
 |------|------|----------|------|
-| A1.1 | `lesslessless` Token | Task 1.1.1 | C++26 digraph `<<<` 未定义 |
-| A1.2 | `greatergreatergreater` Token | Task 1.1.1 | C++26 digraph `>>>` 未定义 |
-| A1.3 | `kw_first_keyword` / `kw_last_keyword` | Task 1.1.2 | 用于 isKeyword() 范围判断的标记未定义 |
+| ~~A1.1~~ | ~~`lesslessless` Token~~ | Task 1.1.1 | ✅ 已实现 C++26 digraph `<<<` |
+| ~~A1.2~~ | ~~`greatergreatergreater` Token~~ | Task 1.1.1 | ✅ 已实现 C++26 digraph `>>>` |
+| ~~A1.3~~ | ~~`kw_first_keyword` / `kw_last_keyword`~~ | Task 1.1.2 | ✅ 已实现关键字范围标记 |
 
 #### ⚠️ 不完善的功能特性
 
 | 编号 | 功能 | 规划位置 | 当前状态 |
 |------|------|----------|----------|
-| B1.1 | Unicode 转义序列 | Task 1.2.4 | `\uXXXX`, `\UXXXXXXXX` 未完整处理 |
-| B1.2 | UTF-8 字符字面量 Token 类型 | Task 1.2.4 | `u8'c'` 未正确设置 `utf8_char_constant` |
+| ~~B1.1~~ | ~~Unicode 转义序列~~ | Task 1.2.4 | ✅ 已实现 `\uXXXX`, `\UXXXXXXXX` |
+| ~~B1.2~~ | ~~UTF-8 字符字面量 Token 类型~~ | Task 1.2.4 | ✅ `u8'c'` 正确返回 `utf8_char_constant` |
 
 ---
 
@@ -237,14 +237,14 @@
 基于审计结果，更新 Phase 1 验收检查清单：
 
 ```
-[✅] TokenKinds.def 定义完整
+[✅] TokenKinds.def 定义完整（关键字范围标记已添加）
 [✅] Token 类实现完成
 [✅] Token 辅助函数实现完成
 [✅] SourceManager 实现完成
 [✅] Lexer 基础框架实现完成
 [✅] 标识符和关键字识别正确（UAX #31 已实现）
 [✅] 数字字面量解析正确（十六进制浮点已完整）
-[⚠️] 字符和字符串字面量解析正确（Unicode 转义不完整）
+[✅] 字符和字符串字面量解析正确（Unicode 转义已完整）
 [✅] 运算符和标点符号解析正确（Digraphs 已完整）
 [✅] 注释处理正确
 [✅] Preprocessor 基础框架实现完成
@@ -254,7 +254,7 @@
 [⚠️] C++26 #embed 实现完成（框架已有，参数缺失）
 [✅] C++26 新预定义宏定义完成
 [✅] C++26 新 Token 支持完成
-[✅] 单元测试覆盖率 ≥ 80%（89 测试通过）
+[✅] 单元测试覆盖率 ≥ 80%（99 测试通过）
 [✅] 错误恢复机制已实现
 [❌] Lit 回归测试通过（未实现）
 [❌] 性能基准建立（未实现）

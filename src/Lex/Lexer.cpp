@@ -500,9 +500,36 @@ bool Lexer::lexCharConstant(Token &Result, const char *Start) {
 
   while (BufferPtr < BufferEnd && *BufferPtr != '\'') {
     if (*BufferPtr == '\\') {
-      ++BufferPtr;
+      ++BufferPtr; // Skip backslash
       if (BufferPtr < BufferEnd) {
-        ++BufferPtr; // Skip escaped character
+        // Handle Unicode escape sequences
+        if (*BufferPtr == 'u') {
+          ++BufferPtr; // Skip 'u'
+          // \uXXXX - exactly 4 hex digits
+          for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
+            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+              ++BufferPtr;
+            } else {
+              Diags.report(getSourceLocation(), DiagLevel::Error, 
+                           "invalid universal character name: expected 4 hex digits after \\u");
+              break;
+            }
+          }
+        } else if (*BufferPtr == 'U') {
+          ++BufferPtr; // Skip 'U'
+          // \UXXXXXXXX - exactly 8 hex digits
+          for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
+            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+              ++BufferPtr;
+            } else {
+              Diags.report(getSourceLocation(), DiagLevel::Error, 
+                           "invalid universal character name: expected 8 hex digits after \\U");
+              break;
+            }
+          }
+        } else {
+          ++BufferPtr; // Skip other escape character
+        }
       }
     } else if (*BufferPtr == '\n') {
       // Unterminated character constant
@@ -528,9 +555,36 @@ bool Lexer::lexStringLiteral(Token &Result, const char *Start) {
 
   while (BufferPtr < BufferEnd && *BufferPtr != '"') {
     if (*BufferPtr == '\\') {
-      ++BufferPtr;
+      ++BufferPtr; // Skip backslash
       if (BufferPtr < BufferEnd) {
-        ++BufferPtr; // Skip escaped character
+        // Handle Unicode escape sequences
+        if (*BufferPtr == 'u') {
+          ++BufferPtr; // Skip 'u'
+          // \uXXXX - exactly 4 hex digits
+          for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
+            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+              ++BufferPtr;
+            } else {
+              Diags.report(getSourceLocation(), DiagLevel::Error, 
+                           "invalid universal character name: expected 4 hex digits after \\u");
+              break;
+            }
+          }
+        } else if (*BufferPtr == 'U') {
+          ++BufferPtr; // Skip 'U'
+          // \UXXXXXXXX - exactly 8 hex digits
+          for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
+            if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+              ++BufferPtr;
+            } else {
+              Diags.report(getSourceLocation(), DiagLevel::Error, 
+                           "invalid universal character name: expected 8 hex digits after \\U");
+              break;
+            }
+          }
+        } else {
+          ++BufferPtr; // Skip other escape character
+        }
       }
     } else if (*BufferPtr == '\n') {
       // Unterminated string literal
@@ -568,8 +622,70 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
 
   // Check for prefix followed by quote
   if (BufferPtr < BufferEnd && *BufferPtr == '\'') {
-    // Character literal - determine kind and lex
-    return lexCharConstant(Result, Start);
+    // Character literal - determine kind based on prefix
+    TokenKind Kind = TokenKind::char_constant;
+    switch (Prefix) {
+    case 'L': Kind = TokenKind::wide_char_constant; break;
+    case 'u':
+      if (IsUTF8) {
+        Kind = TokenKind::utf8_char_constant;
+      } else {
+        Kind = TokenKind::utf16_char_constant;
+      }
+      break;
+    case 'U': Kind = TokenKind::utf32_char_constant; break;
+    default: Kind = TokenKind::char_constant;
+    }
+    
+    ++BufferPtr; // Skip opening quote
+    
+    // Lex the character content
+    while (BufferPtr < BufferEnd && *BufferPtr != '\'') {
+      if (*BufferPtr == '\\') {
+        ++BufferPtr;
+        if (BufferPtr < BufferEnd) {
+          // Handle Unicode escape sequences
+          if (*BufferPtr == 'u') {
+            ++BufferPtr;
+            for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
+              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+                ++BufferPtr;
+              } else {
+                Diags.report(getSourceLocation(), DiagLevel::Error, 
+                             "invalid universal character name: expected 4 hex digits after \\u");
+                break;
+              }
+            }
+          } else if (*BufferPtr == 'U') {
+            ++BufferPtr;
+            for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
+              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+                ++BufferPtr;
+              } else {
+                Diags.report(getSourceLocation(), DiagLevel::Error, 
+                             "invalid universal character name: expected 8 hex digits after \\U");
+                break;
+              }
+            }
+          } else {
+            ++BufferPtr;
+          }
+        }
+      } else if (*BufferPtr == '\n') {
+        Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
+        break;
+      } else {
+        ++BufferPtr;
+      }
+    }
+    
+    if (BufferPtr < BufferEnd && *BufferPtr == '\'') {
+      ++BufferPtr;
+    } else {
+      Diags.report(getSourceLocation(), DiagLevel::Error, "unterminated character constant");
+    }
+    
+    return formToken(Result, Kind, Start);
   }
 
   if (BufferPtr < BufferEnd && *BufferPtr == '"') {
@@ -593,8 +709,34 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
     while (BufferPtr < BufferEnd && *BufferPtr != '"') {
       if (*BufferPtr == '\\') {
         ++BufferPtr;
-        if (BufferPtr < BufferEnd)
-          ++BufferPtr;
+        if (BufferPtr < BufferEnd) {
+          // Handle Unicode escape sequences
+          if (*BufferPtr == 'u') {
+            ++BufferPtr;
+            for (int i = 0; i < 4 && BufferPtr < BufferEnd; ++i) {
+              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+                ++BufferPtr;
+              } else {
+                Diags.report(getSourceLocation(), DiagLevel::Error, 
+                             "invalid universal character name: expected 4 hex digits after \\u");
+                break;
+              }
+            }
+          } else if (*BufferPtr == 'U') {
+            ++BufferPtr;
+            for (int i = 0; i < 8 && BufferPtr < BufferEnd; ++i) {
+              if (std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+                ++BufferPtr;
+              } else {
+                Diags.report(getSourceLocation(), DiagLevel::Error, 
+                             "invalid universal character name: expected 8 hex digits after \\U");
+                break;
+              }
+            }
+          } else {
+            ++BufferPtr;
+          }
+        }
       } else {
         ++BufferPtr;
       }

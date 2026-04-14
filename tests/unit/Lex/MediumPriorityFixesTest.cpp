@@ -301,3 +301,109 @@ TEST_F(MediumPriorityFixesTest, ErrorRecovery) {
   }
   EXPECT_EQ(Tok.getText(), "y");
 }
+
+// Test 21: Unicode escape sequence \uXXXX in string
+TEST_F(MediumPriorityFixesTest, UnicodeEscapeInString) {
+  PP->enterSourceFile("test.cpp", "\"Hello \\u0041\\u0042\"\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::string_literal);
+  EXPECT_EQ(Tok.getText(), "\"Hello \\u0041\\u0042\"");
+}
+
+// Test 22: Unicode escape sequence \UXXXXXXXX in string
+TEST_F(MediumPriorityFixesTest, UnicodeEscape8DigitInString) {
+  PP->enterSourceFile("test.cpp", "\"Test \\U00000041\\U00000042\"\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::string_literal);
+  EXPECT_EQ(Tok.getText(), "\"Test \\U00000041\\U00000042\"");
+}
+
+// Test 23: Unicode escape sequence in character constant
+TEST_F(MediumPriorityFixesTest, UnicodeEscapeInChar) {
+  PP->enterSourceFile("test.cpp", "'\\u0041'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::char_constant);
+  EXPECT_EQ(Tok.getText(), "'\\u0041'");
+}
+
+// Test 24: UTF-8 character literal u8'c'
+TEST_F(MediumPriorityFixesTest, UTF8CharLiteral) {
+  PP->enterSourceFile("test.cpp", "u8'x'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::utf8_char_constant);
+  EXPECT_EQ(Tok.getText(), "u8'x'");
+}
+
+// Test 25: UTF-8 character literal with Unicode escape
+TEST_F(MediumPriorityFixesTest, UTF8CharLiteralWithUnicodeEscape) {
+  PP->enterSourceFile("test.cpp", "u8'\\u0041'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::utf8_char_constant);
+  EXPECT_EQ(Tok.getText(), "u8'\\u0041'");
+}
+
+// Test 26: UTF-16 character literal u'c'
+TEST_F(MediumPriorityFixesTest, UTF16CharLiteral) {
+  PP->enterSourceFile("test.cpp", "u'x'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::utf16_char_constant);
+  EXPECT_EQ(Tok.getText(), "u'x'");
+}
+
+// Test 27: UTF-32 character literal U'c'
+TEST_F(MediumPriorityFixesTest, UTF32CharLiteral) {
+  PP->enterSourceFile("test.cpp", "U'x'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::utf32_char_constant);
+  EXPECT_EQ(Tok.getText(), "U'x'");
+}
+
+// Test 28: Wide character literal L'c'
+TEST_F(MediumPriorityFixesTest, WideCharLiteral) {
+  PP->enterSourceFile("test.cpp", "L'x'\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::wide_char_constant);
+  EXPECT_EQ(Tok.getText(), "L'x'");
+}
+
+// Test 29: UTF-8 string literal u8"..."
+TEST_F(MediumPriorityFixesTest, UTF8StringLiteral) {
+  PP->enterSourceFile("test.cpp", "u8\"hello\"\n");
+  
+  Token Tok;
+  ASSERT_TRUE(PP->lexToken(Tok));
+  EXPECT_EQ(Tok.getKind(), TokenKind::utf8_string_literal);
+  EXPECT_EQ(Tok.getText(), "u8\"hello\"");
+}
+
+// Test 30: Keyword range markers - isKeyword should work
+TEST_F(MediumPriorityFixesTest, KeywordRangeCheck) {
+  // Test that isKeyword correctly identifies keywords
+  Lexer Lex(SM, *Diags, "int auto return", SM.createMainFileID("test.cpp", "int auto return"));
+  
+  Token Tok;
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_TRUE(isKeyword(Tok.getKind())); // int
+  
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_TRUE(isKeyword(Tok.getKind())); // auto
+  
+  ASSERT_TRUE(Lex.lexToken(Tok));
+  EXPECT_TRUE(isKeyword(Tok.getKind())); // return
+}

@@ -167,6 +167,10 @@ TOKEN(greatergreatergreater) // >>> (C++26 digraph)
 #define KEYNOCXX 5
 #endif
 
+// Keyword range markers (for isKeyword() range check)
+// These are pseudo-keywords used to define the range of valid keywords
+KEYWORD(kw_first_keyword, KEYALL)
+
 KEYWORD(auto, KEYALL)
 KEYWORD(break, KEYALL)
 KEYWORD(case, KEYALL)
@@ -363,6 +367,9 @@ KEYWORD_ZH(要求, kw_requires)      // requires
 KEYWORD_ZH(协程等待, kw_co_await)  // co_await
 KEYWORD_ZH(协程返回, kw_co_return) // co_return
 KEYWORD_ZH(协程产出, kw_co_yield)  // co_yield
+
+// End of keyword range marker
+KEYWORD(kw_last_keyword, KEYALL)
 
 //===----------------------------------------------------------------------===//
 // Cleanup
