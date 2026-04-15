@@ -796,4 +796,92 @@ public:
   }
 };
 
+//===----------------------------------------------------------------------===//
+// ModuleDecl - Module declaration (C++20)
+//===----------------------------------------------------------------------===//
+
+/// ModuleDecl - Module declaration.
+/// Example: export module mylib; or module mylib:detail;
+class ModuleDecl : public NamedDecl {
+  llvm::StringRef ModuleName;
+  llvm::StringRef PartitionName;
+  bool IsExported;
+  bool IsModulePartition;
+
+public:
+  ModuleDecl(SourceLocation Loc, llvm::StringRef ModuleName,
+             bool IsExported = false, llvm::StringRef PartitionName = "",
+             bool IsModulePartition = false)
+      : NamedDecl(Loc, ModuleName), ModuleName(ModuleName),
+        PartitionName(PartitionName), IsExported(IsExported),
+        IsModulePartition(IsModulePartition) {}
+
+  llvm::StringRef getModuleName() const { return ModuleName; }
+  llvm::StringRef getPartitionName() const { return PartitionName; }
+  bool isExported() const { return IsExported; }
+  bool isModulePartition() const { return IsModulePartition; }
+
+  NodeKind getKind() const override { return NodeKind::ModuleDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ModuleDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// ImportDecl - Module import declaration (C++20)
+//===----------------------------------------------------------------------===//
+
+/// ImportDecl - Module import declaration.
+/// Example: import std.core; or export import :submodule;
+class ImportDecl : public NamedDecl {
+  llvm::StringRef ModuleName;
+  llvm::StringRef PartitionName;
+  bool IsExported;
+
+public:
+  ImportDecl(SourceLocation Loc, llvm::StringRef ModuleName,
+             bool IsExported = false, llvm::StringRef PartitionName = "")
+      : NamedDecl(Loc, ModuleName), ModuleName(ModuleName),
+        PartitionName(PartitionName), IsExported(IsExported) {}
+
+  llvm::StringRef getModuleName() const { return ModuleName; }
+  llvm::StringRef getPartitionName() const { return PartitionName; }
+  bool isExported() const { return IsExported; }
+
+  NodeKind getKind() const override { return NodeKind::ImportDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ImportDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// ExportDecl - Export declaration (C++20)
+//===----------------------------------------------------------------------===//
+
+/// ExportDecl - Export declaration.
+/// Example: export int x; or export template<typename T> class Vector {};
+class ExportDecl : public Decl {
+  Decl *ExportedDecl;
+
+public:
+  ExportDecl(SourceLocation Loc, Decl *ExportedDecl)
+      : Decl(Loc), ExportedDecl(ExportedDecl) {}
+
+  Decl *getExportedDecl() const { return ExportedDecl; }
+
+  NodeKind getKind() const override { return NodeKind::ExportDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ExportDeclKind;
+  }
+};
+
 } // namespace blocktype

@@ -430,4 +430,47 @@ void TemplateTemplateParmDecl::dump(raw_ostream &OS, unsigned Indent) const {
   }
 }
 
+//===----------------------------------------------------------------------===//
+// ModuleDecl
+//===----------------------------------------------------------------------===//
+
+void ModuleDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ModuleDecl ";
+  if (IsExported)
+    OS << "export ";
+  OS << ModuleName;
+  if (!PartitionName.empty())
+    OS << ":" << PartitionName;
+  OS << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// ImportDecl
+//===----------------------------------------------------------------------===//
+
+void ImportDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ImportDecl ";
+  if (IsExported)
+    OS << "export ";
+  OS << ModuleName;
+  if (!PartitionName.empty())
+    OS << ":" << PartitionName;
+  OS << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// ExportDecl
+//===----------------------------------------------------------------------===//
+
+void ExportDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ExportDecl\n";
+
+  if (ExportedDecl) {
+    ExportedDecl->dump(OS, Indent + 2);
+  }
+}
+
 } // namespace blocktype

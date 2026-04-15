@@ -59,6 +59,29 @@ Stmt *Parser::parseDeclarationStatement() {
 /// simple-declaration ::= decl-specifier-seq init-declarator-list? ';'
 ///
 Decl *Parser::parseDeclaration() {
+  // Check for module declaration (C++20)
+  if (Tok.is(TokenKind::kw_module)) {
+    return parseModuleDeclaration();
+  }
+
+  // Check for import declaration (C++20)
+  if (Tok.is(TokenKind::kw_import)) {
+    return parseImportDeclaration();
+  }
+
+  // Check for export declaration (C++20)
+  if (Tok.is(TokenKind::kw_export)) {
+    // Look ahead to determine if it's an export module/import or export declaration
+    Token NextTok = peekToken();
+    if (NextTok.is(TokenKind::kw_module)) {
+      return parseModuleDeclaration();
+    } else if (NextTok.is(TokenKind::kw_import)) {
+      return parseImportDeclaration();
+    } else {
+      return parseExportDeclaration();
+    }
+  }
+
   // Check for template declaration
   if (Tok.is(TokenKind::kw_template)) {
     return parseTemplateDeclaration();
@@ -72,7 +95,7 @@ Decl *Parser::parseDeclaration() {
   // Check for using declaration or directive
   if (Tok.is(TokenKind::kw_using)) {
     // Look ahead to determine if it's a using directive or using declaration
-    Token NextTok = peekNextToken();
+    Token NextTok = peekToken();
     if (NextTok.is(TokenKind::kw_namespace)) {
       return parseUsingDirective();
     } else {
@@ -1008,6 +1031,162 @@ UsingDirectiveDecl *Parser::parseUsingDirective() {
   consumeToken(); // consume ';'
 
   return Context.create<UsingDirectiveDecl>(NameLoc, Name);
+}
+
+//===----------------------------------------------------------------------===//
+// Module Declaration Parsing (C++20)
+//===----------------------------------------------------------------------===//
+
+/// parseModuleDeclaration - Parse a module declaration.
+///
+/// module-declaration ::= 'export'? 'module' module-name module-partition? attribute-specifier-seq? ';'
+/// module-name ::= identifier ('.' identifier)*
+/// module-partition ::= ':' identifier
+ModuleDecl *Parser::parseModuleDeclaration() {
+  // Check for 'export' keyword (optional)
+  bool IsExported = false;
+  if (Tok.is(TokenKind::kw_export)) {
+    IsExported = true;
+    consumeToken();
+  }
+
+  // Expect 'module' keyword
+  if (!Tok.is(TokenKind::kw_module)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  SourceLocation ModuleLoc = Tok.getLocation();
+  consumeToken(); // consume 'module'
+
+  // Parse module name
+  llvm::StringRef ModuleName = parseModuleName();
+
+  // Parse module partition (optional)
+  llvm::StringRef PartitionName;
+  bool IsModulePartition = false;
+  if (Tok.is(TokenKind::colon)) {
+    IsModulePartition = true;
+    PartitionName = parseModulePartition();
+  }
+
+  // TODO: Parse attribute-specifier-seq (optional)
+
+  // Expect ';'
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+
+  consumeToken(); // consume ';'
+
+  return Context.create<ModuleDecl>(ModuleLoc, ModuleName, IsExported, PartitionName, IsModulePartition);
+}
+
+/// parseImportDeclaration - Parse an import declaration.
+///
+/// module-import ::= 'export'? 'import' module-name module-partition? ';'
+ImportDecl *Parser::parseImportDeclaration() {
+  // Check for 'export' keyword (optional)
+  bool IsExported = false;
+  if (Tok.is(TokenKind::kw_export)) {
+    IsExported = true;
+    consumeToken();
+  }
+
+  // Expect 'import' keyword
+  if (!Tok.is(TokenKind::kw_import)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  SourceLocation ImportLoc = Tok.getLocation();
+  consumeToken(); // consume 'import'
+
+  // Parse module name
+  llvm::StringRef ModuleName = parseModuleName();
+
+  // Parse module partition (optional)
+  llvm::StringRef PartitionName;
+  if (Tok.is(TokenKind::colon)) {
+    PartitionName = parseModulePartition();
+  }
+
+  // Expect ';'
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+
+  consumeToken(); // consume ';'
+
+  return Context.create<ImportDecl>(ImportLoc, ModuleName, IsExported, PartitionName);
+}
+
+/// parseExportDeclaration - Parse an export declaration.
+///
+/// export-declaration ::= 'export' declaration
+ExportDecl *Parser::parseExportDeclaration() {
+  // Expect 'export' keyword
+  if (!Tok.is(TokenKind::kw_export)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  SourceLocation ExportLoc = Tok.getLocation();
+  consumeToken(); // consume 'export'
+
+  // Parse the exported declaration
+  Decl *ExportedDecl = parseDeclaration();
+  if (!ExportedDecl) {
+    return nullptr;
+  }
+
+  return Context.create<ExportDecl>(ExportLoc, ExportedDecl);
+}
+
+/// parseModuleName - Parse a module name.
+///
+/// module-name ::= identifier ('.' identifier)*
+llvm::StringRef Parser::parseModuleName() {
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return "";
+  }
+
+  llvm::StringRef ModuleName = Tok.getText();
+  SourceLocation NameLoc = Tok.getLocation();
+  consumeToken();
+
+  // Handle dotted module names (e.g., std.core)
+  // For now, we only support simple identifiers
+  // TODO: Support dotted module names
+
+  return ModuleName;
+}
+
+/// parseModulePartition - Parse a module partition.
+///
+/// module-partition ::= ':' identifier
+llvm::StringRef Parser::parseModulePartition() {
+  // Expect ':'
+  if (!Tok.is(TokenKind::colon)) {
+    emitError(DiagID::err_expected_colon);
+    return "";
+  }
+
+  consumeToken(); // consume ':'
+
+  // Expect identifier
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return "";
+  }
+
+  llvm::StringRef PartitionName = Tok.getText();
+  consumeToken();
+
+  return PartitionName;
 }
 
 } // namespace blocktype

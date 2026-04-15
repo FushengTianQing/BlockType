@@ -38,6 +38,12 @@ class TemplateDecl;
 class TemplateTypeParmDecl;
 class NonTypeTemplateParmDecl;
 class TemplateTemplateParmDecl;
+class ModuleDecl;
+class ImportDecl;
+class ExportDecl;
+class NamespaceDecl;
+class UsingDecl;
+class UsingDirectiveDecl;
 
 /// LambdaCapture - Represents a lambda capture.
 /// ParsingContext - Represents the current parsing context.
@@ -366,6 +372,21 @@ public:
 
   /// Parses a using directive.
   UsingDirectiveDecl *parseUsingDirective();
+
+  /// Parses a module declaration (C++20).
+  ModuleDecl *parseModuleDeclaration();
+
+  /// Parses an import declaration (C++20).
+  ImportDecl *parseImportDeclaration();
+
+  /// Parses an export declaration (C++20).
+  ExportDecl *parseExportDeclaration();
+
+  /// Parses a module name (identifier or dotted identifier).
+  llvm::StringRef parseModuleName();
+
+  /// Parses a module partition (:identifier).
+  llvm::StringRef parseModulePartition();
 
   //===--------------------------------------------------------------------===//
   // Statement parsing

@@ -172,3 +172,8 @@ DECL(TemplateDecl, NamedDecl)
 DECL(TemplateTemplateParmDecl, TemplateDecl)
 DECL(TemplateTypeParmDecl, TypeDecl)
 DECL(NonTypeTemplateParmDecl, ValueDecl)
+
+// Module declarations (C++20)
+DECL(ModuleDecl, NamedDecl)
+DECL(ImportDecl, NamedDecl)
+DECL(ExportDecl, Decl)
