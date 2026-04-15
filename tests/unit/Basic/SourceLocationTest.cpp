@@ -12,7 +12,7 @@ TEST(SourceLocationTest, DefaultInvalid) {
 TEST(SourceLocationTest, ValidLocation) {
   SourceLocation Loc(1);
   EXPECT_TRUE(Loc.isValid());
-  EXPECT_EQ(Loc.getID(), 1u);
+  EXPECT_EQ(Loc.getRawEncoding(), 1u);
 }
 
 TEST(SourceLocationTest, Comparison) {

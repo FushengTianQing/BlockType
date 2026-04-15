@@ -34,7 +34,7 @@ TEST(TokenTest, SetLocation) {
   Token T;
   SourceLocation Loc(42);
   T.setLocation(Loc);
-  EXPECT_EQ(T.getLocation().getID(), 42u);
+  EXPECT_EQ(T.getLocation().getRawEncoding(), 42u);
 }
 
 TEST(TokenTest, SetLength) {

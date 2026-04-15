@@ -612,6 +612,70 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
     }
   }
 
+  // D2: Validate digit separators
+  // Check for invalid separator positions:
+  // - Cannot start with separator: '123
+  // - Cannot end with separator: 123'
+  // - Cannot have consecutive separators: 1''23
+  // - Cannot have separator adjacent to radix prefix: 0x'FF or 0b'10
+  // - Cannot have separator adjacent to decimal point: 1'.23 or 1.'23
+  // - Cannot have separator adjacent to exponent: 1e'+10 or 1e1'0
+  StringRef LiteralText(Start, BufferPtr - Start);
+  for (size_t i = 0; i < LiteralText.size(); ++i) {
+    if (LiteralText[i] == '\'') {
+      // Check if at start (but after prefix)
+      if (i == 0) {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "digit separator cannot appear at the start of a numeric literal");
+        break;
+      }
+      // Check if at end
+      if (i == LiteralText.size() - 1) {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "digit separator cannot appear at the end of a numeric literal");
+        break;
+      }
+      // Check for consecutive separators
+      if (LiteralText[i - 1] == '\'') {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "consecutive digit separators are not allowed");
+        break;
+      }
+      // Check if separator is after radix prefix (0x, 0b, 0B, 0X)
+      if (i == 2 && LiteralText[0] == '0' && 
+          (LiteralText[1] == 'x' || LiteralText[1] == 'X' || 
+           LiteralText[1] == 'b' || LiteralText[1] == 'B')) {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "digit separator cannot appear immediately after radix prefix");
+        break;
+      }
+      // Check if separator is adjacent to decimal point
+      if (LiteralText[i - 1] == '.' || LiteralText[i + 1] == '.') {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "digit separator cannot be adjacent to decimal point");
+        break;
+      }
+      // Check if separator is adjacent to exponent sign
+      char Prev = LiteralText[i - 1];
+      char Next = LiteralText[i + 1];
+      if (Prev == 'e' || Prev == 'E' || Prev == 'p' || Prev == 'P' ||
+          Next == 'e' || Next == 'E' || Next == 'p' || Next == 'P') {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "digit separator cannot be adjacent to exponent");
+        break;
+      }
+      // Check if separator is after exponent sign (+/-)
+      if ((Prev == '+' || Prev == '-') && i >= 2) {
+        char PrevPrev = LiteralText[i - 2];
+        if (PrevPrev == 'e' || PrevPrev == 'E' || PrevPrev == 'p' || PrevPrev == 'P') {
+          Diags.report(getSourceLocation(), DiagLevel::Error,
+                       "digit separator cannot appear immediately after exponent sign");
+          break;
+        }
+      }
+    }
+  }
+
   // Suffix - B2.4: User-defined literal suffix
   // Standard suffixes (like ULL, f, L) and user-defined suffixes (starting with _)
   const char *SuffixStart = BufferPtr;
@@ -855,6 +919,23 @@ bool Lexer::lexRawStringLiteral(Token &Result, const char *Start) {
   while (BufferPtr < BufferEnd && *BufferPtr != '(' && *BufferPtr != '"') {
     Delimiter += *BufferPtr;
     ++BufferPtr;
+  }
+
+  // D4: Validate delimiter length (max 16 characters)
+  if (Delimiter.size() > 16) {
+    Diags.report(getSourceLocation(), DiagLevel::Error, 
+                 "raw string delimiter exceeds maximum length of 16 characters");
+    // Continue to find end of literal for error recovery
+  }
+
+  // Validate delimiter characters (must not contain: ), \, space, or control characters)
+  for (char C : Delimiter) {
+    if (C == ')' || C == '\\' || C == ' ' || 
+        (static_cast<unsigned char>(C) >= 0x00 && static_cast<unsigned char>(C) <= 0x1F)) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "invalid character in raw string delimiter");
+      break;
+    }
   }
 
   if (BufferPtr >= BufferEnd || *BufferPtr != '(') {
