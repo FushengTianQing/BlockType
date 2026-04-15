@@ -142,6 +142,9 @@ DIAG(err_expected_type, Error, \
 DIAG(err_expected_expression, Error, \
   "expected expression", \
   "期望表达式")
+DIAG(err_expected_string_literal, Error, \
+  "expected string literal", \
+  "期望字符串字面量")
 DIAG(err_expected_statement, Error, \
   "expected statement", \
   "期望语句")

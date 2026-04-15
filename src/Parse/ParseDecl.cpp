@@ -92,12 +92,18 @@ Decl *Parser::parseDeclaration() {
     return parseNamespaceDeclaration();
   }
 
-  // Check for using declaration or directive
+  // Check for using declaration, directive, or type alias
   if (Tok.is(TokenKind::kw_using)) {
-    // Look ahead to determine if it's a using directive or using declaration
+    // Look ahead to determine if it's a using directive, type alias, or using declaration
     Token NextTok = peekToken();
     if (NextTok.is(TokenKind::kw_namespace)) {
       return parseUsingDirective();
+    } else if (NextTok.is(TokenKind::identifier)) {
+      // Could be type alias (using X = ...) or using declaration (using A::B)
+      // For type alias, the pattern is: using identifier = type
+      // For using declaration, the pattern is: using [typename] A::B
+      // We need to look for '=' after the identifier
+      return parseTypeAliasDeclaration(Tok.getLocation());
     } else {
       return parseUsingDeclaration();
     }
@@ -107,14 +113,74 @@ Decl *Parser::parseDeclaration() {
   if (Tok.is(TokenKind::kw_class)) {
     SourceLocation ClassLoc = Tok.getLocation();
     consumeToken();
-    return parseClassDeclaration(ClassLoc);
+    Decl *Result = parseClassDeclaration(ClassLoc);
+    // Consume optional semicolon after class definition
+    if (Tok.is(TokenKind::semicolon)) {
+      consumeToken();
+    }
+    return Result;
   }
 
   // Check for struct declaration
   if (Tok.is(TokenKind::kw_struct)) {
     SourceLocation StructLoc = Tok.getLocation();
     consumeToken();
-    return parseStructDeclaration(StructLoc);
+    Decl *Result = parseStructDeclaration(StructLoc);
+    // Consume optional semicolon after struct definition
+    if (Tok.is(TokenKind::semicolon)) {
+      consumeToken();
+    }
+    return Result;
+  }
+
+  // Check for enum declaration
+  if (Tok.is(TokenKind::kw_enum)) {
+    SourceLocation EnumLoc = Tok.getLocation();
+    consumeToken();
+    Decl *Result = parseEnumDeclaration(EnumLoc);
+    // Consume optional semicolon after enum definition
+    if (Tok.is(TokenKind::semicolon)) {
+      consumeToken();
+    }
+    return Result;
+  }
+
+  // Check for union declaration
+  if (Tok.is(TokenKind::kw_union)) {
+    SourceLocation UnionLoc = Tok.getLocation();
+    consumeToken();
+    Decl *Result = parseUnionDeclaration(UnionLoc);
+    // Consume optional semicolon after union definition
+    if (Tok.is(TokenKind::semicolon)) {
+      consumeToken();
+    }
+    return Result;
+  }
+
+  // Check for typedef declaration
+  if (Tok.is(TokenKind::kw_typedef)) {
+    SourceLocation TypedefLoc = Tok.getLocation();
+    consumeToken();
+    return parseTypedefDeclaration(TypedefLoc);
+  }
+
+  // Check for static_assert declaration
+  if (Tok.is(TokenKind::kw_static_assert)) {
+    SourceLocation Loc = Tok.getLocation();
+    consumeToken();
+    return parseStaticAssertDeclaration(Loc);
+  }
+
+  // Check for extern linkage specification
+  if (Tok.is(TokenKind::kw_extern)) {
+    // Look ahead to see if this is extern "C" or extern "C++"
+    Token NextTok = peekToken();
+    if (NextTok.is(TokenKind::string_literal)) {
+      SourceLocation Loc = Tok.getLocation();
+      consumeToken();
+      return parseLinkageSpecDeclaration(Loc);
+    }
+    // Otherwise, it's a regular extern declaration, fall through
   }
 
   // Parse declaration specifiers (type)
@@ -133,6 +199,30 @@ Decl *Parser::parseDeclaration() {
   llvm::StringRef Name = Tok.getText();
   SourceLocation NameLoc = Tok.getLocation();
   consumeToken();
+
+  // Check for qualified name (e.g., ClassName::member)
+  if (Tok.is(TokenKind::coloncolon)) {
+    consumeToken(); // consume '::'
+    
+    // Parse the member name
+    if (!Tok.is(TokenKind::identifier)) {
+      emitError(DiagID::err_expected_identifier);
+      return nullptr;
+    }
+    
+    llvm::StringRef MemberName = Tok.getText();
+    SourceLocation MemberLoc = Tok.getLocation();
+    consumeToken();
+    
+    // This is a static member definition
+    // For now, treat it as a variable declaration
+    // Check if this is a function definition
+    if (Tok.is(TokenKind::l_paren)) {
+      return parseFunctionDeclaration(Type, MemberName, MemberLoc);
+    }
+    
+    return parseVariableDeclaration(Type, MemberName, MemberLoc);
+  }
 
   // Check if this is a function declaration
   if (Tok.is(TokenKind::l_paren)) {
@@ -312,6 +402,11 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
 
   // Create CXXRecordDecl
   CXXRecordDecl *Class = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_class);
+  
+  // Add class to current scope before parsing body
+  if (CurrentScope) {
+    CurrentScope->addDecl(Class);
+  }
 
   // Parse base clause if present
   if (Tok.is(TokenKind::colon)) {
@@ -328,7 +423,11 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
   }
 
   consumeToken(); // consume '{'
+
+  // Enter class scope
+  pushScope(ScopeFlags::ClassScope);
   parseClassBody(Class);
+  popScope();
 
   if (!Tok.is(TokenKind::r_brace)) {
     emitError(DiagID::err_expected_rbrace);
@@ -418,6 +517,65 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
     return parseAccessSpecifier(Loc);
   }
 
+  // Check for constructor/destructor (if we're in a class scope)
+  if (Class) {
+    // Check for destructor (starts with '~')
+    if (Tok.is(TokenKind::tilde)) {
+      SourceLocation TildeLoc = Tok.getLocation();
+      consumeToken(); // consume '~'
+      
+      // Expect class name
+      if (Tok.is(TokenKind::identifier) && Tok.getText() == Class->getName()) {
+        SourceLocation NameLoc = Tok.getLocation();
+        consumeToken(); // consume class name
+        
+        if (Tok.is(TokenKind::l_paren)) {
+          return parseDestructorDeclaration(Class, NameLoc);
+        }
+        emitError(DiagID::err_expected);
+        return nullptr;
+      }
+      emitError(DiagID::err_expected_identifier);
+      return nullptr;
+    }
+    
+    // Check for constructor (identifier matching class name)
+    if (Tok.is(TokenKind::identifier)) {
+      llvm::StringRef PotentialCtorName = Tok.getText();
+
+      // Check if this is a constructor (name matches class name)
+      if (PotentialCtorName == Class->getName()) {
+        SourceLocation NameLoc = Tok.getLocation();
+        consumeToken();
+
+        // Check if this is a constructor (followed by '(')
+        if (Tok.is(TokenKind::l_paren)) {
+          return parseConstructorDeclaration(Class, NameLoc);
+        }
+        // Otherwise it might be a member variable with the same name as the class
+        // Fall through to normal member parsing
+        // But we've already consumed the identifier, so we need to handle this case
+        // For now, emit an error
+        emitError(DiagID::err_expected);
+        return nullptr;
+      }
+    }
+  }
+
+  // Parse storage class specifiers (static, mutable)
+  bool IsStatic = false;
+  bool IsMutable = false;
+
+  while (Tok.is(TokenKind::kw_static) || Tok.is(TokenKind::kw_mutable)) {
+    if (Tok.is(TokenKind::kw_static)) {
+      IsStatic = true;
+      consumeToken();
+    } else if (Tok.is(TokenKind::kw_mutable)) {
+      IsMutable = true;
+      consumeToken();
+    }
+  }
+
   // Parse type
   QualType Type = parseType();
   if (Type.isNull()) {
@@ -486,8 +644,15 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
     }
 
     // Create CXXMethodDecl
-    return Context.create<CXXMethodDecl>(NameLoc, Name, Type, Params, Class, Body,
-                                         false, IsConst, false, false, false);
+    CXXMethodDecl *Method = Context.create<CXXMethodDecl>(NameLoc, Name, Type, Params, Class, Body,
+                                         IsStatic, IsConst, false, false, false);
+
+    // Add method to current scope
+    if (CurrentScope) {
+      CurrentScope->addDecl(Method);
+    }
+
+    return Method;
   }
 
   // Otherwise, it's a data member
@@ -498,6 +663,13 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
     BitWidth = parseExpression();
   }
 
+  // Parse in-class initializer (if present)
+  Expr *InClassInit = nullptr;
+  if (Tok.is(TokenKind::equal)) {
+    consumeToken(); // consume '='
+    InClassInit = parseExpression();
+  }
+
   // Expect ';'
   if (!Tok.is(TokenKind::semicolon)) {
     emitError(DiagID::err_expected_semi);
@@ -505,8 +677,16 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
   }
   consumeToken();
 
-  // Create FieldDecl
-  return Context.create<FieldDecl>(NameLoc, Name, Type, BitWidth, false);
+  // Create VarDecl for static members, FieldDecl for non-static
+  if (IsStatic) {
+    VarDecl *VD = Context.create<VarDecl>(NameLoc, Name, Type, InClassInit, true);
+    if (CurrentScope) {
+      CurrentScope->addDecl(VD);
+    }
+    return VD;
+  }
+  
+  return Context.create<FieldDecl>(NameLoc, Name, Type, BitWidth, IsMutable, InClassInit);
 }
 
 /// parseAccessSpecifier - Parse an access specifier.
@@ -1187,6 +1367,588 @@ llvm::StringRef Parser::parseModulePartition() {
   consumeToken();
 
   return PartitionName;
+}
+
+//===----------------------------------------------------------------------===//
+// Enum Declaration Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseEnumDeclaration - Parse an enum declaration.
+///
+/// enum-specifier ::= 'enum' identifier? '{' enumerator-list? '}'
+///                  | 'enum' identifier ':' type-specifier-seq '{' enumerator-list? '}'
+///                  | 'enum' 'class' identifier? ':'? type-specifier-seq? '{' enumerator-list? '}'
+EnumDecl *Parser::parseEnumDeclaration(SourceLocation EnumLoc) {
+  // Check for enum class/struct (scoped enum)
+  bool IsScoped = false;
+  if (Tok.is(TokenKind::kw_class) || Tok.is(TokenKind::kw_struct)) {
+    IsScoped = true;
+    consumeToken();
+  }
+
+  // Parse enum name (optional)
+  llvm::StringRef Name;
+  SourceLocation NameLoc;
+
+  if (Tok.is(TokenKind::identifier)) {
+    Name = Tok.getText();
+    NameLoc = Tok.getLocation();
+    consumeToken();
+  }
+
+  // Create EnumDecl
+  EnumDecl *Enum = Context.create<EnumDecl>(NameLoc, Name);
+
+  // Parse optional underlying type (enum : int)
+  if (Tok.is(TokenKind::colon)) {
+    consumeToken();
+    QualType UnderlyingType = parseType();
+    // Note: We should store the underlying type in EnumDecl
+    // For now, we just parse it and discard
+  }
+
+  // Parse enum body
+  if (!Tok.is(TokenKind::l_brace)) {
+    emitError(DiagID::err_expected_lbrace);
+    return Enum;
+  }
+
+  consumeToken(); // consume '{'
+  parseEnumBody(Enum);
+
+  if (!Tok.is(TokenKind::r_brace)) {
+    emitError(DiagID::err_expected_rbrace);
+    return Enum;
+  }
+
+  consumeToken(); // consume '}'
+
+  // Expect optional semicolon
+  if (Tok.is(TokenKind::semicolon)) {
+    consumeToken();
+  }
+
+  return Enum;
+}
+
+/// parseEnumBody - Parse an enum body.
+///
+/// enumerator-list ::= enumerator (',' enumerator)*
+void Parser::parseEnumBody(EnumDecl *Enum) {
+  while (!Tok.is(TokenKind::r_brace) && !Tok.is(TokenKind::eof)) {
+    parseEnumerator(Enum);
+
+    if (Tok.is(TokenKind::comma)) {
+      consumeToken();
+    } else {
+      break;
+    }
+  }
+}
+
+/// parseEnumerator - Parse an enumerator.
+///
+/// enumerator ::= identifier ('=' constant-expression)?
+void Parser::parseEnumerator(EnumDecl *Enum) {
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return;
+  }
+
+  llvm::StringRef Name = Tok.getText();
+  SourceLocation NameLoc = Tok.getLocation();
+  consumeToken();
+
+  // Parse optional initializer
+  Expr *InitVal = nullptr;
+  if (Tok.is(TokenKind::equal)) {
+    consumeToken();
+    InitVal = parseExpression();
+  }
+
+  // Create EnumConstantDecl
+  // Note: We should determine the enum type properly
+  EnumConstantDecl *Constant = Context.create<EnumConstantDecl>(
+      NameLoc, Name, QualType(), InitVal);
+  Enum->addEnumerator(Constant);
+}
+
+//===----------------------------------------------------------------------===//
+// Union Declaration Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseUnionDeclaration - Parse a union declaration.
+///
+/// union-specifier ::= 'union' identifier? '{' member-specification? '}'
+RecordDecl *Parser::parseUnionDeclaration(SourceLocation UnionLoc) {
+  // Parse union name (optional)
+  llvm::StringRef Name;
+  SourceLocation NameLoc;
+
+  if (Tok.is(TokenKind::identifier)) {
+    Name = Tok.getText();
+    NameLoc = Tok.getLocation();
+    consumeToken();
+  }
+
+  // Create RecordDecl (union)
+  RecordDecl *Union = Context.create<RecordDecl>(NameLoc, Name, TagDecl::TK_union);
+
+  // Parse union body
+  if (!Tok.is(TokenKind::l_brace)) {
+    emitError(DiagID::err_expected_lbrace);
+    return Union;
+  }
+
+  consumeToken(); // consume '{'
+
+  // Parse members
+  while (!Tok.is(TokenKind::r_brace) && !Tok.is(TokenKind::eof)) {
+    Decl *Member = parseClassMember(nullptr);
+    if (Member) {
+      Union->addField(static_cast<FieldDecl *>(Member));
+    } else {
+      // Error recovery: skip to next ';' or '}'
+      skipUntil({TokenKind::semicolon, TokenKind::r_brace});
+      if (Tok.is(TokenKind::semicolon)) {
+        consumeToken();
+      }
+    }
+  }
+
+  if (!Tok.is(TokenKind::r_brace)) {
+    emitError(DiagID::err_expected_rbrace);
+    return Union;
+  }
+
+  consumeToken(); // consume '}'
+
+  // Expect optional semicolon
+  if (Tok.is(TokenKind::semicolon)) {
+    consumeToken();
+  }
+
+  return Union;
+}
+
+//===----------------------------------------------------------------------===//
+// Typedef Declaration Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseTypedefDeclaration - Parse a typedef declaration.
+///
+/// typedef-declaration ::= 'typedef' type-specifier-seq declarator ';'
+TypedefDecl *Parser::parseTypedefDeclaration(SourceLocation TypedefLoc) {
+  // Parse type
+  QualType Type = parseType();
+  if (Type.isNull()) {
+    emitError(DiagID::err_expected_type);
+    return nullptr;
+  }
+
+  // Parse declarator (pointer/reference modifiers)
+  Type = parseDeclarator(Type);
+
+  // Parse identifier
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return nullptr;
+  }
+
+  llvm::StringRef Name = Tok.getText();
+  SourceLocation NameLoc = Tok.getLocation();
+  consumeToken();
+
+  // Expect semicolon
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+  consumeToken();
+
+  // Create TypedefDecl
+  return Context.create<TypedefDecl>(NameLoc, Name, Type);
+}
+
+//===----------------------------------------------------------------------===//
+// Type Alias Declaration Parsing (C++11)
+//===----------------------------------------------------------------------===//
+
+/// parseTypeAliasDeclaration - Parse a type alias declaration.
+///
+/// type-alias-declaration ::= 'using' identifier '=' type-id ';'
+TypeAliasDecl *Parser::parseTypeAliasDeclaration(SourceLocation UsingLoc) {
+  // Expect 'using' keyword
+  if (!Tok.is(TokenKind::kw_using)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  consumeToken(); // consume 'using'
+
+  // Parse identifier
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return nullptr;
+  }
+
+  llvm::StringRef Name = Tok.getText();
+  SourceLocation NameLoc = Tok.getLocation();
+  consumeToken();
+
+  // Expect '='
+  if (!Tok.is(TokenKind::equal)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  consumeToken(); // consume '='
+
+  // Parse underlying type
+  QualType UnderlyingType = parseType();
+  if (UnderlyingType.isNull()) {
+    emitError(DiagID::err_expected_type);
+    return nullptr;
+  }
+
+  // Expect semicolon
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+  consumeToken();
+
+  // Create TypeAliasDecl
+  return Context.create<TypeAliasDecl>(NameLoc, Name, UnderlyingType);
+}
+
+//===----------------------------------------------------------------------===//
+// Static Assert Declaration Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseStaticAssertDeclaration - Parse a static_assert declaration.
+///
+/// static-assert-declaration ::= 'static_assert' '(' constant-expression ')' ';'
+///                             | 'static_assert' '(' constant-expression ',' string-literal ')' ';'
+StaticAssertDecl *Parser::parseStaticAssertDeclaration(SourceLocation Loc) {
+  // Expect '('
+  if (!Tok.is(TokenKind::l_paren)) {
+    emitError(DiagID::err_expected_lparen);
+    return nullptr;
+  }
+
+  consumeToken(); // consume '('
+
+  // Parse condition expression
+  Expr *CondExpr = parseExpression();
+  if (!CondExpr) {
+    emitError(DiagID::err_expected_expression);
+    return nullptr;
+  }
+
+  // Parse optional message
+  llvm::StringRef Message;
+  if (Tok.is(TokenKind::comma)) {
+    consumeToken(); // consume ','
+
+    if (!Tok.is(TokenKind::string_literal)) {
+      emitError(DiagID::err_expected_string_literal);
+      return nullptr;
+    }
+
+    Message = Tok.getText();
+    consumeToken();
+  }
+
+  // Expect ')'
+  if (!Tok.is(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+    return nullptr;
+  }
+
+  consumeToken(); // consume ')'
+
+  // Expect semicolon
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+  consumeToken();
+
+  // Create StaticAssertDecl
+  return Context.create<StaticAssertDecl>(Loc, CondExpr, Message);
+}
+
+//===----------------------------------------------------------------------===//
+// Linkage Specification Declaration Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseLinkageSpecDeclaration - Parse a linkage specification.
+///
+/// linkage-specification ::= 'extern' string-literal '{' declaration-seq? '}'
+///                        | 'extern' string-literal declaration
+LinkageSpecDecl *Parser::parseLinkageSpecDeclaration(SourceLocation Loc) {
+  // Parse linkage string
+  if (!Tok.is(TokenKind::string_literal)) {
+    emitError(DiagID::err_expected_string_literal);
+    return nullptr;
+  }
+
+  llvm::StringRef LangStr = Tok.getText();
+  consumeToken();
+
+  // Determine language
+  LinkageSpecDecl::Language Lang;
+  if (LangStr == "\"C\"") {
+    Lang = LinkageSpecDecl::C;
+  } else if (LangStr == "\"C++\"") {
+    Lang = LinkageSpecDecl::CXX;
+  } else {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  // Check for brace or single declaration
+  bool HasBraces = false;
+  if (Tok.is(TokenKind::l_brace)) {
+    HasBraces = true;
+    consumeToken();
+  }
+
+  // Create LinkageSpecDecl
+  LinkageSpecDecl *LinkageSpec = Context.create<LinkageSpecDecl>(Loc, Lang, HasBraces);
+
+  // Parse declarations
+  if (HasBraces) {
+    while (!Tok.is(TokenKind::r_brace) && !Tok.is(TokenKind::eof)) {
+      Decl *D = parseDeclaration();
+      if (D) {
+        LinkageSpec->addDecl(D);
+      } else {
+        // Error recovery
+        skipUntil({TokenKind::semicolon, TokenKind::r_brace});
+        if (Tok.is(TokenKind::semicolon)) {
+          consumeToken();
+        }
+      }
+    }
+
+    if (!Tok.is(TokenKind::r_brace)) {
+      emitError(DiagID::err_expected_rbrace);
+      return LinkageSpec;
+    }
+
+    consumeToken(); // consume '}'
+  } else {
+    // Single declaration
+    Decl *D = parseDeclaration();
+    if (D) {
+      LinkageSpec->addDecl(D);
+    }
+  }
+
+  return LinkageSpec;
+}
+
+//===----------------------------------------------------------------------===//
+// Constructor and Destructor Parsing
+//===----------------------------------------------------------------------===//
+
+/// parseConstructorDeclaration - Parse a constructor declaration.
+///
+/// constructor-declaration ::= identifier '(' parameter-declaration-clause? ')'
+///                               (member-initializer-list)? function-body?
+///
+CXXConstructorDecl *Parser::parseConstructorDeclaration(CXXRecordDecl *Class,
+                                                         SourceLocation Loc) {
+  // Parse parameter list
+  llvm::SmallVector<ParmVarDecl *, 8> Params;
+
+  expectAndConsume(TokenKind::l_paren, "expected '(' after constructor name");
+
+  // Parse parameters
+  if (!Tok.is(TokenKind::r_paren)) {
+    do {
+      ParmVarDecl *Param = parseParameterDeclaration();
+      if (!Param) {
+        emitError(DiagID::err_expected_type);
+        skipUntil({TokenKind::r_paren, TokenKind::semicolon});
+        break;
+      }
+      Params.push_back(Param);
+
+      if (Tok.is(TokenKind::comma)) {
+        consumeToken();
+      } else {
+        break;
+      }
+    } while (true);
+  }
+
+  if (!Tok.is(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+    return nullptr;
+  }
+  consumeToken(); // consume ')'
+
+  // Create CXXConstructorDecl
+  CXXConstructorDecl *Ctor = Context.create<CXXConstructorDecl>(Loc, Class, Params, nullptr, false);
+
+  // Parse member initializer list (if present)
+  if (Tok.is(TokenKind::colon)) {
+    parseMemberInitializerList(Ctor);
+  }
+
+  // Parse function body (if present)
+  Stmt *Body = nullptr;
+  if (Tok.is(TokenKind::l_brace)) {
+    Body = parseCompoundStatement();
+  }
+
+  Ctor->setBody(Body);
+
+  // Add constructor to current scope
+  if (CurrentScope) {
+    CurrentScope->addDecl(Ctor);
+  }
+
+  return Ctor;
+}
+
+/// parseDestructorDeclaration - Parse a destructor declaration.
+///
+/// destructor-declaration ::= '~' identifier '(' ')' function-body?
+///
+CXXDestructorDecl *Parser::parseDestructorDeclaration(CXXRecordDecl *Class,
+                                                       SourceLocation Loc) {
+  // Parse parameter list (destructors have no parameters)
+  expectAndConsume(TokenKind::l_paren, "expected '(' after destructor name");
+
+  if (!Tok.is(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+    return nullptr;
+  }
+  consumeToken(); // consume ')'
+
+  // Parse function body (if present)
+  Stmt *Body = nullptr;
+  if (Tok.is(TokenKind::l_brace)) {
+    Body = parseCompoundStatement();
+  }
+
+  // Create CXXDestructorDecl
+  CXXDestructorDecl *Dtor = Context.create<CXXDestructorDecl>(Loc, Class, Body);
+
+  // Add destructor to current scope
+  if (CurrentScope) {
+    CurrentScope->addDecl(Dtor);
+  }
+
+  return Dtor;
+}
+
+/// parseMemberInitializerList - Parse a member initializer list.
+///
+/// member-initializer-list ::= ':' member-initializer (',' member-initializer)*
+///
+void Parser::parseMemberInitializerList(CXXConstructorDecl *Ctor) {
+  assert(Tok.is(TokenKind::colon) && "Expected ':'");
+  consumeToken(); // consume ':'
+
+  do {
+    CXXCtorInitializer *Init = parseMemberInitializer();
+    if (Init) {
+      Ctor->addInitializer(Init);
+    } else {
+      // Error recovery: skip to next ',' or '{'
+      skipUntil({TokenKind::comma, TokenKind::l_brace, TokenKind::semicolon});
+    }
+
+    if (Tok.is(TokenKind::comma)) {
+      consumeToken();
+    } else {
+      break;
+    }
+  } while (true);
+}
+
+/// parseMemberInitializer - Parse a single member initializer.
+///
+/// member-initializer ::= identifier '(' expr-list? ')'
+///                      | identifier '{' expr-list? '}'
+///                      | identifier
+///
+CXXCtorInitializer *Parser::parseMemberInitializer() {
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return nullptr;
+  }
+
+  SourceLocation MemberLoc = Tok.getLocation();
+  llvm::StringRef MemberName = Tok.getText();
+  consumeToken();
+
+  llvm::SmallVector<Expr *, 4> Args;
+
+  // Check for '(' or '{'
+  if (Tok.is(TokenKind::l_paren)) {
+    consumeToken(); // consume '('
+
+    // Parse arguments
+    if (!Tok.is(TokenKind::r_paren)) {
+      do {
+        Expr *Arg = parseExpression();
+        if (Arg) {
+          Args.push_back(Arg);
+        } else {
+          emitError(DiagID::err_expected_expression);
+          skipUntil({TokenKind::comma, TokenKind::r_paren});
+        }
+
+        if (Tok.is(TokenKind::comma)) {
+          consumeToken();
+        } else {
+          break;
+        }
+      } while (true);
+    }
+
+    if (!Tok.is(TokenKind::r_paren)) {
+      emitError(DiagID::err_expected_rparen);
+      return nullptr;
+    }
+    consumeToken(); // consume ')'
+  } else if (Tok.is(TokenKind::l_brace)) {
+    consumeToken(); // consume '{'
+
+    // Parse arguments (uniform initialization)
+    if (!Tok.is(TokenKind::r_brace)) {
+      do {
+        Expr *Arg = parseExpression();
+        if (Arg) {
+          Args.push_back(Arg);
+        } else {
+          emitError(DiagID::err_expected_expression);
+          skipUntil({TokenKind::comma, TokenKind::r_brace});
+        }
+
+        if (Tok.is(TokenKind::comma)) {
+          consumeToken();
+        } else {
+          break;
+        }
+      } while (true);
+    }
+
+    if (!Tok.is(TokenKind::r_brace)) {
+      emitError(DiagID::err_expected_rbrace);
+      return nullptr;
+    }
+    consumeToken(); // consume '}'
+  }
+  // else: member initializer without arguments (value initialization)
+
+  return new CXXCtorInitializer(MemberLoc, MemberName, Args, false, false);
 }
 
 } // namespace blocktype

@@ -10,6 +10,7 @@
 #include "blocktype/Parse/Parser.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/ASTDumper.h"
+#include "blocktype/AST/Decl.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -212,10 +213,8 @@ int main(int argc, char *argv[]) {
     
     // 7. 可选：输出 AST
     if (ASTDump && TU) {
-      ASTDumper Dumper(outs());
       outs() << "\n=== AST Dump for " << File << " ===\n";
-      // Dumper.dump(TU);
-      outs() << "TranslationUnitDecl\n";
+      TU->dump(outs());
       outs() << "=== End AST Dump ===\n\n";
     }
     

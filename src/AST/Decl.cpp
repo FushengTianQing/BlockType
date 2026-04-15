@@ -24,6 +24,9 @@ namespace blocktype {
 void VarDecl::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
   OS << "VarDecl " << getName();
+  if (IsStatic) {
+    OS << " static";
+  }
   if (T.getTypePtr()) {
     OS << " '";
     T.dump(OS);
@@ -103,6 +106,12 @@ void FieldDecl::dump(raw_ostream &OS, unsigned Indent) const {
   if (BitWidth) {
     OS << " : ";
     BitWidth->dump(OS, 0);
+  }
+  if (InClassInitializer) {
+    OS << "\n";
+    printIndent(OS, Indent + 2);
+    OS << "in-class initializer:\n";
+    InClassInitializer->dump(OS, Indent + 4);
   } else {
     OS << "\n";
   }
@@ -276,6 +285,22 @@ void CXXMethodDecl::dump(raw_ostream &OS, unsigned Indent) const {
 // CXXConstructorDecl
 //===----------------------------------------------------------------------===//
 
+void CXXCtorInitializer::dump(raw_ostream &OS, unsigned Indent) const {
+  for (unsigned I = 0; I < Indent; ++I)
+    OS << "  ";
+  if (IsBaseInitializer)
+    OS << "base ";
+  else if (IsDelegatingInitializer)
+    OS << "delegating ";
+  OS << MemberName << "(";
+  for (unsigned i = 0; i < Args.size(); ++i) {
+    if (i > 0)
+      OS << ", ";
+    Args[i]->dump(OS, 0);
+  }
+  OS << ")\n";
+}
+
 void CXXConstructorDecl::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
   OS << "CXXConstructorDecl " << getParent()->getName();
@@ -286,6 +311,14 @@ void CXXConstructorDecl::dump(raw_ostream &OS, unsigned Indent) const {
   if (!getParams().empty()) {
     for (auto *Param : getParams()) {
       Param->dump(OS, Indent + 2);
+    }
+  }
+
+  if (!Initializers.empty()) {
+    printIndent(OS, Indent + 2);
+    OS << "member initializers:\n";
+    for (auto *Init : Initializers) {
+      Init->dump(OS, Indent + 4);
     }
   }
 
@@ -471,6 +504,54 @@ void ExportDecl::dump(raw_ostream &OS, unsigned Indent) const {
   if (ExportedDecl) {
     ExportedDecl->dump(OS, Indent + 2);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// StaticAssertDecl
+//===----------------------------------------------------------------------===//
+
+void StaticAssertDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "StaticAssertDecl";
+  if (!Message.empty())
+    OS << " \"" << Message << "\"";
+  OS << "\n";
+  if (AssertExpr) {
+    AssertExpr->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// LinkageSpecDecl
+//===----------------------------------------------------------------------===//
+
+void LinkageSpecDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "LinkageSpecDecl " << (Lang == C ? "\"C\"" : "\"C++\"");
+  if (HasBraces)
+    OS << " {\n";
+  else
+    OS << "\n";
+
+  for (auto *D : Decls) {
+    D->dump(OS, Indent + 2);
+  }
+
+  if (HasBraces) {
+    printIndent(OS, Indent);
+    OS << "}\n";
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// TypeAliasDecl
+//===----------------------------------------------------------------------===//
+
+void TypeAliasDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "TypeAliasDecl " << getName() << " = '";
+  UnderlyingType.dump(OS);
+  OS << "'\n";
 }
 
 } // namespace blocktype

@@ -30,12 +30,33 @@ Parser::~Parser() = default;
 //===----------------------------------------------------------------------===//
 
 TranslationUnitDecl *Parser::parseTranslationUnit() {
-  // TODO: Implement translation unit parsing
-  // For now, just consume all tokens
+  // Create translation unit scope
+  pushScope(ScopeFlags::TranslationUnitScope);
+  
+  // Create TranslationUnitDecl
+  SourceLocation StartLoc = Tok.getLocation();
+  TranslationUnitDecl *TU = Context.create<TranslationUnitDecl>(StartLoc);
+  
+  // Parse declarations
   while (!Tok.is(TokenKind::eof)) {
-    consumeToken();
+    Decl *D = parseDeclaration();
+    if (D) {
+      TU->addDecl(D);
+      
+      // Add to symbol table if it's a named declaration
+      if (auto *ND = llvm::dyn_cast<NamedDecl>(D)) {
+        if (CurrentScope) {
+          CurrentScope->addDecl(ND);
+        }
+      }
+    } else {
+      // Error recovery: skip to next token
+      consumeToken();
+    }
   }
-  return nullptr;
+  
+  popScope();
+  return TU;
 }
 
 //===----------------------------------------------------------------------===//

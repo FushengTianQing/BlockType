@@ -68,6 +68,9 @@ EXPR(CXXConstCastExpr, CastExpr)
 EXPR(CXXReinterpretCastExpr, CastExpr)
 EXPR(CStyleCastExpr, CastExpr)
 
+// Initialization
+EXPR(InitListExpr, Expr)
+
 // Lambda
 EXPR(LambdaExpr, Expr)
 
@@ -177,3 +180,12 @@ DECL(NonTypeTemplateParmDecl, ValueDecl)
 DECL(ModuleDecl, NamedDecl)
 DECL(ImportDecl, NamedDecl)
 DECL(ExportDecl, Decl)
+
+// Static assertion
+DECL(StaticAssertDecl, Decl)
+
+// Linkage specification
+DECL(LinkageSpecDecl, Decl)
+
+// Type alias (C++11)
+DECL(TypeAliasDecl, TypeDecl)

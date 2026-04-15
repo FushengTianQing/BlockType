@@ -12,6 +12,7 @@
 
 #include "blocktype/Parse/Parser.h"
 #include "blocktype/AST/ASTContext.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Lex/Token.h"
@@ -73,14 +74,51 @@ QualType Parser::parseTypeSpecifier() {
   if (Result.isNull()) {
     // Try to parse a named type
     if (Tok.is(TokenKind::identifier)) {
-      // TODO: Look up the type name in the symbol table
-      // For now, create an unresolved type
-      // This should be replaced with proper type lookup
-      emitError(DiagID::err_expected_type);
+      // Check for nested-name-specifier (A::B::C)
+      llvm::StringRef Qualifier = parseNestedNameSpecifier();
+      
+      // Parse the final type name
+      if (!Tok.is(TokenKind::identifier)) {
+        emitError(DiagID::err_expected_identifier);
+        return QualType();
+      }
+      
+      llvm::StringRef TypeName = Tok.getText();
+      SourceLocation TypeNameLoc = Tok.getLocation();
       consumeToken();
+      
+      // Check for template argument list
+      if (Tok.is(TokenKind::less)) {
+        // Parse template arguments
+        Result = parseTemplateSpecializationType(TypeName);
+      } else {
+        // Try to look up the type name in the symbol table
+        bool FoundInScope = false;
+        if (CurrentScope) {
+          if (NamedDecl *D = CurrentScope->lookup(TypeName)) {
+            // Check if this is a type declaration
+            if (auto *TD = llvm::dyn_cast<TypeDecl>(D)) {
+              Result = Context.getTypeDeclType(TD);
+              FoundInScope = true;
+            }
+          }
+        }
+        
+        // If not found in scope, create an unresolved type
+        if (!FoundInScope) {
+          UnresolvedType *Unresolved = Context.getUnresolvedType(TypeName);
+          Result = QualType(Unresolved, Qualifier::None);
+        }
+      }
+      
+      // If we have a qualifier, create an elaborated type
+      if (!Qualifier.empty() && !Result.isNull()) {
+        ElaboratedType *Elaborated = Context.getElaboratedType(Result.getTypePtr(), Qualifier);
+        Result = QualType(Elaborated, Qualifier::None);
+      }
+    } else {
       return QualType();
     }
-    return QualType();
   }
   
   // Apply qualifiers
@@ -168,11 +206,12 @@ QualType Parser::parseBuiltinType() {
     break;
     
   case TokenKind::kw_auto:
-    // TODO: Implement auto type deduction
-    // For now, treat as an error
-    emitError(DiagID::err_expected_type);
+    // Create auto type (will be deduced later)
     consumeToken();
-    return QualType();
+    {
+      AutoType *AutoTy = Context.getAutoType();
+      return QualType(AutoTy, Qualifier::None);
+    }
     
   case TokenKind::kw_signed:
     consumeToken();
@@ -301,6 +340,54 @@ QualType Parser::parseDeclarator(QualType Base) {
   return Base;
 }
 
+/// parseTemplateSpecializationType - Parse a template specialization type.
+///
+/// template-specialization-type ::= template-name '<' template-arg-list '>'
+/// template-arg-list ::= template-arg (',' template-arg)*
+/// template-arg ::= type
+///
+QualType Parser::parseTemplateSpecializationType(llvm::StringRef TemplateName) {
+  assert(Tok.is(TokenKind::less) && "Expected '<'");
+  consumeToken(); // consume '<'
+  
+  // Create template specialization type
+  TemplateSpecializationType *TemplateSpec = Context.getTemplateSpecializationType(TemplateName);
+  
+  // Parse template arguments
+  bool First = true;
+  while (!Tok.is(TokenKind::greater) && !Tok.is(TokenKind::eof)) {
+    if (!First) {
+      if (!Tok.is(TokenKind::comma)) {
+        emitError(DiagID::err_expected);
+        break;
+      }
+      consumeToken(); // consume ','
+    }
+    First = false;
+    
+    // Parse a type argument
+    QualType ArgType = parseType();
+    if (!ArgType.isNull()) {
+      TemplateSpec->addTemplateArg(ArgType);
+    } else {
+      // Error recovery: skip to next comma or '>'
+      while (!Tok.is(TokenKind::comma) && !Tok.is(TokenKind::greater) && 
+             !Tok.is(TokenKind::eof)) {
+        consumeToken();
+      }
+    }
+  }
+  
+  // Expect '>'
+  if (!Tok.is(TokenKind::greater)) {
+    emitError(DiagID::err_expected);
+    return QualType();
+  }
+  consumeToken(); // consume '>'
+  
+  return QualType(TemplateSpec, Qualifier::None);
+}
+
 /// parseArrayDimension - Parse an array dimension.
 ///
 /// array-dimension ::= '[' expr? ']'
@@ -328,6 +415,54 @@ QualType Parser::parseArrayDimension(QualType Base) {
   // Create array type
   ArrayType *AT = Context.getArrayType(Base.getTypePtr(), Size);
   return QualType(AT, Qualifier::None);
+}
+
+/// parseNestedNameSpecifier - Parse a nested-name-specifier.
+///
+/// nested-name-specifier ::= '::'? identifier '::' (identifier '::')*
+///
+llvm::StringRef Parser::parseNestedNameSpecifier() {
+  llvm::SmallString<64> Qualifier;
+  
+  // Check for leading '::' (global scope)
+  if (Tok.is(TokenKind::coloncolon)) {
+    Qualifier = "::";
+    consumeToken();
+  }
+  
+  // Parse identifier:: sequences
+  while (Tok.is(TokenKind::identifier)) {
+    llvm::StringRef Name = Tok.getText();
+    
+    // Peek ahead to check for '::'
+    Token NextTok = peekToken();
+    if (!NextTok.is(TokenKind::coloncolon)) {
+      // This identifier is the final type name, not part of the qualifier
+      break;
+    }
+    
+    // Add to qualifier
+    if (!Qualifier.empty() && Qualifier.back() != ':') {
+      Qualifier += "::";
+    }
+    Qualifier += Name;
+    
+    consumeToken(); // consume identifier
+    consumeToken(); // consume '::'
+    
+    Qualifier += "::";
+  }
+  
+  // Return empty if no qualifier
+  if (Qualifier.empty()) {
+    return "";
+  }
+  
+  // Allocate string in AST context
+  char *Mem = reinterpret_cast<char *>(
+      Context.getAllocator().Allocate(Qualifier.size() + 1, alignof(char)));
+  std::memcpy(Mem, Qualifier.c_str(), Qualifier.size() + 1);
+  return llvm::StringRef(Mem, Qualifier.size());
 }
 
 } // namespace blocktype

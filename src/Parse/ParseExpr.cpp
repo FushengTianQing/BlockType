@@ -316,6 +316,10 @@ Expr *Parser::parsePrimaryExpression() {
   // Parenthesized expression
   case TokenKind::l_paren:
     return parseParenExpression();
+  
+  // Brace-enclosed initializer list
+  case TokenKind::l_brace:
+    return parseInitializerList();
 
   // Lambda expression
   case TokenKind::l_square:
@@ -657,6 +661,55 @@ UnaryOpKind Parser::getUnaryOpKind(TokenKind K) {
     // Unknown operator - default to Plus
     return UnaryOpKind::Plus;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Initializer List Parsing
+//===----------------------------------------------------------------------===//
+
+Expr *Parser::parseInitializerList() {
+  assert(Tok.is(TokenKind::l_brace) && "Expected '{'");
+  SourceLocation LBraceLoc = Tok.getLocation();
+  consumeToken(); // consume '{'
+  
+  llvm::SmallVector<Expr *, 8> Inits;
+  
+  // Parse initializer clauses
+  while (!Tok.is(TokenKind::r_brace) && !Tok.is(TokenKind::eof)) {
+    // Parse an initializer clause (can be an expression or nested init list)
+    Expr *Init = parseAssignmentExpression();
+    if (Init) {
+      Inits.push_back(Init);
+    } else {
+      // Error recovery: skip to next comma or '}'
+      while (!Tok.is(TokenKind::comma) && !Tok.is(TokenKind::r_brace) && 
+             !Tok.is(TokenKind::eof)) {
+        consumeToken();
+      }
+    }
+    
+    // Check for comma separator
+    if (Tok.is(TokenKind::comma)) {
+      consumeToken();
+      // Allow trailing comma
+      if (Tok.is(TokenKind::r_brace))
+        break;
+    } else if (!Tok.is(TokenKind::r_brace)) {
+      // Missing comma or '}'
+      emitError(DiagID::err_expected);
+      break;
+    }
+  }
+  
+  // Expect '}'
+  if (!Tok.is(TokenKind::r_brace)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  SourceLocation RBraceLoc = Tok.getLocation();
+  consumeToken(); // consume '}'
+  
+  return Context.create<InitListExpr>(LBraceLoc, Inits, RBraceLoc);
 }
 
 } // namespace blocktype

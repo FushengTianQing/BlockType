@@ -45,3 +45,21 @@ TYPE(Enum, Type)
 
 // Typedef
 TYPE(Typedef, Type)
+
+// Elaborated type (A::B::C)
+TYPE(Elaborated, Type)
+
+// Template specialization (Vector<int>)
+TYPE(TemplateSpecialization, Type)
+
+// Auto type (C++11)
+TYPE(Auto, Type)
+
+// Decltype type (C++11)
+TYPE(Decltype, Type)
+
+// Unresolved type (forward reference)
+TYPE(Unresolved, Type)
+
+// Member pointer type
+TYPE(MemberPointer, Type)

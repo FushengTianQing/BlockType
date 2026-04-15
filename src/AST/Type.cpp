@@ -179,6 +179,84 @@ void TypedefType::dump(llvm::raw_ostream &OS) const {
 }
 
 //===----------------------------------------------------------------------===//
+// ElaboratedType Implementation
+//===----------------------------------------------------------------------===//
+
+void ElaboratedType::dump(llvm::raw_ostream &OS) const {
+  if (!Qualifier.empty())
+    OS << Qualifier << "::";
+  if (NamedType)
+    NamedType->dump(OS);
+}
+
+//===----------------------------------------------------------------------===//
+// TemplateSpecializationType Implementation
+//===----------------------------------------------------------------------===//
+
+void TemplateSpecializationType::dump(llvm::raw_ostream &OS) const {
+  OS << TemplateName;
+  if (!TemplateArgs.empty()) {
+    OS << "<";
+    bool First = true;
+    for (const QualType &Arg : TemplateArgs) {
+      if (!First)
+        OS << ", ";
+      First = false;
+      Arg.dump(OS);
+    }
+    OS << ">";
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// AutoType Implementation
+//===----------------------------------------------------------------------===//
+
+void AutoType::dump(llvm::raw_ostream &OS) const {
+  if (IsDeduced) {
+    OS << "auto -> ";
+    DeducedType.dump(OS);
+  } else {
+    OS << "auto";
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// DecltypeType Implementation
+//===----------------------------------------------------------------------===//
+
+void DecltypeType::dump(llvm::raw_ostream &OS) const {
+  OS << "decltype(";
+  if (UnderlyingType.isNull()) {
+    OS << "<expr>";
+  } else {
+    UnderlyingType.dump(OS);
+  }
+  OS << ")";
+}
+
+//===----------------------------------------------------------------------===//
+// UnresolvedType Implementation
+//===----------------------------------------------------------------------===//
+
+void UnresolvedType::dump(llvm::raw_ostream &OS) const {
+  OS << Name << " <unresolved>";
+}
+
+//===----------------------------------------------------------------------===//
+// MemberPointerType Implementation
+//===----------------------------------------------------------------------===//
+
+void MemberPointerType::dump(llvm::raw_ostream &OS) const {
+  if (PointeeType)
+    PointeeType->dump(OS);
+  OS << " ";
+  if (ClassType)
+    ClassType->dump(OS);
+  OS << "::*";
+}
+
+//===----------------------------------------------------------------------===//
 // Type Implementation
 //===----------------------------------------------------------------------===//
 

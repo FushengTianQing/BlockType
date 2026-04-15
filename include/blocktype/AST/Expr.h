@@ -448,6 +448,37 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// Initialization Expressions
+//===----------------------------------------------------------------------===//
+
+/// InitListExpr - Represents brace-enclosed initializer list.
+/// Example: int arr[] = {1, 2, 3}; or Point p = {1.0, 2.0};
+class InitListExpr : public Expr {
+  llvm::SmallVector<Expr *, 8> Inits;
+  SourceLocation LBraceLoc;
+  SourceLocation RBraceLoc;
+
+public:
+  InitListExpr(SourceLocation LBraceLoc, llvm::ArrayRef<Expr *> Inits,
+               SourceLocation RBraceLoc)
+      : Expr(LBraceLoc), Inits(Inits.begin(), Inits.end()),
+        LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc) {}
+
+  llvm::ArrayRef<Expr *> getInits() const { return Inits; }
+  unsigned getNumInits() const { return Inits.size(); }
+  SourceLocation getLBraceLoc() const { return LBraceLoc; }
+  SourceLocation getRBraceLoc() const { return RBraceLoc; }
+
+  NodeKind getKind() const override { return NodeKind::InitListExprKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::InitListExprKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // C++ Specific Expressions
 //===----------------------------------------------------------------------===//
 

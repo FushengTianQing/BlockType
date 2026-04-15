@@ -94,13 +94,17 @@ public:
 class VarDecl : public ValueDecl {
 protected:
   Expr *Init;
+  bool IsStatic;
 
 public:
-  VarDecl(SourceLocation Loc, llvm::StringRef Name, QualType T, Expr *Init = nullptr)
-      : ValueDecl(Loc, Name, T), Init(Init) {}
+  VarDecl(SourceLocation Loc, llvm::StringRef Name, QualType T, 
+          Expr *Init = nullptr, bool IsStatic = false)
+      : ValueDecl(Loc, Name, T), Init(Init), IsStatic(IsStatic) {}
 
   Expr *getInit() const { return Init; }
   void setInit(Expr *I) { Init = I; }
+  bool isStatic() const { return IsStatic; }
+  void setStatic(bool S) { IsStatic = S; }
 
   NodeKind getKind() const override { return NodeKind::VarDeclKind; }
 
@@ -180,15 +184,20 @@ public:
 /// FieldDecl - Field declaration (member of a class/struct/union).
 class FieldDecl : public ValueDecl {
   Expr *BitWidth;
+  Expr *InClassInitializer;
   bool IsMutable;
 
 public:
   FieldDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
-            Expr *BitWidth = nullptr, bool IsMutable = false)
-      : ValueDecl(Loc, Name, T), BitWidth(BitWidth), IsMutable(IsMutable) {}
+            Expr *BitWidth = nullptr, bool IsMutable = false,
+            Expr *InClassInit = nullptr)
+      : ValueDecl(Loc, Name, T), BitWidth(BitWidth),
+        InClassInitializer(InClassInit), IsMutable(IsMutable) {}
 
   Expr *getBitWidth() const { return BitWidth; }
   bool isMutable() const { return IsMutable; }
+  Expr *getInClassInitializer() const { return InClassInitializer; }
+  bool hasInClassInitializer() const { return InClassInitializer != nullptr; }
 
   NodeKind getKind() const override { return NodeKind::FieldDeclKind; }
 
@@ -244,15 +253,28 @@ public:
 // TypedefDecl - Typedef declaration
 //===----------------------------------------------------------------------===//
 
-/// TypedefDecl - Typedef declaration.
-class TypedefDecl : public TypeDecl {
+/// TypedefNameDecl - Base class for typedef and type alias declarations.
+class TypedefNameDecl : public TypeDecl {
+protected:
   QualType UnderlyingType;
 
 public:
-  TypedefDecl(SourceLocation Loc, llvm::StringRef Name, QualType Underlying)
+  TypedefNameDecl(SourceLocation Loc, llvm::StringRef Name, QualType Underlying)
       : TypeDecl(Loc, Name), UnderlyingType(Underlying) {}
 
   QualType getUnderlyingType() const { return UnderlyingType; }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() >= NodeKind::TypedefDeclKind &&
+           N->getKind() <= NodeKind::TypeAliasDeclKind;
+  }
+};
+
+/// TypedefDecl - Typedef declaration.
+class TypedefDecl : public TypedefNameDecl {
+public:
+  TypedefDecl(SourceLocation Loc, llvm::StringRef Name, QualType Underlying)
+      : TypedefNameDecl(Loc, Name, Underlying) {}
 
   NodeKind getKind() const override { return NodeKind::TypedefDeclKind; }
 
@@ -461,11 +483,42 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// CXXCtorInitializer - Member initializer in constructor
+//===----------------------------------------------------------------------===//
+
+/// CXXCtorInitializer - Represents a single member initializer in a constructor's
+/// initializer list, e.g., `member(value)` in `: member(value), ...`
+class CXXCtorInitializer {
+  SourceLocation MemberLoc;
+  llvm::StringRef MemberName;
+  llvm::SmallVector<Expr *, 4> Args;
+  bool IsBaseInitializer;
+  bool IsDelegatingInitializer;
+
+public:
+  CXXCtorInitializer(SourceLocation Loc, llvm::StringRef Name,
+                     llvm::ArrayRef<Expr *> Arguments,
+                     bool IsBase = false, bool IsDelegating = false)
+      : MemberLoc(Loc), MemberName(Name), Args(Arguments.begin(), Arguments.end()),
+        IsBaseInitializer(IsBase), IsDelegatingInitializer(IsDelegating) {}
+
+  SourceLocation getMemberLocation() const { return MemberLoc; }
+  llvm::StringRef getMemberName() const { return MemberName; }
+  llvm::ArrayRef<Expr *> getArguments() const { return Args; }
+  bool isBaseInitializer() const { return IsBaseInitializer; }
+  bool isDelegatingInitializer() const { return IsDelegatingInitializer; }
+  bool isMemberInitializer() const { return !IsBaseInitializer && !IsDelegatingInitializer; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const;
+};
+
+//===----------------------------------------------------------------------===//
 // CXXConstructorDecl - C++ constructor declaration
 //===----------------------------------------------------------------------===//
 
 /// CXXConstructorDecl - C++ constructor declaration.
 class CXXConstructorDecl : public CXXMethodDecl {
+  llvm::SmallVector<CXXCtorInitializer *, 8> Initializers;
   bool IsExplicit;
 
 public:
@@ -476,6 +529,11 @@ public:
         IsExplicit(IsExplicit) {}
 
   bool isExplicit() const { return IsExplicit; }
+
+  // Member initializers
+  llvm::ArrayRef<CXXCtorInitializer *> initializers() const { return Initializers; }
+  void addInitializer(CXXCtorInitializer *Init) { Initializers.push_back(Init); }
+  unsigned getNumInitializers() const { return Initializers.size(); }
 
   NodeKind getKind() const override { return NodeKind::CXXConstructorDeclKind; }
 
@@ -881,6 +939,94 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::ExportDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// StaticAssertDecl - Static assertion declaration
+//===----------------------------------------------------------------------===//
+
+/// StaticAssertDecl - Static assertion declaration.
+/// Example: static_assert(sizeof(int) == 4, "int must be 4 bytes");
+class StaticAssertDecl : public Decl {
+  Expr *AssertExpr;
+  llvm::StringRef Message;
+  bool IsFailed;
+
+public:
+  StaticAssertDecl(SourceLocation Loc, Expr *E, llvm::StringRef Msg)
+      : Decl(Loc), AssertExpr(E), Message(Msg), IsFailed(false) {}
+
+  Expr *getAssertExpr() const { return AssertExpr; }
+  llvm::StringRef getMessage() const { return Message; }
+  bool isFailed() const { return IsFailed; }
+  void setFailed(bool Failed) { IsFailed = Failed; }
+
+  NodeKind getKind() const override { return NodeKind::StaticAssertDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::StaticAssertDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// LinkageSpecDecl - Linkage specification declaration
+//===----------------------------------------------------------------------===//
+
+/// LinkageSpecDecl - Linkage specification declaration.
+/// Example: extern "C" { void foo(); } or extern "C++" { ... }
+class LinkageSpecDecl : public Decl {
+public:
+  enum Language { C, CXX };
+
+private:
+  Language Lang;
+  llvm::SmallVector<Decl *, 8> Decls;
+  bool HasBraces;
+
+public:
+  LinkageSpecDecl(SourceLocation Loc, Language L, bool HasBraces = true)
+      : Decl(Loc), Lang(L), HasBraces(HasBraces) {}
+
+  Language getLanguage() const { return Lang; }
+  bool hasBraces() const { return HasBraces; }
+
+  llvm::ArrayRef<Decl *> decls() const { return Decls; }
+  void addDecl(Decl *D) { Decls.push_back(D); }
+
+  NodeKind getKind() const override { return NodeKind::LinkageSpecDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::LinkageSpecDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// TypeAliasDecl - Type alias declaration (C++11)
+//===----------------------------------------------------------------------===//
+
+/// TypeAliasDecl - Type alias declaration (C++11 using alias).
+/// Example: using IntPtr = int*; or template<typename T> using Vec = std::vector<T>;
+class TypeAliasDecl : public TypedefNameDecl {
+  TemplateDecl *Template; // For alias templates
+
+public:
+  TypeAliasDecl(SourceLocation Loc, llvm::StringRef Name, QualType Underlying,
+                TemplateDecl *TD = nullptr)
+      : TypedefNameDecl(Loc, Name, Underlying), Template(TD) {}
+
+  TemplateDecl *getTemplate() const { return Template; }
+
+  NodeKind getKind() const override { return NodeKind::TypeAliasDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::TypeAliasDeclKind;
   }
 };
 

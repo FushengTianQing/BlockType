@@ -28,6 +28,10 @@ class LValueReferenceType;
 class RValueReferenceType;
 class ArrayType;
 class Expr;
+class TypeDecl;
+class RecordDecl;
+class EnumDecl;
+class TypedefNameDecl;
 
 /// ASTContext - Manages memory allocation and lifetime of AST nodes.
 ///
@@ -97,6 +101,9 @@ public:
   /// Dumps memory usage statistics for debugging.
   void dumpMemoryUsage(raw_ostream &OS) const;
   
+  /// Returns the allocator for AST nodes.
+  llvm::BumpPtrAllocator &getAllocator() { return Allocator; }
+  
   //===--------------------------------------------------------------------===//
   // Type creation
   //===--------------------------------------------------------------------===//
@@ -115,6 +122,21 @@ public:
   
   /// Gets or creates an array type.
   ArrayType *getArrayType(const Type *Element, Expr *Size);
+  
+  /// Gets or creates an unresolved type.
+  UnresolvedType *getUnresolvedType(llvm::StringRef Name);
+  
+  /// Gets or creates an auto type.
+  AutoType *getAutoType();
+  
+  /// Gets or creates a template specialization type.
+  TemplateSpecializationType *getTemplateSpecializationType(llvm::StringRef Name);
+  
+  /// Gets or creates an elaborated type.
+  ElaboratedType *getElaboratedType(const Type *NamedType, llvm::StringRef Qualifier);
+  
+  /// Gets the type for a type declaration.
+  QualType getTypeDeclType(const TypeDecl *D);
 
 private:
   /// Destroys all nodes in reverse order of creation.

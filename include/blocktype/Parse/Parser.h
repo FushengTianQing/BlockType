@@ -28,6 +28,7 @@ namespace blocktype {
 
 class TranslationUnitDecl;
 class VarDecl;
+class CXXCtorInitializer;
 class FunctionDecl;
 class ParmVarDecl;
 class Decl;
@@ -44,6 +45,13 @@ class ExportDecl;
 class NamespaceDecl;
 class UsingDecl;
 class UsingDirectiveDecl;
+class EnumDecl;
+class StaticAssertDecl;
+class LinkageSpecDecl;
+class TypeAliasDecl;
+class TypedefDecl;
+class CXXConstructorDecl;
+class CXXDestructorDecl;
 
 /// LambdaCapture - Represents a lambda capture.
 /// ParsingContext - Represents the current parsing context.
@@ -213,6 +221,9 @@ public:
 
   /// Parses a primary expression (literals, identifiers, parentheses).
   Expr *parsePrimaryExpression();
+  
+  /// Parses an initializer list (brace-enclosed list).
+  Expr *parseInitializerList();
 
   /// Parses an integer literal.
   Expr *parseIntegerLiteral();
@@ -302,6 +313,13 @@ public:
 
   /// Parses an array dimension.
   QualType parseArrayDimension(QualType Base);
+  
+  /// Parses a template specialization type (e.g., Vector<int>).
+  QualType parseTemplateSpecializationType(llvm::StringRef TemplateName);
+  
+  /// Parses a nested-name-specifier (e.g., A::B::C).
+  /// Returns the qualifier string (e.g., "A::B::") or empty string if none.
+  llvm::StringRef parseNestedNameSpecifier();
 
   //===--------------------------------------------------------------------===//
   // Declaration parsing
@@ -387,6 +405,42 @@ public:
 
   /// Parses a module partition (:identifier).
   llvm::StringRef parseModulePartition();
+
+  /// Parses an enum declaration.
+  EnumDecl *parseEnumDeclaration(SourceLocation EnumLoc);
+
+  /// Parses an enum body (enumerators).
+  void parseEnumBody(EnumDecl *Enum);
+
+  /// Parses an enumerator.
+  void parseEnumerator(EnumDecl *Enum);
+
+  /// Parses a union declaration.
+  RecordDecl *parseUnionDeclaration(SourceLocation UnionLoc);
+
+  /// Parses a typedef declaration.
+  TypedefDecl *parseTypedefDeclaration(SourceLocation TypedefLoc);
+
+  /// Parses a type alias declaration (C++11 using alias).
+  TypeAliasDecl *parseTypeAliasDeclaration(SourceLocation UsingLoc);
+
+  /// Parses a static_assert declaration.
+  StaticAssertDecl *parseStaticAssertDeclaration(SourceLocation Loc);
+
+  /// Parses a linkage specification (extern "C"/"C++").
+  LinkageSpecDecl *parseLinkageSpecDeclaration(SourceLocation Loc);
+  
+  /// Parses a constructor declaration.
+  CXXConstructorDecl *parseConstructorDeclaration(CXXRecordDecl *Class, SourceLocation Loc);
+
+  /// Parses a destructor declaration.
+  CXXDestructorDecl *parseDestructorDeclaration(CXXRecordDecl *Class, SourceLocation Loc);
+
+  /// Parses a member initializer list in a constructor.
+  void parseMemberInitializerList(CXXConstructorDecl *Ctor);
+
+  /// Parses a single member initializer.
+  CXXCtorInitializer *parseMemberInitializer();
 
   //===--------------------------------------------------------------------===//
   // Statement parsing

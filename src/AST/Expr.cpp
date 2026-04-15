@@ -221,6 +221,23 @@ void CXXTemporaryObjectExpr::dump(raw_ostream &OS, unsigned Indent) const {
 }
 
 //===----------------------------------------------------------------------===//
+// InitListExpr
+//===----------------------------------------------------------------------===//
+
+void InitListExpr::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "InitListExpr: {" << getNumInits() << " elements}\n";
+  for (Expr *Init : Inits) {
+    if (Init)
+      Init->dump(OS, Indent + 1);
+    else {
+      printIndent(OS, Indent + 1);
+      OS << "<nullptr>\n";
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // CXXNewExpr
 //===----------------------------------------------------------------------===//
 

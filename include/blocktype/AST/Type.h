@@ -324,6 +324,75 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// ElaboratedType - Elaborated types (A::B::C)
+//===----------------------------------------------------------------------===//
+
+/// ElaboratedType - Represents elaborated types with nested-name-specifier.
+/// Example: A::B::C, ::std::vector
+class ElaboratedType : public Type {
+  const Type *NamedType;
+  llvm::StringRef Qualifier; // Simplified: just store the qualifier string
+
+public:
+  ElaboratedType(const Type *T, llvm::StringRef Qual = "")
+      : Type(TypeClass::Elaborated), NamedType(T), Qualifier(Qual) {}
+
+  const Type *getNamedType() const { return NamedType; }
+  llvm::StringRef getQualifier() const { return Qualifier; }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::Elaborated;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// UnresolvedType - Unresolved type (forward reference)
+//===----------------------------------------------------------------------===//
+
+/// UnresolvedType - Represents a type that hasn't been resolved yet.
+/// Used for forward references and type names that haven't been looked up.
+class UnresolvedType : public Type {
+  llvm::StringRef Name;
+
+public:
+  UnresolvedType(llvm::StringRef N) : Type(TypeClass::Unresolved), Name(N) {}
+
+  llvm::StringRef getName() const { return Name; }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::Unresolved;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// MemberPointerType - Member pointer type
+//===----------------------------------------------------------------------===//
+
+/// MemberPointerType - Represents pointer to member type.
+/// Example: int (Class::*)
+class MemberPointerType : public Type {
+  const Type *ClassType;
+  const Type *PointeeType;
+
+public:
+  MemberPointerType(const Type *Pointee, const Type *Class)
+      : Type(TypeClass::MemberPointer), ClassType(Class), PointeeType(Pointee) {}
+
+  const Type *getClassType() const { return ClassType; }
+  const Type *getPointeeType() const { return PointeeType; }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::MemberPointer;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // QualType - Qualified types with CV qualifiers
 //===----------------------------------------------------------------------===//
 
@@ -400,6 +469,88 @@ public:
   // Dump
   void dump() const;
   void dump(llvm::raw_ostream &OS) const;
+};
+
+//===----------------------------------------------------------------------===//
+// TemplateSpecializationType - Template specialization types
+//===----------------------------------------------------------------------===//
+
+class TemplateDecl;
+
+/// TemplateSpecializationType - Represents template specialization types.
+/// Example: Vector<int>, std::vector<std::string>
+class TemplateSpecializationType : public Type {
+  TemplateDecl *Template;
+  llvm::SmallVector<QualType, 4> TemplateArgs;
+  llvm::StringRef TemplateName;
+
+public:
+  TemplateSpecializationType(llvm::StringRef Name, TemplateDecl *T = nullptr)
+      : Type(TypeClass::TemplateSpecialization), Template(T), TemplateName(Name) {}
+
+  TemplateDecl *getTemplateDecl() const { return Template; }
+  llvm::StringRef getTemplateName() const { return TemplateName; }
+  llvm::ArrayRef<QualType> getTemplateArgs() const { return TemplateArgs; }
+  void addTemplateArg(QualType Arg) { TemplateArgs.push_back(Arg); }
+  unsigned getNumTemplateArgs() const { return TemplateArgs.size(); }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::TemplateSpecialization;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// AutoType - Auto type (C++11)
+//===----------------------------------------------------------------------===//
+
+/// AutoType - Represents auto type.
+/// Example: auto x = 10; -> x has AutoType that will be deduced
+class AutoType : public Type {
+  QualType DeducedType;
+  bool IsDeduced;
+
+public:
+  AutoType() : Type(TypeClass::Auto), IsDeduced(false) {}
+
+  QualType getDeducedType() const { return DeducedType; }
+  bool isDeduced() const { return IsDeduced; }
+  void setDeducedType(QualType T) {
+    DeducedType = T;
+    IsDeduced = true;
+  }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::Auto;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// DecltypeType - Decltype type (C++11)
+//===----------------------------------------------------------------------===//
+
+/// DecltypeType - Represents decltype type.
+/// Example: decltype(expr)
+class DecltypeType : public Type {
+  Expr *Expression;
+  QualType UnderlyingType;
+
+public:
+  DecltypeType(Expr *E, QualType Underlying = QualType())
+      : Type(TypeClass::Decltype), Expression(E), UnderlyingType(Underlying) {}
+
+  Expr *getExpression() const { return Expression; }
+  QualType getUnderlyingType() const { return UnderlyingType; }
+  void setUnderlyingType(QualType T) { UnderlyingType = T; }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::Decltype;
+  }
 };
 
 //===----------------------------------------------------------------------===//

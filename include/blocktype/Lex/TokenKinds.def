@@ -179,7 +179,7 @@ TOKEN(greatergreatergreater) // >>> (C++26 digraph)
 
 // Keyword range markers (for isKeyword() range check)
 // These are pseudo-keywords used to define the range of valid keywords
-KEYWORD(kw_first_keyword, KEYALL)
+KEYWORD(first_keyword, KEYALL)
 
 KEYWORD(auto, KEYALL)
 KEYWORD(break, KEYALL)
@@ -381,7 +381,7 @@ KEYWORD_ZH(协程返回, kw_co_return) // co_return
 KEYWORD_ZH(协程产出, kw_co_yield)  // co_yield
 
 // End of keyword range marker
-KEYWORD(kw_last_keyword, KEYALL)
+KEYWORD(last_keyword, KEYALL)
 
 //===----------------------------------------------------------------------===//
 // Cleanup
