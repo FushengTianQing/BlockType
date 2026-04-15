@@ -1167,8 +1167,9 @@ NonTypeTemplateParmDecl *Parser::parseNonTypeTemplateParameter() {
   if (Tok.is(TokenKind::equal)) {
     consumeToken(); // consume '='
     Expr *DefaultArg = parseExpression();
-    // Note: We don't store the default argument yet in NonTypeTemplateParmDecl
-    // This can be added later if needed
+    if (DefaultArg) {
+      Param->setDefaultArgument(DefaultArg);
+    }
   }
 
   return Param;
@@ -1242,14 +1243,162 @@ TemplateTemplateParmDecl *Parser::parseTemplateTemplateParameter() {
   }
 
   // Parse default argument (optional)
+  // For template template parameter, default is a template name
   if (Tok.is(TokenKind::equal)) {
     consumeToken(); // consume '='
-    // Note: We need to parse id-expression here
-    // For now, skip to the next token
-    // TODO: Implement id-expression parsing
+    
+    // Parse nested-name-specifier (optional)
+    llvm::StringRef Qualifier = parseNestedNameSpecifier();
+    
+    // Parse template name
+    if (Tok.is(TokenKind::identifier)) {
+      llvm::StringRef TemplateName = Tok.getText();
+      SourceLocation TemplateNameLoc = Tok.getLocation();
+      consumeToken();
+      
+      // TODO: Look up the template in the symbol table
+      // For now, we create a placeholder TemplateDecl
+      // This should be replaced with proper template lookup
+      TemplateDecl *DefaultTemplate = Context.create<TemplateDecl>(
+          TemplateNameLoc, TemplateName, nullptr);
+      
+      Param->setDefaultArgument(DefaultTemplate);
+    } else {
+      emitError(DiagID::err_expected_identifier);
+    }
   }
 
   return Param;
+}
+
+/// parseTemplateArgument - Parse a template argument.
+///
+/// template-argument ::= type-id | constant-expression | id-expression
+TemplateArgument Parser::parseTemplateArgument() {
+  // Try to parse as a type first
+  // We need to determine if this is a type or an expression
+  // For now, we use a simple heuristic:
+  // - If it starts with a type keyword (int, float, etc.) or
+  //   an identifier followed by '<', it's likely a type
+  // - Otherwise, parse as an expression
+
+  // Check for type-id (starts with type keywords or identifier)
+  if (Tok.is(TokenKind::kw_void) || Tok.is(TokenKind::kw_bool) ||
+      Tok.is(TokenKind::kw_char) || Tok.is(TokenKind::kw_short) ||
+      Tok.is(TokenKind::kw_int) || Tok.is(TokenKind::kw_long) ||
+      Tok.is(TokenKind::kw_float) || Tok.is(TokenKind::kw_double) ||
+      Tok.is(TokenKind::kw_const) || Tok.is(TokenKind::kw_volatile) ||
+      Tok.is(TokenKind::kw_unsigned) || Tok.is(TokenKind::kw_signed)) {
+    // Parse as type
+    QualType Type = parseType();
+    if (!Type.isNull()) {
+      return TemplateArgument(Type);
+    }
+    return TemplateArgument(QualType());
+  }
+
+  // Check for identifier (could be a type name or an expression)
+  if (Tok.is(TokenKind::identifier)) {
+    // Look ahead to see if this is a template-id (identifier '<')
+    Token NextTok = PP.peekToken(0);
+    if (NextTok.is(TokenKind::less)) {
+      // This is likely a template-id, parse as type
+      QualType Type = parseType();
+      if (!Type.isNull()) {
+        return TemplateArgument(Type);
+      }
+      return TemplateArgument(QualType());
+    }
+
+    // Otherwise, parse as expression (could be a constant or id-expression)
+    Expr *E = parseExpression();
+    if (E) {
+      return TemplateArgument(E);
+    }
+    return TemplateArgument(static_cast<Expr *>(nullptr));
+  }
+
+  // Check for literal (definitely an expression)
+  if (Tok.is(TokenKind::numeric_constant) ||
+      Tok.is(TokenKind::string_literal) ||
+      Tok.is(TokenKind::char_constant) ||
+      Tok.is(TokenKind::kw_true) || Tok.is(TokenKind::kw_false) ||
+      Tok.is(TokenKind::kw_nullptr)) {
+    Expr *E = parseExpression();
+    if (E) {
+      return TemplateArgument(E);
+    }
+    return TemplateArgument(static_cast<Expr *>(nullptr));
+  }
+
+  // Default: try to parse as expression
+  Expr *E = parseExpression();
+  if (E) {
+    return TemplateArgument(E);
+  }
+
+  return TemplateArgument(QualType());
+}
+
+/// parseTemplateArgumentList - Parse a template argument list.
+///
+/// template-argument-list ::= template-argument (',' template-argument)*
+llvm::SmallVector<TemplateArgument, 4> Parser::parseTemplateArgumentList() {
+  llvm::SmallVector<TemplateArgument, 4> Args;
+
+  while (!Tok.is(TokenKind::greater) && !Tok.is(TokenKind::eof)) {
+    TemplateArgument Arg = parseTemplateArgument();
+    Args.push_back(Arg);
+
+    // Check for comma
+    if (Tok.is(TokenKind::comma)) {
+      consumeToken();
+    } else {
+      break;
+    }
+  }
+
+  return Args;
+}
+
+/// parseTemplateId - Parse a template-id (e.g., Vector<int>).
+///
+/// template-id ::= identifier '<' template-argument-list? '>'
+TemplateSpecializationType *Parser::parseTemplateId(llvm::StringRef Name) {
+  SourceLocation NameLoc = Tok.getLocation();
+
+  // Expect '<'
+  if (!Tok.is(TokenKind::less)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  consumeToken(); // consume '<'
+
+  // Parse template arguments
+  llvm::SmallVector<TemplateArgument, 4> Args;
+  if (!Tok.is(TokenKind::greater)) {
+    Args = parseTemplateArgumentList();
+  }
+
+  // Expect '>'
+  if (!Tok.is(TokenKind::greater)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  consumeToken(); // consume '>'
+
+  // Create TemplateSpecializationType
+  // Note: TemplateSpecializationType is not an ASTNode, so we create it directly
+  TemplateSpecializationType *SpecType = new TemplateSpecializationType(Name, nullptr);
+
+  // Add template arguments
+  for (const TemplateArgument &Arg : Args) {
+    SpecType->addTemplateArg(Arg);
+  }
+
+  return SpecType;
 }
 
 //===----------------------------------------------------------------------===//

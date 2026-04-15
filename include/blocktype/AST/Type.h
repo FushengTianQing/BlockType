@@ -22,6 +22,7 @@ namespace blocktype {
 class Expr;
 class RecordDecl;
 class EnumDecl;
+class TemplateDecl;
 
 //===----------------------------------------------------------------------===//
 // Type Classifications
@@ -472,6 +473,61 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// Template Argument
+//===----------------------------------------------------------------------===//
+
+/// TemplateArgumentKind - Kind of template argument.
+enum class TemplateArgumentKind {
+  Type,      // type argument: template<typename T> -> T = int
+  NonType,   // non-type argument: template<int N> -> N = 42
+  Template,  // template template argument: template<template<typename> class T> -> T = vector
+};
+
+/// TemplateArgument - Represents a template argument.
+/// A template argument can be a type, a non-type (expression), or a template.
+class TemplateArgument {
+  TemplateArgumentKind Kind;
+  union {
+    QualType AsType;
+    Expr *AsExpr;
+    TemplateDecl *AsTemplate;
+  };
+
+public:
+  /// Construct a type template argument.
+  TemplateArgument(QualType T) : Kind(TemplateArgumentKind::Type), AsType(T) {}
+
+  /// Construct a non-type template argument.
+  TemplateArgument(Expr *E) : Kind(TemplateArgumentKind::NonType), AsExpr(E) {}
+
+  /// Construct a template template argument.
+  TemplateArgument(TemplateDecl *T) : Kind(TemplateArgumentKind::Template), AsTemplate(T) {}
+
+  TemplateArgumentKind getKind() const { return Kind; }
+
+  bool isType() const { return Kind == TemplateArgumentKind::Type; }
+  bool isNonType() const { return Kind == TemplateArgumentKind::NonType; }
+  bool isTemplate() const { return Kind == TemplateArgumentKind::Template; }
+
+  QualType getAsType() const {
+    assert(isType() && "Template argument is not a type");
+    return AsType;
+  }
+
+  Expr *getAsExpr() const {
+    assert(isNonType() && "Template argument is not a non-type");
+    return AsExpr;
+  }
+
+  TemplateDecl *getAsTemplate() const {
+    assert(isTemplate() && "Template argument is not a template");
+    return AsTemplate;
+  }
+
+  void dump(llvm::raw_ostream &OS) const;
+};
+
+//===----------------------------------------------------------------------===//
 // TemplateSpecializationType - Template specialization types
 //===----------------------------------------------------------------------===//
 
@@ -481,7 +537,7 @@ class TemplateDecl;
 /// Example: Vector<int>, std::vector<std::string>
 class TemplateSpecializationType : public Type {
   TemplateDecl *Template;
-  llvm::SmallVector<QualType, 4> TemplateArgs;
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
   llvm::StringRef TemplateName;
 
 public:
@@ -490,8 +546,8 @@ public:
 
   TemplateDecl *getTemplateDecl() const { return Template; }
   llvm::StringRef getTemplateName() const { return TemplateName; }
-  llvm::ArrayRef<QualType> getTemplateArgs() const { return TemplateArgs; }
-  void addTemplateArg(QualType Arg) { TemplateArgs.push_back(Arg); }
+  llvm::ArrayRef<TemplateArgument> getTemplateArgs() const { return TemplateArgs; }
+  void addTemplateArg(const TemplateArgument &Arg) { TemplateArgs.push_back(Arg); }
   unsigned getNumTemplateArgs() const { return TemplateArgs.size(); }
 
   void dump(llvm::raw_ostream &OS) const;

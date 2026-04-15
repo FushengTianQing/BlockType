@@ -158,6 +158,15 @@ Decl *Member = parseClassMember(nullptr); // 应该使用 RecordDecl*
 | **变参模板展开** | 正确处理 `typename... Args` | 🟡 中 | 高 |
 | **模板参数默认值存储** | 非类型模板参数默认值未存储 | 🟡 中 | 低 |
 
+### 3.2.1 已实现功能 ✅ (2026-04-16 更新)
+
+| 功能 | 状态 | 实现位置 |
+|------|------|----------|
+| **模板实参列表解析** | ✅ 已实现 | ParseDecl.cpp:1358-1373 |
+| **模板实参解析** | ✅ 已实现 | ParseDecl.cpp:1300-1355 |
+| **模板标识符解析** | ✅ 已实现 | ParseDecl.cpp:1378-1404 |
+| **TemplateArgument 类** | ✅ 已实现 | Type.h:481-524 |
+
 ### 3.3 不完善功能 ⚠️
 
 ```cpp
@@ -177,6 +186,13 @@ if (Tok.is(TokenKind::equal)) {
   // TODO: Implement id-expression parsing  <-- 问题：默认值未解析
 }
 ```
+
+### 3.3.1 已修复功能 ✅ (2026-04-16 更新)
+
+| 功能 | 状态 | 实现位置 |
+|------|------|----------|
+| **NonTypeTemplateParmDecl 默认值存储** | ✅ 已实现 | Decl.h:848-852, ParseDecl.cpp:1167-1172 |
+| **TemplateTemplateParmDecl 默认值解析** | ✅ 已实现 | Decl.h:878-882, ParseDecl.cpp:1245-1268 |
 
 ---
 

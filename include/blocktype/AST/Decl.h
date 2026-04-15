@@ -845,16 +845,21 @@ class NonTypeTemplateParmDecl : public ValueDecl {
   unsigned Depth;
   unsigned Index;
   bool IsParameterPack;
+  Expr *DefaultArg;
 
 public:
   NonTypeTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
                           unsigned Depth, unsigned Index, bool IsParameterPack)
       : ValueDecl(Loc, Name, T), Depth(Depth), Index(Index),
-        IsParameterPack(IsParameterPack) {}
+        IsParameterPack(IsParameterPack), DefaultArg(nullptr) {}
 
   unsigned getDepth() const { return Depth; }
   unsigned getIndex() const { return Index; }
   bool isParameterPack() const { return IsParameterPack; }
+
+  Expr *getDefaultArgument() const { return DefaultArg; }
+  void setDefaultArgument(Expr *Arg) { DefaultArg = Arg; }
+  bool hasDefaultArgument() const { return DefaultArg != nullptr; }
 
   NodeKind getKind() const override { return NodeKind::NonTypeTemplateParmDeclKind; }
 
@@ -875,16 +880,21 @@ class TemplateTemplateParmDecl : public TemplateDecl {
   unsigned Depth;
   unsigned Index;
   bool IsParameterPack;
+  TemplateDecl *DefaultArg;
 
 public:
   TemplateTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
                            unsigned Depth, unsigned Index, bool IsParameterPack)
       : TemplateDecl(Loc, Name, nullptr), Depth(Depth), Index(Index),
-        IsParameterPack(IsParameterPack) {}
+        IsParameterPack(IsParameterPack), DefaultArg(nullptr) {}
 
   unsigned getDepth() const { return Depth; }
   unsigned getIndex() const { return Index; }
   bool isParameterPack() const { return IsParameterPack; }
+
+  TemplateDecl *getDefaultArgument() const { return DefaultArg; }
+  void setDefaultArgument(TemplateDecl *Arg) { DefaultArg = Arg; }
+  bool hasDefaultArgument() const { return DefaultArg != nullptr; }
 
   NodeKind getKind() const override { return NodeKind::TemplateTemplateParmDeclKind; }
 

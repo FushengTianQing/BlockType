@@ -28,6 +28,7 @@ namespace blocktype {
 
 class TranslationUnitDecl;
 class VarDecl;
+class FriendDecl;
 class CXXCtorInitializer;
 class FunctionDecl;
 class ParmVarDecl;
@@ -378,6 +379,15 @@ public:
 
   /// Parses a template template parameter.
   TemplateTemplateParmDecl *parseTemplateTemplateParameter();
+
+  /// Parses a template argument.
+  TemplateArgument parseTemplateArgument();
+
+  /// Parses a template argument list.
+  llvm::SmallVector<TemplateArgument, 4> parseTemplateArgumentList();
+
+  /// Parses a template-id (e.g., Vector<int>).
+  TemplateSpecializationType *parseTemplateId(llvm::StringRef Name);
 
   /// Parses a namespace declaration.
   NamespaceDecl *parseNamespaceDeclaration();

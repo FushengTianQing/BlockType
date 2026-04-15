@@ -7,9 +7,37 @@
 //===----------------------------------------------------------------------===//
 
 #include "blocktype/AST/Type.h"
+#include "blocktype/AST/Expr.h"
+#include "blocktype/AST/Decl.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace blocktype {
+
+//===----------------------------------------------------------------------===//
+// TemplateArgument Implementation
+//===----------------------------------------------------------------------===//
+
+void TemplateArgument::dump(llvm::raw_ostream &OS) const {
+  switch (Kind) {
+  case TemplateArgumentKind::Type:
+    AsType.dump(OS);
+    break;
+  case TemplateArgumentKind::NonType:
+    if (AsExpr) {
+      AsExpr->dump(OS);
+    } else {
+      OS << "<null-expr>";
+    }
+    break;
+  case TemplateArgumentKind::Template:
+    if (AsTemplate) {
+      OS << AsTemplate->getName();
+    } else {
+      OS << "<null-template>";
+    }
+    break;
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // BuiltinType Implementation
@@ -198,7 +226,7 @@ void TemplateSpecializationType::dump(llvm::raw_ostream &OS) const {
   if (!TemplateArgs.empty()) {
     OS << "<";
     bool First = true;
-    for (const QualType &Arg : TemplateArgs) {
+    for (const TemplateArgument &Arg : TemplateArgs) {
       if (!First)
         OS << ", ";
       First = false;
