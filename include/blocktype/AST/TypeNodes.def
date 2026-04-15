@@ -1,0 +1,47 @@
+//===--- TypeNodes.def - Type Node Definitions --------------*- C++ -*-===//
+//
+// Part of the BlockType Project, under the Apache License v2.0 with LLVM
+// Exceptions. See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the kinds of types using macros.
+// It is included multiple times with different macro definitions.
+//
+// Usage:
+// Before including this file, you must define the following macros:
+//   TYPE(Class, Base) - For concrete type classes
+//   ABSTRACT_TYPE(Class, Base) - For abstract type classes
+//
+// After including this file, you should undef these macros.
+//
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Type Nodes
+//===----------------------------------------------------------------------===//
+
+ABSTRACT_TYPE(Type, Type)
+
+// Builtin types
+TYPE(Builtin, Type)
+
+// Pointer and reference types
+TYPE(Pointer, Type)
+ABSTRACT_TYPE(Reference, Type)
+TYPE(LValueReference, Reference)
+TYPE(RValueReference, Reference)
+
+// Array types
+TYPE(ConstantArray, Type)
+
+// Function types
+TYPE(Function, Type)
+
+// Tag types
+TYPE(Record, Type)
+TYPE(Enum, Type)
+
+// Typedef
+TYPE(Typedef, Type)

@@ -1,0 +1,76 @@
+//===--- BuiltinTypes.def - Builtin Type Definitions --------*- C++ -*-===//
+//
+// Part of the BlockType Project, under the Apache License v2.0 with LLVM
+// Exceptions. See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines all builtin types using macros.
+//
+// Usage:
+// Before including this file, you must define the macro:
+//   BUILTIN_TYPE(Name, Id)
+//
+// After including this file, you should undef this macro.
+//
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Void type
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(Void, Void)
+
+//===----------------------------------------------------------------------===//
+// Boolean type
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(Bool, Bool)
+
+//===----------------------------------------------------------------------===//
+// Character types
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(Char, Char)
+BUILTIN_TYPE(SignedChar, SChar)
+BUILTIN_TYPE(UnsignedChar, UChar)
+BUILTIN_TYPE(WChar, WChar)
+BUILTIN_TYPE(Char16, Char16)
+BUILTIN_TYPE(Char32, Char32)
+BUILTIN_TYPE(Char8, Char8)  // C++20
+
+//===----------------------------------------------------------------------===//
+// Signed integer types
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(Short, Short)
+BUILTIN_TYPE(Int, Int)
+BUILTIN_TYPE(Long, Long)
+BUILTIN_TYPE(LongLong, LongLong)
+BUILTIN_TYPE(Int128, Int128)
+
+//===----------------------------------------------------------------------===//
+// Unsigned integer types
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(UnsignedShort, UShort)
+BUILTIN_TYPE(UnsignedInt, UInt)
+BUILTIN_TYPE(UnsignedLong, ULong)
+BUILTIN_TYPE(UnsignedLongLong, ULongLong)
+BUILTIN_TYPE(UnsignedInt128, UInt128)
+
+//===----------------------------------------------------------------------===//
+// Floating point types
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(Float, Float)
+BUILTIN_TYPE(Double, Double)
+BUILTIN_TYPE(LongDouble, LongDouble)
+BUILTIN_TYPE(Float128, Float128)
+
+//===----------------------------------------------------------------------===//
+// Other types
+//===----------------------------------------------------------------------===//
+
+BUILTIN_TYPE(NullPtr, NullPtr)  // nullptr_t
