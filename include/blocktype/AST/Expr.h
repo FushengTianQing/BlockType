@@ -13,6 +13,7 @@
 #pragma once
 
 #include "blocktype/AST/ASTNode.h"
+#include "blocktype/AST/Type.h"  // For QualType
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallString.h"
@@ -21,7 +22,8 @@
 
 namespace blocktype {
 
-class ValueDecl; // Forward declaration
+class ValueDecl;    // Forward declaration
+class ParmVarDecl;  // Forward declaration
 
 //===----------------------------------------------------------------------===//
 // Operator Kinds
@@ -631,34 +633,130 @@ public:
 // Modern C++ Expressions
 //===----------------------------------------------------------------------===//
 
+/// LambdaCapture - Represents a lambda capture.
+struct LambdaCapture {
+  enum CaptureKind {
+    ByCopy,    // [=]
+    ByRef,     // [&]
+    InitCopy   // [x = expr]
+  };
+  
+  CaptureKind Kind = ByCopy;
+  StringRef Name;
+  class Expr *InitExpr = nullptr;  // For init captures
+  SourceLocation Loc;
+  
+  LambdaCapture() = default;
+  LambdaCapture(CaptureKind K, StringRef N, class Expr *I, SourceLocation L)
+      : Kind(K), Name(N), InitExpr(I), Loc(L) {}
+};
+
 /// LambdaExpr - Lambda expression.
 class LambdaExpr : public Expr {
+  llvm::SmallVector<LambdaCapture, 4> Captures;
+  llvm::SmallVector<ParmVarDecl *, 4> Params;
+  Stmt *Body;  // CompoundStmt
+  bool IsMutable = false;
+  QualType ReturnType;
+  SourceLocation LBraceLoc;
+  SourceLocation RBraceLoc;
+
 public:
-  LambdaExpr(SourceLocation Loc) : Expr(Loc) {}
+  LambdaExpr(SourceLocation Loc, llvm::ArrayRef<LambdaCapture> Captures,
+             llvm::ArrayRef<ParmVarDecl *> Params, Stmt *Body,
+             bool IsMutable = false, QualType ReturnType = QualType(),
+             SourceLocation LBraceLoc = SourceLocation(),
+             SourceLocation RBraceLoc = SourceLocation())
+      : Expr(Loc), Captures(Captures.begin(), Captures.end()),
+        Params(Params.begin(), Params.end()), Body(Body),
+        IsMutable(IsMutable), ReturnType(ReturnType),
+        LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc) {}
+
+  llvm::ArrayRef<LambdaCapture> getCaptures() const { return Captures; }
+  llvm::ArrayRef<ParmVarDecl *> getParams() const { return Params; }
+  Stmt *getBody() const { return Body; }
+  bool isMutable() const { return IsMutable; }
+  QualType getReturnType() const { return ReturnType; }
 
   NodeKind getKind() const override { return NodeKind::LambdaExprKind; }
 
-  void dump(raw_ostream &OS, unsigned Indent = 0) const override {
-    printIndent(OS, Indent);
-    OS << "LambdaExpr\n";
-  }
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::LambdaExprKind;
   }
 };
 
+/// Requirement - Base class for requires expression requirements.
+class Requirement {
+public:
+  enum RequirementKind {
+    Type,        // typename T
+    SimpleExpr,  // expression
+    Nested,      // { requires ... }
+    Compound     // { statement-seq }
+  };
+  
+private:
+  RequirementKind Kind;
+  SourceLocation Loc;
+  
+public:
+  Requirement(RequirementKind K, SourceLocation Loc) : Kind(K), Loc(Loc) {}
+  virtual ~Requirement() = default;
+  
+  RequirementKind getKind() const { return Kind; }
+  SourceLocation getLocation() const { return Loc; }
+  virtual void dump(raw_ostream &OS, unsigned Indent = 0) const = 0;
+};
+
+/// TypeRequirement - Requires clause type requirement.
+class TypeRequirement : public Requirement {
+  QualType Type;
+  
+public:
+  TypeRequirement(QualType T, SourceLocation Loc)
+      : Requirement(RequirementKind::Type, Loc), Type(T) {}
+  
+  QualType getType() const { return Type; }
+  
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+};
+
+/// ExprRequirement - Requires clause expression requirement.
+class ExprRequirement : public Requirement {
+  class Expr *Expression;
+  bool IsNoexcept = false;
+  
+public:
+  ExprRequirement(class Expr *E, bool Noexcept, SourceLocation Loc)
+      : Requirement(RequirementKind::SimpleExpr, Loc), Expression(E),
+        IsNoexcept(Noexcept) {}
+  
+  class Expr *getExpression() const { return Expression; }
+  bool isNoexcept() const { return IsNoexcept; }
+  
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+};
+
 /// RequiresExpr - C++20 requires expression.
 class RequiresExpr : public Expr {
+  llvm::SmallVector<Requirement *, 4> Requirements;
+  SourceLocation RequiresLoc;
+  SourceLocation RBraceLoc;
+
 public:
-  RequiresExpr(SourceLocation Loc) : Expr(Loc) {}
+  RequiresExpr(SourceLocation Loc, llvm::ArrayRef<Requirement *> Reqs,
+               SourceLocation RequiresLoc = SourceLocation(),
+               SourceLocation RBraceLoc = SourceLocation())
+      : Expr(Loc), Requirements(Reqs.begin(), Reqs.end()),
+        RequiresLoc(RequiresLoc), RBraceLoc(RBraceLoc) {}
+
+  llvm::ArrayRef<Requirement *> getRequirements() const { return Requirements; }
 
   NodeKind getKind() const override { return NodeKind::RequiresExprKind; }
 
-  void dump(raw_ostream &OS, unsigned Indent = 0) const override {
-    printIndent(OS, Indent);
-    OS << "RequiresExpr\n";
-  }
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::RequiresExprKind;
@@ -667,15 +765,28 @@ public:
 
 /// CXXFoldExpr - C++17 fold expression.
 class CXXFoldExpr : public Expr {
+  Expr *LHS = nullptr;      // Left operand (nullptr for unary left fold)
+  Expr *RHS = nullptr;      // Right operand (nullptr for unary right fold)
+  Expr *Pattern;            // The pack expansion pattern
+  BinaryOpKind Op;          // The operator (+, -, *, /, etc.)
+  bool IsRightFold;         // True if right fold, false if left fold
+
 public:
-  CXXFoldExpr(SourceLocation Loc) : Expr(Loc) {}
+  CXXFoldExpr(SourceLocation Loc, Expr *LHS, Expr *RHS, Expr *Pattern,
+              BinaryOpKind Op, bool IsRightFold)
+      : Expr(Loc), LHS(LHS), RHS(RHS), Pattern(Pattern), Op(Op),
+        IsRightFold(IsRightFold) {}
+
+  Expr *getLHS() const { return LHS; }
+  Expr *getRHS() const { return RHS; }
+  Expr *getPattern() const { return Pattern; }
+  BinaryOpKind getOperator() const { return Op; }
+  bool isRightFold() const { return IsRightFold; }
+  bool isLeftFold() const { return !IsRightFold; }
 
   NodeKind getKind() const override { return NodeKind::CXXFoldExprKind; }
 
-  void dump(raw_ostream &OS, unsigned Indent = 0) const override {
-    printIndent(OS, Indent);
-    OS << "CXXFoldExpr\n";
-  }
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXFoldExprKind;
@@ -684,15 +795,19 @@ public:
 
 /// PackIndexingExpr - C++26 pack indexing expression.
 class PackIndexingExpr : public Expr {
+  Expr *Pack;           // The pack expression
+  Expr *Index;          // The index expression (constant or runtime)
+
 public:
-  PackIndexingExpr(SourceLocation Loc) : Expr(Loc) {}
+  PackIndexingExpr(SourceLocation Loc, Expr *Pack, Expr *Index)
+      : Expr(Loc), Pack(Pack), Index(Index) {}
+
+  Expr *getPack() const { return Pack; }
+  Expr *getIndex() const { return Index; }
 
   NodeKind getKind() const override { return NodeKind::PackIndexingExprKind; }
 
-  void dump(raw_ostream &OS, unsigned Indent = 0) const override {
-    printIndent(OS, Indent);
-    OS << "PackIndexingExpr\n";
-  }
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::PackIndexingExprKind;
@@ -701,15 +816,19 @@ public:
 
 /// ReflexprExpr - C++26 reflexpr expression.
 class ReflexprExpr : public Expr {
+  Expr *Argument;       // The type-id or expression being reflected
+  QualType ResultType;  // The result type (meta::info)
+
 public:
-  ReflexprExpr(SourceLocation Loc) : Expr(Loc) {}
+  ReflexprExpr(SourceLocation Loc, Expr *Arg, QualType ResultType = QualType())
+      : Expr(Loc), Argument(Arg), ResultType(ResultType) {}
+
+  Expr *getArgument() const { return Argument; }
+  QualType getResultType() const { return ResultType; }
 
   NodeKind getKind() const override { return NodeKind::ReflexprExprKind; }
 
-  void dump(raw_ostream &OS, unsigned Indent = 0) const override {
-    printIndent(OS, Indent);
-    OS << "ReflexprExpr\n";
-  }
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::ReflexprExprKind;

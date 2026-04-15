@@ -33,16 +33,6 @@ class ParmVarDecl;
 class Decl;
 
 /// LambdaCapture - Represents a lambda capture.
-struct LambdaCapture {
-  enum CaptureKind {
-    ByCopy,  // x
-    ByRef,   // &x
-    Init,    // x = expr
-  };
-  CaptureKind Kind = ByCopy;
-  // TODO: Add captured variable and initializer
-};
-
 /// ParsingContext - Represents the current parsing context.
 enum class ParsingContext {
   Expression,        // Parsing an expression
