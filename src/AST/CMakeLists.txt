@@ -2,6 +2,7 @@
 
 add_library(blocktype-ast
   ASTContext.cpp
+  ASTDumper.cpp
   Expr.cpp
   Stmt.cpp
   Type.cpp
