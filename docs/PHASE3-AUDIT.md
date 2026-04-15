@@ -218,10 +218,10 @@ if (Tok.is(TokenKind::equal)) {
 
 | 功能 | 文件 | 行号 | 状态 |
 |------|------|------|------|
-| `parseNamespaceDeclaration()` | ParseDecl.cpp | 874-927 | ⚠️ 部分 |
-| `parseNamespaceBody()` | ParseDecl.cpp | 932-945 | ✅ 完整 |
-| `parseUsingDeclaration()` | ParseDecl.cpp | 952-989 | ⚠️ 部分 |
-| `parseUsingDirective()` | ParseDecl.cpp | 994-1034 | ⚠️ 部分 |
+| `parseNamespaceDeclaration()` | ParseDecl.cpp | 1440-1532 | ✅ 完整 |
+| `parseNamespaceBody()` | ParseDecl.cpp | 1534-1554 | ✅ 完整 |
+| `parseUsingDeclaration()` | ParseDecl.cpp | 1600-1642 | ✅ 完整 |
+| `parseUsingDirective()` | ParseDecl.cpp | 1668-1703 | ✅ 完整 |
 
 ### 4.2 缺失功能 ❌
 
@@ -271,6 +271,27 @@ if (Tok.is(TokenKind::equal)) {
 | **using 指令嵌套名称说明符** | ✅ 已修复 | ParseDecl.cpp:1650-1656 |
 | **UsingDecl 嵌套名称存储** | ✅ 已修复 | Decl.h:719-731 |
 | **UsingDirectiveDecl 嵌套名称存储** | ✅ 已修复 | Decl.h:738-750 |
+
+### 4.1.1 函数完整性更新 ✅ (2026-04-16 更新)
+
+以下函数已从"⚠️ 部分"更新为"✅ 完整"：
+
+**parseNamespaceDeclaration()** - 完整实现：
+- 支持普通命名空间定义
+- 支持内联命名空间 (inline namespace)
+- 支持匿名命名空间
+- 支持嵌套命名空间定义 (C++17: namespace A::B::C { })
+- 支持命名空间别名 (namespace AB = A::B;)
+
+**parseUsingDeclaration()** - 完整实现：
+- 支持简单 using 声明 (using x;)
+- 支持嵌套名称说明符 (using A::B::C;)
+- 支持 typename 关键字 (using typename T::type;)
+- 支持 using enum (C++20: using enum Color;)
+
+**parseUsingDirective()** - 完整实现：
+- 支持简单 using 指令 (using namespace std;)
+- 支持嵌套名称说明符 (using namespace A::B::C;)
 
 ---
 
