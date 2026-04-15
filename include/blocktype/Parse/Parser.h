@@ -14,6 +14,7 @@
 
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Expr.h"
+#include "blocktype/AST/Stmt.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Lex/Preprocessor.h"
 #include "blocktype/Lex/Token.h"
@@ -248,6 +249,46 @@ public:
 
   /// Parses a C-style cast expression.
   Expr *parseCStyleCastExpr();
+
+  //===--------------------------------------------------------------------===//
+  // Statement parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parses a statement.
+  Stmt *parseStatement();
+
+  /// Parses a compound statement (block).
+  Stmt *parseCompoundStatement();
+
+  /// Parses a return statement.
+  Stmt *parseReturnStatement();
+
+  /// Parses a null statement (empty statement).
+  Stmt *parseNullStatement();
+
+  /// Parses an expression statement.
+  Stmt *parseExpressionStatement();
+
+  /// Parses a declaration statement.
+  Stmt *parseDeclarationStatement();
+
+  /// Parses a label statement.
+  Stmt *parseLabelStatement();
+
+  /// Parses a case statement.
+  Stmt *parseCaseStatement();
+
+  /// Parses a default statement.
+  Stmt *parseDefaultStatement();
+
+  /// Parses a break statement.
+  Stmt *parseBreakStatement();
+
+  /// Parses a continue statement.
+  Stmt *parseContinueStatement();
+
+  /// Parses a goto statement.
+  Stmt *parseGotoStatement();
 
 private:
   //===--------------------------------------------------------------------===//
