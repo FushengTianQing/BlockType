@@ -281,6 +281,12 @@ if __name__ == "__main__":
 
 ## 📦 集成方案
 
+### Unicode 版本
+
+**当前版本：** Unicode 17.0.0（最新标准）
+
+BlockType 编译器内置最新的 Unicode 17.0.0 数据（2025年发布），支持所有最新的 Unicode 字符作为标识符。
+
 ### CMake 配置
 ```cmake
 # src/Unicode/CMakeLists.txt

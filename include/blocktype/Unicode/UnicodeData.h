@@ -14,6 +14,7 @@
 #pragma once
 
 #include "blocktype/Basic/LLVM.h"
+#include "blocktype/Config/UnicodeVersion.h"
 #include <cstdint>
 
 namespace blocktype {
