@@ -39,6 +39,7 @@ include(AI)
 
 # 添加子目录
 add_subdirectory(src/Basic)
+add_subdirectory(src/Unicode)
 add_subdirectory(src/Lex)
 add_subdirectory(src/Parse)
 add_subdirectory(src/AST)

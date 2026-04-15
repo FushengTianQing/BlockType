@@ -12,6 +12,7 @@ target_include_directories(blocktype-lex PUBLIC
 
 target_link_libraries(blocktype-lex PUBLIC
   blocktype-basic
+  blocktype-unicode
 )
 
 blocktype_add_compile_options(blocktype-lex)
