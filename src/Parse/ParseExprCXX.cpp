@@ -372,4 +372,70 @@ Expr *Parser::parseCStyleCastExpr() {
   return SubExpr;
 }
 
+//===----------------------------------------------------------------------===//
+// C++26 expression parsing
+//===----------------------------------------------------------------------===//
+
+Expr *Parser::parsePackIndexingExpr() {
+  SourceLocation PackLoc = Tok.getLocation();
+
+  // Parse the pack expression
+  Expr *Pack = parsePrimaryExpression();
+  if (!Pack) {
+    Pack = createRecoveryExpr(PackLoc);
+  }
+
+  // Expect ...[
+  if (!Tok.is(TokenKind::ellipsis)) {
+    emitError(DiagID::err_expected);
+    return Pack;
+  }
+  consumeToken(); // consume '...'
+
+  if (!tryConsumeToken(TokenKind::l_square)) {
+    emitError(DiagID::err_expected);
+    return Pack;
+  }
+
+  // Parse the index
+  Expr *Index = parseExpression();
+  if (!Index) {
+    Index = createRecoveryExpr(PackLoc);
+  }
+
+  if (!tryConsumeToken(TokenKind::r_square)) {
+    emitError(DiagID::err_expected);
+  }
+
+  // TODO: Create PackIndexingExpr
+  return Pack;
+}
+
+Expr *Parser::parseReflexprExpr() {
+  SourceLocation ReflexprLoc = Tok.getLocation();
+  consumeToken(); // consume 'reflexpr'
+
+  // Parse '('
+  if (!tryConsumeToken(TokenKind::l_paren)) {
+    emitError(DiagID::err_expected_lparen);
+    return createRecoveryExpr(ReflexprLoc);
+  }
+
+  // Parse the argument (type-id or expression)
+  // TODO: Determine if it's a type or expression
+  // For now, parse as expression
+  Expr *Arg = parseExpression();
+  if (!Arg) {
+    Arg = createRecoveryExpr(ReflexprLoc);
+  }
+
+  // Parse ')'
+  if (!tryConsumeToken(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+  }
+
+  // TODO: Create ReflexprExpr
+  return Arg;
+}
+
 } // namespace blocktype

@@ -323,6 +323,12 @@ public:
   /// Parses a C++20 co_await expression.
   Expr *parseCoawaitExpression();
 
+  /// Parses a C++26 pack indexing expression.
+  Expr *parsePackIndexingExpr();
+
+  /// Parses a C++26 reflexpr expression.
+  Expr *parseReflexprExpr();
+
 private:
   //===--------------------------------------------------------------------===//
   // Internal helpers
