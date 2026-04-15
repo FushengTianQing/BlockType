@@ -1,0 +1,151 @@
+//===--- NodeKinds.def - AST Node Kind Definitions ----------*- C++ -*-===//
+//
+// Part of the BlockType Project, under the Apache License v2.0 with LLVM
+// Exceptions. See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the kinds of AST nodes using macros.
+// It is included multiple times with different macro definitions.
+//
+// Usage:
+// Before including this file, you must define the following macros:
+//   EXPR(Type, Base) - For concrete expression nodes
+//   ABSTRACT_EXPR(Type, Base) - For abstract expression nodes
+//   STMT(Type, Base) - For concrete statement nodes
+//   ABSTRACT_STMT(Type, Base) - For abstract statement nodes
+//   DECL(Type, Base) - For concrete declaration nodes
+//   ABSTRACT_DECL(Type, Base) - For abstract declaration nodes
+//
+// After including this file, you should undef these macros.
+//
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Expression Nodes
+//===----------------------------------------------------------------------===//
+
+ABSTRACT_EXPR(Expr, ASTNode)
+
+// Literals
+EXPR(IntegerLiteral, Expr)
+EXPR(FloatingLiteral, Expr)
+EXPR(StringLiteral, Expr)
+EXPR(CharacterLiteral, Expr)
+EXPR(CXXBoolLiteral, Expr)
+EXPR(CXXNullPtrLiteral, Expr)
+
+// References
+EXPR(DeclRefExpr, Expr)
+EXPR(MemberExpr, Expr)
+
+// Operators
+EXPR(BinaryOperator, Expr)
+EXPR(UnaryOperator, Expr)
+EXPR(ConditionalOperator, Expr)
+
+// Calls
+EXPR(CallExpr, Expr)
+EXPR(CXXMemberCallExpr, CallExpr)
+EXPR(CXXConstructExpr, Expr)
+EXPR(CXXTemporaryObjectExpr, CXXConstructExpr)
+
+// C++ Expressions
+EXPR(CXXThisExpr, Expr)
+EXPR(CXXNewExpr, Expr)
+EXPR(CXXDeleteExpr, Expr)
+EXPR(CXXThrowExpr, Expr)
+
+// Casts
+ABSTRACT_EXPR(CastExpr, Expr)
+EXPR(CXXStaticCastExpr, CastExpr)
+EXPR(CXXDynamicCastExpr, CastExpr)
+EXPR(CXXConstCastExpr, CastExpr)
+EXPR(CXXReinterpretCastExpr, CastExpr)
+EXPR(CStyleCastExpr, CastExpr)
+
+// Lambda
+EXPR(LambdaExpr, Expr)
+
+// C++20/26
+EXPR(RequiresExpr, Expr)
+EXPR(CXXFoldExpr, Expr)
+EXPR(PackIndexingExpr, Expr)
+EXPR(ReflexprExpr, Expr)
+
+// Coroutine
+EXPR(CoawaitExpr, Expr)
+
+// Error recovery
+EXPR(RecoveryExpr, Expr)
+
+//===----------------------------------------------------------------------===//
+// Statement Nodes
+//===----------------------------------------------------------------------===//
+
+ABSTRACT_STMT(Stmt, ASTNode)
+
+// Basic
+STMT(NullStmt, Stmt)
+STMT(CompoundStmt, Stmt)
+STMT(ReturnStmt, Stmt)
+STMT(ExprStmt, Stmt)
+
+// Declarations
+STMT(DeclStmt, Stmt)
+
+// Control Flow
+STMT(IfStmt, Stmt)
+STMT(SwitchStmt, Stmt)
+STMT(CaseStmt, Stmt)
+STMT(DefaultStmt, Stmt)
+STMT(BreakStmt, Stmt)
+STMT(ContinueStmt, Stmt)
+STMT(GotoStmt, Stmt)
+STMT(LabelStmt, Stmt)
+
+// Loops
+STMT(WhileStmt, Stmt)
+STMT(DoStmt, Stmt)
+STMT(ForStmt, Stmt)
+STMT(CXXForRangeStmt, Stmt)
+
+// Exception
+STMT(CXXTryStmt, Stmt)
+STMT(CXXCatchStmt, Stmt)
+
+// Coroutine
+STMT(CoreturnStmt, Stmt)
+STMT(CoyieldStmt, Stmt)
+
+//===----------------------------------------------------------------------===//
+// Declaration Nodes
+//===----------------------------------------------------------------------===//
+
+ABSTRACT_DECL(Decl, ASTNode)
+
+// Declarative
+DECL(NamedDecl, Decl)
+DECL(ValueDecl, NamedDecl)
+DECL(VarDecl, ValueDecl)
+DECL(FunctionDecl, ValueDecl)
+DECL(FieldDecl, ValueDecl)
+DECL(EnumConstantDecl, ValueDecl)
+
+// Types
+DECL(TypeDecl, NamedDecl)
+DECL(TypedefDecl, TypeDecl)
+DECL(TagDecl, TypeDecl)
+DECL(EnumDecl, TagDecl)
+DECL(RecordDecl, TagDecl)
+
+// Namespaces
+DECL(NamespaceDecl, NamedDecl)
+
+// Translation Unit
+DECL(TranslationUnitDecl, Decl)
+
+// Using declarations
+DECL(UsingDecl, NamedDecl)
+DECL(UsingDirectiveDecl, NamedDecl)

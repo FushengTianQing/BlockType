@@ -17,6 +17,9 @@ gtest_discover_tests(blocktype-tests)
 # Lex 单元测试
 add_subdirectory(Lex)
 
+# AST 单元测试
+add_subdirectory(AST)
+
 # D19: Performance tests
 add_executable(PerformanceTest
   PerformanceTest.cpp

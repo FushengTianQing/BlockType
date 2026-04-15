@@ -1,2 +1,18 @@
-add_library(blocktype-ast INTERFACE)
-target_link_libraries(blocktype-ast INTERFACE blocktype-basic)
+# AST module for BlockType
+
+add_library(blocktype-ast
+  ASTContext.cpp
+  Expr.cpp
+)
+
+target_include_directories(blocktype-ast
+  PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_BINARY_DIR}/include
+)
+
+target_link_libraries(blocktype-ast
+  PUBLIC
+    blocktype-basic
+    LLVMSupport
+)

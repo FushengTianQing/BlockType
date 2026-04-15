@@ -63,10 +63,12 @@ class SourceRange {
 public:
   SourceRange() = default;
   SourceRange(SourceLocation B, SourceLocation E) : Begin(B), End(E) {}
+  SourceRange(SourceLocation Loc) : Begin(Loc), End(Loc) {}
   
   SourceLocation getBegin() const { return Begin; }
   SourceLocation getEnd() const { return End; }
   bool isValid() const { return Begin.isValid() && End.isValid(); }
+  bool isInvalid() const { return !isValid(); }
 };
 
 } // namespace blocktype
