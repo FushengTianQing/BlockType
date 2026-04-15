@@ -26,6 +26,10 @@
 namespace blocktype {
 
 class TranslationUnitDecl;
+class VarDecl;
+class FunctionDecl;
+class ParmVarDecl;
+class Decl;
 
 /// LambdaCapture - Represents a lambda capture.
 struct LambdaCapture {
@@ -268,6 +272,25 @@ public:
 
   /// Parses an array dimension.
   QualType parseArrayDimension(QualType Base);
+
+  //===--------------------------------------------------------------------===//
+  // Declaration parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parses a declaration.
+  Decl *parseDeclaration();
+
+  /// Parses a variable declaration.
+  VarDecl *parseVariableDeclaration(QualType Type, llvm::StringRef Name,
+                                    SourceLocation Loc);
+
+  /// Parses a function declaration.
+  FunctionDecl *parseFunctionDeclaration(QualType ReturnType,
+                                         llvm::StringRef Name,
+                                         SourceLocation Loc);
+
+  /// Parses a parameter declaration.
+  ParmVarDecl *parseParameterDeclaration();
 
   //===--------------------------------------------------------------------===//
   // Statement parsing
