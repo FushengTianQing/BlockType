@@ -13,9 +13,11 @@
 #pragma once
 
 #include "blocktype/AST/ASTContext.h"
+#include "blocktype/AST/Expr.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Lex/Preprocessor.h"
 #include "blocktype/Lex/Token.h"
+#include "blocktype/Parse/OperatorPrecedence.h"
 #include "llvm/ADT/SmallVector.h"
 #include <initializer_list>
 #include <vector>
@@ -150,6 +152,61 @@ public:
   ASTContext &getASTContext() { return Context; }
   DiagnosticsEngine &getDiagnostics() { return Diags; }
 
+  //===--------------------------------------------------------------------===//
+  // Expression parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parses an expression.
+  Expr *parseExpression();
+
+  /// Parses an expression with a minimum precedence level.
+  Expr *parseExpressionWithPrecedence(PrecedenceLevel MinPrec);
+
+  /// Parses the right-hand side of a binary expression using precedence climbing.
+  Expr *parseRHS(Expr *LHS, PrecedenceLevel MinPrec);
+
+  /// Parses a unary expression (prefix operators).
+  Expr *parseUnaryExpression();
+
+  /// Parses a postfix expression.
+  Expr *parsePostfixExpression(Expr *Base);
+
+  /// Parses a primary expression (literals, identifiers, parentheses).
+  Expr *parsePrimaryExpression();
+
+  /// Parses an integer literal.
+  Expr *parseIntegerLiteral();
+
+  /// Parses a floating point literal.
+  Expr *parseFloatingLiteral();
+
+  /// Parses a string literal.
+  Expr *parseStringLiteral();
+
+  /// Parses a character literal.
+  Expr *parseCharacterLiteral();
+
+  /// Parses a boolean literal (true/false).
+  Expr *parseBoolLiteral();
+
+  /// Parses a nullptr literal.
+  Expr *parseNullPtrLiteral();
+
+  /// Parses an identifier.
+  Expr *parseIdentifier();
+
+  /// Parses a parenthesized expression.
+  Expr *parseParenExpression();
+
+  /// Parses a conditional expression (?:).
+  Expr *parseConditionalExpression(Expr *Cond);
+
+  /// Parses a function call expression.
+  Expr *parseCallExpression(Expr *Fn);
+
+  /// Parses call arguments.
+  llvm::SmallVector<Expr *, 8> parseCallArguments();
+
 private:
   //===--------------------------------------------------------------------===//
   // Internal helpers
@@ -160,6 +217,12 @@ private:
 
   /// Initializes the token lookahead.
   void initializeTokenLookahead();
+
+  /// Converts TokenKind to BinaryOpKind.
+  static BinaryOpKind getBinaryOpKind(TokenKind K);
+
+  /// Converts TokenKind to UnaryOpKind.
+  static UnaryOpKind getUnaryOpKind(TokenKind K);
 };
 
 } // namespace blocktype
