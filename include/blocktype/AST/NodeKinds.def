@@ -129,9 +129,11 @@ ABSTRACT_DECL(Decl, ASTNode)
 DECL(NamedDecl, Decl)
 DECL(ValueDecl, NamedDecl)
 DECL(VarDecl, ValueDecl)
+DECL(ParmVarDecl, VarDecl)
 DECL(FunctionDecl, ValueDecl)
 DECL(FieldDecl, ValueDecl)
 DECL(EnumConstantDecl, ValueDecl)
+DECL(LabelDecl, NamedDecl)
 
 // Types
 DECL(TypeDecl, NamedDecl)
