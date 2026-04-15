@@ -145,6 +145,18 @@ DECL(TagDecl, TypeDecl)
 DECL(EnumDecl, TagDecl)
 DECL(RecordDecl, TagDecl)
 
+// C++ Records
+DECL(CXXRecordDecl, RecordDecl)
+
+// C++ Methods
+DECL(CXXMethodDecl, FunctionDecl)
+DECL(CXXConstructorDecl, CXXMethodDecl)
+DECL(CXXDestructorDecl, CXXMethodDecl)
+DECL(CXXConversionDecl, CXXMethodDecl)
+
+// Access Specifier
+DECL(AccessSpecDecl, Decl)
+
 // Namespaces
 DECL(NamespaceDecl, NamedDecl)
 
@@ -154,3 +166,9 @@ DECL(TranslationUnitDecl, Decl)
 // Using declarations
 DECL(UsingDecl, NamedDecl)
 DECL(UsingDirectiveDecl, NamedDecl)
+
+// Template declarations
+DECL(TemplateDecl, NamedDecl)
+DECL(TemplateTemplateParmDecl, TemplateDecl)
+DECL(TemplateTypeParmDecl, TypeDecl)
+DECL(NonTypeTemplateParmDecl, ValueDecl)

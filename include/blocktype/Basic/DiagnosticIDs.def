@@ -130,6 +130,9 @@ DIAG(err_expected_lparen, Error, \
 DIAG(err_expected_rparen, Error, \
   "expected ')'", \
   "期望 ')'")
+DIAG(err_expected_colon, Error, \
+  "expected ':'", \
+  "期望 ':'")
 DIAG(err_expected_identifier, Error, \
   "expected identifier", \
   "期望标识符")

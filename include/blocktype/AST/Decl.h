@@ -24,6 +24,8 @@ class Expr;
 class Stmt;
 class CompoundStmt;
 class ParmVarDecl; // Forward declaration
+class CXXMethodDecl; // Forward declaration
+class CXXRecordDecl; // Forward declaration
 
 //===----------------------------------------------------------------------===//
 // Decl - Base class for all declarations
@@ -339,7 +341,224 @@ public:
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {
-    return N->getKind() == NodeKind::RecordDeclKind;
+    return N->getKind() == NodeKind::RecordDeclKind ||
+           N->getKind() == NodeKind::CXXRecordDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// CXXRecordDecl - C++ class declaration
+//===----------------------------------------------------------------------===//
+
+/// CXXRecordDecl - C++ class declaration with additional features like
+/// base classes, member functions, access control, etc.
+class CXXRecordDecl : public RecordDecl {
+public:
+  /// BaseSpecifier - Describes a base class.
+  class BaseSpecifier {
+    QualType Type;
+    SourceLocation Loc;
+    bool IsVirtual;
+    bool IsBaseOfClass;
+    unsigned Access;
+
+  public:
+    BaseSpecifier(QualType T, SourceLocation Loc, bool IsVirtual,
+                  bool IsBaseOfClass, unsigned Access)
+        : Type(T), Loc(Loc), IsVirtual(IsVirtual),
+          IsBaseOfClass(IsBaseOfClass), Access(Access) {}
+
+    QualType getType() const { return Type; }
+    SourceLocation getLocation() const { return Loc; }
+    bool isVirtual() const { return IsVirtual; }
+    bool isBaseOfClass() const { return IsBaseOfClass; }
+    unsigned getAccessSpecifier() const { return Access; }
+  };
+
+private:
+  llvm::SmallVector<BaseSpecifier, 4> Bases;
+  llvm::SmallVector<CXXMethodDecl *, 16> Methods;
+  llvm::SmallVector<Decl *, 32> Members;
+  bool HasDefaultConstructor;
+  bool HasCopyConstructor;
+  bool HasMoveConstructor;
+  bool HasDestructor;
+
+public:
+  CXXRecordDecl(SourceLocation Loc, llvm::StringRef Name, TagKind TK = TK_class)
+      : RecordDecl(Loc, Name, TK), HasDefaultConstructor(false),
+        HasCopyConstructor(false), HasMoveConstructor(false),
+        HasDestructor(false) {}
+
+  // Base classes
+  llvm::ArrayRef<BaseSpecifier> bases() const { return Bases; }
+  void addBase(const BaseSpecifier &Base) { Bases.push_back(Base); }
+  unsigned getNumBases() const { return Bases.size(); }
+
+  // Methods
+  llvm::ArrayRef<CXXMethodDecl *> methods() const { return Methods; }
+  void addMethod(CXXMethodDecl *M) { Methods.push_back(M); }
+
+  // Members
+  llvm::ArrayRef<Decl *> members() const { return Members; }
+  void addMember(Decl *D) { Members.push_back(D); }
+
+  // Special members
+  bool hasDefaultConstructor() const { return HasDefaultConstructor; }
+  bool hasCopyConstructor() const { return HasCopyConstructor; }
+  bool hasMoveConstructor() const { return HasMoveConstructor; }
+  bool hasDestructor() const { return HasDestructor; }
+
+  NodeKind getKind() const override { return NodeKind::CXXRecordDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::CXXRecordDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// CXXMethodDecl - C++ member function declaration
+//===----------------------------------------------------------------------===//
+
+/// CXXMethodDecl - C++ member function declaration.
+class CXXMethodDecl : public FunctionDecl {
+  CXXRecordDecl *Parent;
+  bool IsStatic;
+  bool IsConst;
+  bool IsVolatile;
+  bool IsVirtual;
+  bool IsOverride;
+  bool IsFinal;
+
+public:
+  CXXMethodDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
+                llvm::ArrayRef<ParmVarDecl *> Params, CXXRecordDecl *Parent,
+                Stmt *Body = nullptr, bool IsStatic = false, bool IsConst = false,
+                bool IsVirtual = false, bool IsOverride = false, bool IsFinal = false)
+      : FunctionDecl(Loc, Name, T, Params, Body), Parent(Parent),
+        IsStatic(IsStatic), IsConst(IsConst), IsVolatile(false),
+        IsVirtual(IsVirtual), IsOverride(IsOverride), IsFinal(IsFinal) {}
+
+  CXXRecordDecl *getParent() const { return Parent; }
+
+  bool isStatic() const { return IsStatic; }
+  bool isConst() const { return IsConst; }
+  bool isVolatile() const { return IsVolatile; }
+  bool isVirtual() const { return IsVirtual; }
+  bool isOverride() const { return IsOverride; }
+  bool isFinal() const { return IsFinal; }
+
+  NodeKind getKind() const override { return NodeKind::CXXMethodDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() >= NodeKind::CXXMethodDeclKind &&
+           N->getKind() <= NodeKind::CXXConversionDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// CXXConstructorDecl - C++ constructor declaration
+//===----------------------------------------------------------------------===//
+
+/// CXXConstructorDecl - C++ constructor declaration.
+class CXXConstructorDecl : public CXXMethodDecl {
+  bool IsExplicit;
+
+public:
+  CXXConstructorDecl(SourceLocation Loc, CXXRecordDecl *Parent,
+                     llvm::ArrayRef<ParmVarDecl *> Params, Stmt *Body = nullptr,
+                     bool IsExplicit = false)
+      : CXXMethodDecl(Loc, Parent->getName(), QualType(), Params, Parent, Body),
+        IsExplicit(IsExplicit) {}
+
+  bool isExplicit() const { return IsExplicit; }
+
+  NodeKind getKind() const override { return NodeKind::CXXConstructorDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::CXXConstructorDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// CXXDestructorDecl - C++ destructor declaration
+//===----------------------------------------------------------------------===//
+
+/// CXXDestructorDecl - C++ destructor declaration.
+class CXXDestructorDecl : public CXXMethodDecl {
+public:
+  CXXDestructorDecl(SourceLocation Loc, CXXRecordDecl *Parent,
+                    Stmt *Body = nullptr);
+
+  NodeKind getKind() const override { return NodeKind::CXXDestructorDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::CXXDestructorDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// CXXConversionDecl - C++ conversion function declaration
+//===----------------------------------------------------------------------===//
+
+/// CXXConversionDecl - C++ conversion function declaration.
+class CXXConversionDecl : public CXXMethodDecl {
+  QualType ConversionType;
+
+public:
+  CXXConversionDecl(SourceLocation Loc, QualType ConvType,
+                    CXXRecordDecl *Parent, Stmt *Body = nullptr);
+
+  QualType getConversionType() const { return ConversionType; }
+
+  NodeKind getKind() const override { return NodeKind::CXXConversionDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::CXXConversionDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// AccessSpecDecl - Access specifier declaration
+//===----------------------------------------------------------------------===//
+
+/// AccessSpecDecl - Access specifier declaration (public, protected, private).
+class AccessSpecDecl : public Decl {
+public:
+  enum AccessSpecifier {
+    AS_public,
+    AS_protected,
+    AS_private
+  };
+
+private:
+  AccessSpecifier Access;
+  SourceLocation ColonLoc;
+
+public:
+  AccessSpecDecl(SourceLocation Loc, AccessSpecifier Access,
+                 SourceLocation ColonLoc)
+      : Decl(Loc), Access(Access), ColonLoc(ColonLoc) {}
+
+  AccessSpecifier getAccess() const { return Access; }
+  SourceLocation getColonLoc() const { return ColonLoc; }
+
+  NodeKind getKind() const override { return NodeKind::AccessSpecDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::AccessSpecDeclKind;
   }
 };
 
@@ -447,6 +666,133 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::LabelDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// TemplateDecl - Base class for template declarations
+//===----------------------------------------------------------------------===//
+
+/// TemplateDecl - Base class for template declarations.
+class TemplateDecl : public NamedDecl {
+protected:
+  llvm::SmallVector<NamedDecl *, 8> TemplateParams;
+  Decl *TemplatedDecl;
+
+public:
+  TemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
+      : NamedDecl(Loc, Name), TemplatedDecl(TemplatedDecl) {}
+
+  llvm::ArrayRef<NamedDecl *> getTemplateParameters() const {
+    return TemplateParams;
+  }
+  void addTemplateParameter(NamedDecl *Param) { TemplateParams.push_back(Param); }
+
+  Decl *getTemplatedDecl() const { return TemplatedDecl; }
+
+  NodeKind getKind() const override { return NodeKind::TemplateDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::TemplateDeclKind ||
+           N->getKind() == NodeKind::TemplateTemplateParmDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// TemplateTypeParmDecl - Template type parameter declaration
+//===----------------------------------------------------------------------===//
+
+/// TemplateTypeParmDecl - Template type parameter declaration.
+/// Example: template<typename T> or template<class T>
+class TemplateTypeParmDecl : public TypeDecl {
+  unsigned Depth;
+  unsigned Index;
+  bool IsParameterPack;
+  bool IsTypename; // true for 'typename', false for 'class'
+  QualType DefaultArgument;
+
+public:
+  TemplateTypeParmDecl(SourceLocation Loc, llvm::StringRef Name, unsigned Depth,
+                       unsigned Index, bool IsParameterPack, bool IsTypename)
+      : TypeDecl(Loc, Name), Depth(Depth), Index(Index),
+        IsParameterPack(IsParameterPack), IsTypename(IsTypename) {}
+
+  unsigned getDepth() const { return Depth; }
+  unsigned getIndex() const { return Index; }
+  bool isParameterPack() const { return IsParameterPack; }
+  bool isTypename() const { return IsTypename; }
+
+  QualType getDefaultArgument() const { return DefaultArgument; }
+  void setDefaultArgument(QualType T) { DefaultArgument = T; }
+
+  NodeKind getKind() const override { return NodeKind::TemplateTypeParmDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::TemplateTypeParmDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// NonTypeTemplateParmDecl - Non-type template parameter declaration
+//===----------------------------------------------------------------------===//
+
+/// NonTypeTemplateParmDecl - Non-type template parameter declaration.
+/// Example: template<int N> or template<auto X>
+class NonTypeTemplateParmDecl : public ValueDecl {
+  unsigned Depth;
+  unsigned Index;
+  bool IsParameterPack;
+
+public:
+  NonTypeTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
+                          unsigned Depth, unsigned Index, bool IsParameterPack)
+      : ValueDecl(Loc, Name, T), Depth(Depth), Index(Index),
+        IsParameterPack(IsParameterPack) {}
+
+  unsigned getDepth() const { return Depth; }
+  unsigned getIndex() const { return Index; }
+  bool isParameterPack() const { return IsParameterPack; }
+
+  NodeKind getKind() const override { return NodeKind::NonTypeTemplateParmDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::NonTypeTemplateParmDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// TemplateTemplateParmDecl - Template template parameter declaration
+//===----------------------------------------------------------------------===//
+
+/// TemplateTemplateParmDecl - Template template parameter declaration.
+/// Example: template<template<typename> class T>
+class TemplateTemplateParmDecl : public TemplateDecl {
+  unsigned Depth;
+  unsigned Index;
+  bool IsParameterPack;
+
+public:
+  TemplateTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                           unsigned Depth, unsigned Index, bool IsParameterPack)
+      : TemplateDecl(Loc, Name, nullptr), Depth(Depth), Index(Index),
+        IsParameterPack(IsParameterPack) {}
+
+  unsigned getDepth() const { return Depth; }
+  unsigned getIndex() const { return Index; }
+  bool isParameterPack() const { return IsParameterPack; }
+
+  NodeKind getKind() const override { return NodeKind::TemplateTemplateParmDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::TemplateTemplateParmDeclKind;
   }
 };
 

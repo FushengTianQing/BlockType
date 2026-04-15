@@ -31,6 +31,9 @@ class VarDecl;
 class FunctionDecl;
 class ParmVarDecl;
 class Decl;
+class RecordDecl;
+class CXXRecordDecl;
+class AccessSpecDecl;
 
 /// LambdaCapture - Represents a lambda capture.
 /// ParsingContext - Represents the current parsing context.
@@ -308,6 +311,27 @@ public:
 
   /// Parses a parameter declaration.
   ParmVarDecl *parseParameterDeclaration();
+
+  /// Parses a class declaration.
+  CXXRecordDecl *parseClassDeclaration(SourceLocation ClassLoc);
+
+  /// Parses a struct declaration.
+  RecordDecl *parseStructDeclaration(SourceLocation StructLoc);
+
+  /// Parses a class/struct body.
+  void parseClassBody(CXXRecordDecl *Class);
+
+  /// Parses a class member.
+  Decl *parseClassMember(CXXRecordDecl *Class);
+
+  /// Parses an access specifier.
+  AccessSpecDecl *parseAccessSpecifier(SourceLocation Loc);
+
+  /// Parses a base clause.
+  bool parseBaseClause(CXXRecordDecl *Class);
+
+  /// Parses a base specifier.
+  void parseBaseSpecifier(CXXRecordDecl *Class);
 
   //===--------------------------------------------------------------------===//
   // Statement parsing

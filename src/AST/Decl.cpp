@@ -213,4 +213,221 @@ void LabelDecl::dump(raw_ostream &OS, unsigned Indent) const {
   OS << "LabelDecl " << getName() << "\n";
 }
 
+//===----------------------------------------------------------------------===//
+// CXXRecordDecl
+//===----------------------------------------------------------------------===//
+
+void CXXRecordDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << (isClass() ? "CXXRecordDecl " : "RecordDecl ") << getName() << "\n";
+
+  if (!Bases.empty()) {
+    printIndent(OS, Indent + 2);
+    OS << "Bases:\n";
+    for (const auto &Base : Bases) {
+      printIndent(OS, Indent + 4);
+      OS << "base ";
+      Base.getType().dump(OS);
+      OS << "\n";
+    }
+  }
+
+  for (auto *Member : Members) {
+    Member->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// CXXMethodDecl
+//===----------------------------------------------------------------------===//
+
+void CXXMethodDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "CXXMethodDecl " << getName();
+  if (T.getTypePtr()) {
+    OS << " '";
+    T.dump(OS);
+    OS << "'";
+  }
+  if (IsStatic)
+    OS << " static";
+  if (IsConst)
+    OS << " const";
+  if (IsVirtual)
+    OS << " virtual";
+  if (IsOverride)
+    OS << " override";
+  if (IsFinal)
+    OS << " final";
+  OS << "\n";
+
+  if (!getParams().empty()) {
+    for (auto *Param : getParams()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+
+  if (getBody()) {
+    getBody()->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// CXXConstructorDecl
+//===----------------------------------------------------------------------===//
+
+void CXXConstructorDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "CXXConstructorDecl " << getParent()->getName();
+  if (IsExplicit)
+    OS << " explicit";
+  OS << "\n";
+
+  if (!getParams().empty()) {
+    for (auto *Param : getParams()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+
+  if (getBody()) {
+    getBody()->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// CXXDestructorDecl
+//===----------------------------------------------------------------------===//
+
+CXXDestructorDecl::CXXDestructorDecl(SourceLocation Loc, CXXRecordDecl *Parent,
+                                     Stmt *Body)
+    : CXXMethodDecl(Loc, "", QualType(), llvm::ArrayRef<ParmVarDecl *>(), Parent,
+                    Body) {
+  // Name will be constructed as "~ClassName" when needed
+}
+
+void CXXDestructorDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "CXXDestructorDecl ~" << getParent()->getName() << "\n";
+
+  if (getBody()) {
+    getBody()->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// CXXConversionDecl
+//===----------------------------------------------------------------------===//
+
+CXXConversionDecl::CXXConversionDecl(SourceLocation Loc, QualType ConvType,
+                                     CXXRecordDecl *Parent, Stmt *Body)
+    : CXXMethodDecl(Loc, "operator", ConvType, llvm::ArrayRef<ParmVarDecl *>(),
+                    Parent, Body),
+      ConversionType(ConvType) {}
+
+void CXXConversionDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "CXXConversionDecl operator ";
+  ConversionType.dump(OS);
+  OS << "\n";
+
+  if (getBody()) {
+    getBody()->dump(OS, Indent + 2);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// AccessSpecDecl
+//===----------------------------------------------------------------------===//
+
+void AccessSpecDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "AccessSpecDecl ";
+  switch (Access) {
+  case AS_public:
+    OS << "public";
+    break;
+  case AS_protected:
+    OS << "protected";
+    break;
+  case AS_private:
+    OS << "private";
+    break;
+  }
+  OS << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// TemplateDecl
+//===----------------------------------------------------------------------===//
+
+void TemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "TemplateDecl " << getName() << "\n";
+
+  if (!TemplateParams.empty()) {
+    printIndent(OS, Indent + 2);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : TemplateParams) {
+      Param->dump(OS, Indent + 4);
+    }
+  }
+
+  if (TemplatedDecl) {
+    printIndent(OS, Indent + 2);
+    OS << "TemplatedDecl:\n";
+    TemplatedDecl->dump(OS, Indent + 4);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// TemplateTypeParmDecl
+//===----------------------------------------------------------------------===//
+
+void TemplateTypeParmDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "TemplateTypeParmDecl " << getName();
+  if (IsParameterPack)
+    OS << " ...";
+  OS << (IsTypename ? " typename" : " class");
+  if (!DefaultArgument.isNull()) {
+    OS << " = ";
+    DefaultArgument.dump(OS);
+  }
+  OS << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// NonTypeTemplateParmDecl
+//===----------------------------------------------------------------------===//
+
+void NonTypeTemplateParmDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "NonTypeTemplateParmDecl " << getName();
+  if (IsParameterPack)
+    OS << " ...";
+  OS << " '";
+  T.dump(OS);
+  OS << "'\n";
+}
+
+//===----------------------------------------------------------------------===//
+// TemplateTemplateParmDecl
+//===----------------------------------------------------------------------===//
+
+void TemplateTemplateParmDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "TemplateTemplateParmDecl " << getName();
+  if (IsParameterPack)
+    OS << " ...";
+  OS << "\n";
+
+  if (!TemplateParams.empty()) {
+    printIndent(OS, Indent + 2);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : TemplateParams) {
+      Param->dump(OS, Indent + 4);
+    }
+  }
+}
+
 } // namespace blocktype
