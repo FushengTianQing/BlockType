@@ -135,10 +135,51 @@ std::string SourceManager::getLocationString(SourceLocation Loc) const {
   const FileInfo *FI = getFileInfo(Loc);
   if (!FI)
     return "<invalid loc>";
-  
+
   auto [Line, Column] = getLineAndColumn(Loc);
-  return FI->getFilename().str() + ":" + std::to_string(Line) + ":" + 
+  return FI->getFilename().str() + ":" + std::to_string(Line) + ":" +
          std::to_string(Column);
+}
+
+//===----------------------------------------------------------------------===//
+// Macro Expansion Location Tracking Implementation
+//===----------------------------------------------------------------------===//
+
+void SourceManager::addMacroExpansion(SourceLocation Loc, SourceLocation SpellingLoc,
+                                      SourceLocation ExpansionLoc, StringRef MacroName) {
+  MacroExpansionInfo Info;
+  Info.SpellingLoc = SpellingLoc;
+  Info.ExpansionLoc = ExpansionLoc;
+  Info.MacroName = MacroName;
+  MacroExpansionMap[Loc] = Info;
+}
+
+SourceLocation SourceManager::getSpellingLoc(SourceLocation Loc) const {
+  auto It = MacroExpansionMap.find(Loc);
+  if (It != MacroExpansionMap.end()) {
+    return It->second.SpellingLoc;
+  }
+  return Loc;
+}
+
+SourceLocation SourceManager::getExpansionLoc(SourceLocation Loc) const {
+  auto It = MacroExpansionMap.find(Loc);
+  if (It != MacroExpansionMap.end()) {
+    return It->second.ExpansionLoc;
+  }
+  return Loc;
+}
+
+bool SourceManager::isMacroArgExpansion(SourceLocation Loc) const {
+  return MacroExpansionMap.find(Loc) != MacroExpansionMap.end();
+}
+
+StringRef SourceManager::getMacroName(SourceLocation Loc) const {
+  auto It = MacroExpansionMap.find(Loc);
+  if (It != MacroExpansionMap.end()) {
+    return It->second.MacroName;
+  }
+  return StringRef();
 }
 
 } // namespace blocktype

@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <map>
 
 namespace blocktype {
 
@@ -45,6 +46,14 @@ public:
 /// SourceManager - Manages source files and provides source location services.
 class SourceManager {
   std::vector<std::unique_ptr<FileInfo>> Files;
+
+  // D15: Macro expansion location tracking
+  struct MacroExpansionInfo {
+    SourceLocation SpellingLoc;   // Location in the macro definition
+    SourceLocation ExpansionLoc;  // Location where macro was expanded
+    StringRef MacroName;
+  };
+  std::map<SourceLocation, MacroExpansionInfo> MacroExpansionMap;
 
 public:
   SourceManager() = default;
@@ -86,6 +95,28 @@ public:
 
   /// Clears all file entries.
   void clear() { Files.clear(); }
+
+  //===--------------------------------------------------------------------===//
+  // Macro Expansion Location Tracking (D15, E2)
+  //===--------------------------------------------------------------------===//
+
+  /// Records a macro expansion.
+  void addMacroExpansion(SourceLocation Loc, SourceLocation SpellingLoc,
+                         SourceLocation ExpansionLoc, StringRef MacroName);
+
+  /// Returns the spelling location for a macro expansion location.
+  /// If the location is not inside a macro expansion, returns the input.
+  SourceLocation getSpellingLoc(SourceLocation Loc) const;
+
+  /// Returns the expansion location for a macro expansion location.
+  /// If the location is not inside a macro expansion, returns the input.
+  SourceLocation getExpansionLoc(SourceLocation Loc) const;
+
+  /// Returns true if the location is inside a macro expansion.
+  bool isMacroArgExpansion(SourceLocation Loc) const;
+
+  /// Returns the macro name for a macro expansion location.
+  StringRef getMacroName(SourceLocation Loc) const;
 };
 
 } // namespace blocktype

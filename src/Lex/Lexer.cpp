@@ -168,7 +168,10 @@ bool Lexer::lexToken(Token &Result) {
       return lexIdentifier(Result, TokStart);
     }
     // Unknown character
-    Diags.report(getSourceLocation(), DiagLevel::Error, "invalid character in source code");
+    std::string ErrorMsg = "invalid character in source code: '";
+    ErrorMsg += C;
+    ErrorMsg += "'";
+    Diags.report(getSourceLocation(), DiagLevel::Error, ErrorMsg);
     consumeChar();
     return formToken(Result, TokenKind::unknown, TokStart);
   }

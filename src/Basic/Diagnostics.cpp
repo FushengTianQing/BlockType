@@ -158,39 +158,47 @@ void DiagnosticsEngine::printDiagnostic(SourceLocation Loc, DiagLevel Level, llv
 
 void DiagnosticsEngine::printSourceLine(SourceLocation Loc) {
   if (!SM) return;
-  
+
   auto [Line, Column] = SM->getLineAndColumn(Loc);
-  if (Line == 0) return;
-  
-  // Get the source line
-  StringRef Data = SM->getCharacterData(Loc);
-  if (Data.empty()) return;
-  
-  // Find line start and end
-  const char *LineStart = Data.data();
-  while (LineStart > SM->getCharacterData(Loc).data() - 1000 && LineStart[-1] != '\n') {
+  if (Line == 0 || Column == 0) return;
+
+  // Get file info
+  const FileInfo *FI = SM->getFileInfo(Loc);
+  if (!FI) return;
+
+  // Get the full file content
+  StringRef Content = FI->getContent();
+  unsigned Offset = Loc.getOffset();
+  if (Offset >= Content.size()) return;
+
+  // Find line start
+  const char *LineStart = Content.data() + Offset;
+  while (LineStart > Content.data() && LineStart[-1] != '\n') {
     --LineStart;
   }
-  
-  const char *LineEnd = Data.data();
-  while (*LineEnd && *LineEnd != '\n' && *LineEnd != '\r') {
+
+  // Find line end
+  const char *LineEnd = Content.data() + Offset;
+  while (LineEnd < Content.data() + Content.size() && *LineEnd != '\n' && *LineEnd != '\r') {
     ++LineEnd;
   }
-  
+
   // Print line number
-  OS << std::to_string(Line) << " | ";
-  
+  std::string LineNumStr = std::to_string(Line);
+  OS << LineNumStr << " | ";
+
   // Print the source line
-  OS << StringRef(LineStart, LineEnd - LineStart) << "\n";
-  
+  StringRef LineText(LineStart, LineEnd - LineStart);
+  OS << LineText << "\n";
+
   // Print caret pointing to the column
-  OS << std::string(std::to_string(Line).size() + 3, ' ');
-  OS << StringRef(std::string(Column - 1, ' ') + "^");
-  
+  OS << std::string(LineNumStr.size(), ' ') << " | ";
+  OS << std::string(Column - 1, ' ');
+
   if (OS.has_colors()) {
-    OS.changeColor(llvm::raw_ostream::GREEN);
+    OS.changeColor(llvm::raw_ostream::GREEN, true);
   }
-  OS << "~\n";
+  OS << "^\n";
   if (OS.has_colors()) {
     OS.resetColor();
   }

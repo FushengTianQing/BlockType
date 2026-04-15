@@ -138,6 +138,16 @@ class Preprocessor {
   // Current file ID for #pragma once
   unsigned CurrentFileID = static_cast<unsigned>(-1);
 
+  // Include guard detection
+  struct IncludeGuardInfo {
+    StringRef MacroName;       // The macro name used for the guard
+    SourceLocation IfLoc;      // Location of the #ifndef
+    bool IsValid = false;      // Is this a valid include guard?
+    bool SawDefine = false;    // Did we see the matching #define?
+  };
+  std::map<unsigned, IncludeGuardInfo> FileIncludeGuards;  // FileID -> IncludeGuardInfo
+  StringRef PendingIncludeGuard;  // Potential include guard macro name
+
 public:
   Preprocessor(SourceManager &SM, DiagnosticsEngine &Diags,
                HeaderSearch *HS = nullptr, LanguageManager *LM = nullptr,

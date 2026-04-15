@@ -437,9 +437,74 @@ void Preprocessor::handleDefineDirective(Token &DefineTok) {
   }
 
   StringRef MacroName = MacroNameTok.getText();
-  auto MI = parseMacroDefinition(MacroNameTok);
-  if (MI) {
-    Macros[MacroName] = std::move(MI);
+
+  // D11: Check if this is part of an include guard pattern
+  if (!PendingIncludeGuard.empty() && MacroName == PendingIncludeGuard &&
+      CurrentFileID != static_cast<unsigned>(-1)) {
+    auto It = FileIncludeGuards.find(CurrentFileID);
+    if (It != FileIncludeGuards.end() && It->second.IsValid && !It->second.SawDefine) {
+      It->second.SawDefine = true;
+      // Mark this file as having an include guard
+      if (Headers) {
+        Headers->markHasIncludeGuard(CurrentFilename);
+      }
+    }
+    PendingIncludeGuard = StringRef();
+  }
+
+  // Check for predefined macros
+  if (PredefinedMacros.count(MacroName)) {
+    Diags.report(MacroNameTok.getLocation(), DiagLevel::Warning,
+                 "redefining predefined macro '" + MacroName.str() + "'");
+  }
+
+  // Check for existing macro definition
+  auto ExistingIt = Macros.find(MacroName);
+  if (ExistingIt != Macros.end()) {
+    // Parse new definition
+    auto NewMI = parseMacroDefinition(MacroNameTok);
+    if (!NewMI) return;
+
+    // Compare with existing definition
+    MacroInfo *Existing = ExistingIt->second.get();
+    bool IsDifferent = false;
+
+    // Check if function-like status differs
+    if (Existing->isFunctionLike() != NewMI->isFunctionLike()) {
+      IsDifferent = true;
+    }
+    // Check if parameter count differs
+    else if (Existing->isFunctionLike() &&
+             Existing->getNumParams() != NewMI->getNumParams()) {
+      IsDifferent = true;
+    }
+    // Check if replacement tokens differ
+    else if (Existing->getNumTokens() != NewMI->getNumTokens()) {
+      IsDifferent = true;
+    }
+    else {
+      // Compare each token
+      for (unsigned I = 0; I < Existing->getNumTokens(); ++I) {
+        if (Existing->getReplacementToken(I).getText() != NewMI->getReplacementToken(I).getText()) {
+          IsDifferent = true;
+          break;
+        }
+      }
+    }
+
+    if (IsDifferent) {
+      Diags.report(MacroNameTok.getLocation(), DiagLevel::Warning,
+                   "macro '" + MacroName.str() + "' redefined");
+    }
+
+    // Update the macro
+    Macros[MacroName] = std::move(NewMI);
+  } else {
+    // Parse and add new macro
+    auto MI = parseMacroDefinition(MacroNameTok);
+    if (MI) {
+      Macros[MacroName] = std::move(MI);
+    }
   }
 }
 
@@ -835,7 +900,21 @@ void Preprocessor::handleIfndefDirective(Token &IfndefTok) {
     return;
   }
 
-  bool IsNotDefined = !isMacroDefined(MacroNameTok.getText());
+  StringRef MacroName = MacroNameTok.getText();
+  bool IsNotDefined = !isMacroDefined(MacroName);
+
+  // D11: Include guard detection - check if this is first #ifndef in file
+  if (!Skipping && ConditionalStack.empty() && CurrentFileID != static_cast<unsigned>(-1)) {
+    // Check if we're at the start of the file (no tokens processed yet)
+    // This is a potential include guard
+    PendingIncludeGuard = MacroName;
+    FileIncludeGuards[CurrentFileID] = IncludeGuardInfo{
+      MacroName,
+      IfndefTok.getLocation(),
+      true,
+      false
+    };
+  }
 
   // Skip to end of directive
   Token Tok;
@@ -1381,10 +1460,42 @@ void Preprocessor::handlePragmaDirective(Token &PragmaTok) {
 }
 
 void Preprocessor::handleLineDirective(Token &LineTok) {
-  while (true) {
-    Token Tok;
-    if (!lexFromLexer(Tok) || Tok.is(TokenKind::eod) || Tok.is(TokenKind::eof)) {
-      break;
+  // Parse line number
+  Token LineNumberTok;
+  if (!lexFromLexer(LineNumberTok) || LineNumberTok.is(TokenKind::eod) || LineNumberTok.is(TokenKind::eof)) {
+    Diags.report(LineTok.getLocation(), DiagLevel::Error, "expected line number after #line");
+    return;
+  }
+
+  if (!LineNumberTok.isNumericConstant()) {
+    Diags.report(LineNumberTok.getLocation(), DiagLevel::Error, "line number must be a numeric constant");
+    return;
+  }
+
+  // Parse line number value
+  StringRef LineText = LineNumberTok.getText();
+  unsigned long long LineNum = 0;
+  if (LineText.getAsInteger(10, LineNum)) {
+    Diags.report(LineNumberTok.getLocation(), DiagLevel::Error, "invalid line number");
+    return;
+  }
+
+  // Update current line number
+  CurrentLine = static_cast<unsigned>(LineNum);
+
+  // Parse optional filename
+  Token FilenameTok;
+  if (lexFromLexer(FilenameTok) && !FilenameTok.is(TokenKind::eod) && !FilenameTok.is(TokenKind::eof)) {
+    if (FilenameTok.isStringLiteral()) {
+      StringRef Filename = FilenameTok.getText();
+      // Remove quotes
+      if (Filename.size() >= 2) {
+        Filename = Filename.substr(1, Filename.size() - 2);
+      }
+      // Update current filename for __FILE__
+      CurrentFilename = Filename;
+    } else {
+      Diags.report(FilenameTok.getLocation(), DiagLevel::Error, "expected filename string after line number");
     }
   }
 }
@@ -1394,6 +1505,10 @@ void Preprocessor::handleLineDirective(Token &LineTok) {
 //===----------------------------------------------------------------------===//
 
 bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI) {
+  // E2: Record macro expansion location
+  SourceLocation ExpansionLoc = Result.getLocation();
+  SourceLocation SpellingLoc = MI->getDefinitionLoc();
+
   // Handle special predefined macros
   if (MacroName == "__FILE__") {
     Result.setKind(TokenKind::string_literal);
@@ -1404,6 +1519,9 @@ bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI
     FileBuffer = QuotedFilename;
     Result.setLiteralData(FileBuffer.c_str());
     Result.setLength(static_cast<unsigned>(FileBuffer.size()));
+
+    // Record macro expansion
+    SM.addMacroExpansion(Result.getLocation(), SpellingLoc, ExpansionLoc, MacroName);
     return true;
   }
 
@@ -1417,6 +1535,9 @@ bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI
     LineBuffer = std::to_string(Line);
     Result.setLiteralData(LineBuffer.c_str());
     Result.setLength(static_cast<unsigned>(LineBuffer.size()));
+
+    // Record macro expansion
+    SM.addMacroExpansion(Result.getLocation(), SpellingLoc, ExpansionLoc, MacroName);
     return true;
   }
 
@@ -1560,6 +1681,12 @@ bool Preprocessor::expandMacro(Token &Result, StringRef MacroName, MacroInfo *MI
   }
 
   MI->setBeingExpanded(false);
+
+  // E2: Record macro expansion location if successful
+  if (Success) {
+    SM.addMacroExpansion(Result.getLocation(), SpellingLoc, ExpansionLoc, MacroName);
+  }
+
   return Success;
 }
 
