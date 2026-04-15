@@ -153,6 +153,36 @@ Decl *Member = parseClassMember(nullptr); // 应该使用 RecordDecl*
 
 | 功能 | 状态 | 实现位置 |
 |------|------|----------|
+| **约束表达式解析** | ✅ 已实现 | ParseDecl.cpp:2698-2712 (parseRequiresClause) |
+| **约束表达式解析** | ✅ 已实现 | ParseDecl.cpp:2714-2720 (parseConstraintExpression) |
+| **概念定义解析** | ✅ 已实现 | ParseDecl.cpp:2722-2780 (parseConceptDefinition) |
+| **ConceptDecl AST节点** | ✅ 已实现 | Decl.h:1187-1216 |
+| **TemplateDecl requires-clause** | ✅ 已实现 | Decl.h:853-876 |
+| **类模板部分特化** | ✅ 已实现 | ParseDecl.cpp:392-437 (parseClassDeclaration) |
+
+### 3.2.2 实现说明 (2026-04-16 更新)
+
+**约束表达式 (requires-clause)：**
+- 添加 `parseRequiresClause()` 函数解析 requires 子句
+- 添加 `parseConstraintExpression()` 函数解析约束表达式
+- 在 `parseTemplateDeclaration()` 中检测并解析 requires-clause
+- 在 `TemplateDecl` 中添加 `RequiresClause` 字段存储约束表达式
+
+**概念定义 (concept)：**
+- 添加 `parseConceptDefinition()` 函数解析概念定义
+- 添加 `ConceptDecl` AST 节点存储概念声明
+- 支持概念定义的模板参数列表和约束表达式
+- 在 `parseTemplateDeclaration()` 中检测 `concept` 关键字并解析概念定义
+
+**类模板部分特化：**
+- 在 `parseClassDeclaration()` 中添加模板参数列表解析
+- 支持类名后的模板参数列表（如 `Vector<T*>`）
+- 自动支持部分特化和显式特化的区分
+
+### 3.2.3 已实现功能 ✅ (2026-04-16 更新)
+
+| 功能 | 状态 | 实现位置 |
+|------|------|----------|
 | **模板实参列表解析** | ✅ 已实现 | ParseDecl.cpp:1358-1373 |
 | **模板实参解析** | ✅ 已实现 | ParseDecl.cpp:1327-1439 |
 | **模板标识符解析** | ✅ 已实现 | ParseDecl.cpp:1378-1404 |

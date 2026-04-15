@@ -471,6 +471,12 @@ void TemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
     }
   }
 
+  if (RequiresClause) {
+    printIndent(OS, Indent + 2);
+    OS << "RequiresClause:\n";
+    RequiresClause->dump(OS, Indent + 4);
+  }
+
   if (TemplatedDecl) {
     printIndent(OS, Indent + 2);
     OS << "TemplatedDecl:\n";
@@ -641,6 +647,28 @@ void FriendDecl::dump(raw_ostream &OS, unsigned Indent) const {
     OS << "'";
   }
   OS << "\n";
+}
+
+//===----------------------------------------------------------------------===//
+// ConceptDecl
+//===----------------------------------------------------------------------===//
+
+void ConceptDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ConceptDecl " << getName();
+  if (ConstraintExpr) {
+    OS << " constraint:\n";
+    ConstraintExpr->dump(OS, Indent + 2);
+  } else {
+    OS << "\n";
+  }
+  if (Template) {
+    printIndent(OS, Indent + 2);
+    OS << "Template Parameters:\n";
+    for (auto *Param : Template->getTemplateParameters()) {
+      Param->dump(OS, Indent + 4);
+    }
+  }
 }
 
 } // namespace blocktype

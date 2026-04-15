@@ -55,6 +55,7 @@ class TypeAliasDecl;
 class TypedefDecl;
 class CXXConstructorDecl;
 class CXXDestructorDecl;
+class ConceptDecl;
 
 /// LambdaCapture - Represents a lambda capture.
 /// ParsingContext - Represents the current parsing context.
@@ -390,6 +391,15 @@ public:
 
   /// Parses a template-id (e.g., Vector<int>).
   TemplateSpecializationType *parseTemplateId(llvm::StringRef Name);
+
+  /// Parses a requires-clause (C++20).
+  Expr *parseRequiresClause();
+
+  /// Parses a constraint-expression (C++20).
+  Expr *parseConstraintExpression();
+
+  /// Parses a concept definition (C++20).
+  ConceptDecl *parseConceptDefinition(SourceLocation Loc);
 
   /// Parses a namespace declaration (including namespace alias).
   Decl *parseNamespaceDeclaration();

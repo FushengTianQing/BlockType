@@ -194,3 +194,6 @@ DECL(TypeAliasDecl, TypeDecl)
 
 // Friend declaration
 DECL(FriendDecl, Decl)
+
+// Concept declaration (C++20)
+DECL(ConceptDecl, TypeDecl)

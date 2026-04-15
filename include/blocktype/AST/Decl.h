@@ -852,10 +852,11 @@ class TemplateDecl : public NamedDecl {
 protected:
   llvm::SmallVector<NamedDecl *, 8> TemplateParams;
   Decl *TemplatedDecl;
+  Expr *RequiresClause; // C++20 requires-clause
 
 public:
   TemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
-      : NamedDecl(Loc, Name), TemplatedDecl(TemplatedDecl) {}
+      : NamedDecl(Loc, Name), TemplatedDecl(TemplatedDecl), RequiresClause(nullptr) {}
 
   llvm::ArrayRef<NamedDecl *> getTemplateParameters() const {
     return TemplateParams;
@@ -863,6 +864,10 @@ public:
   void addTemplateParameter(NamedDecl *Param) { TemplateParams.push_back(Param); }
 
   Decl *getTemplatedDecl() const { return TemplatedDecl; }
+
+  Expr *getRequiresClause() const { return RequiresClause; }
+  void setRequiresClause(Expr *E) { RequiresClause = E; }
+  bool hasRequiresClause() const { return RequiresClause != nullptr; }
 
   NodeKind getKind() const override { return NodeKind::TemplateDeclKind; }
 
@@ -1182,6 +1187,33 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::FriendDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// ConceptDecl - Concept declaration (C++20)
+//===----------------------------------------------------------------------===//
+
+/// ConceptDecl - Concept declaration (C++20).
+/// Example: template<typename T> concept Integral = requires { ... };
+class ConceptDecl : public TypeDecl {
+  Expr *ConstraintExpr; // The constraint expression
+  TemplateDecl *Template;
+
+public:
+  ConceptDecl(SourceLocation Loc, llvm::StringRef Name, Expr *Constraint,
+              TemplateDecl *TD = nullptr)
+      : TypeDecl(Loc, Name), ConstraintExpr(Constraint), Template(TD) {}
+
+  Expr *getConstraintExpr() const { return ConstraintExpr; }
+  TemplateDecl *getTemplate() const { return Template; }
+
+  NodeKind getKind() const override { return NodeKind::ConceptDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ConceptDeclKind;
   }
 };
 

@@ -400,8 +400,20 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
     consumeToken();
   }
 
+  // Check for template specialization arguments (e.g., Vector<T*>)
+  // This is used for partial and explicit specializations
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
+  if (Tok.is(TokenKind::less)) {
+    // Parse template argument list
+    TemplateArgs = parseTemplateArgumentList();
+  }
+
   // Create CXXRecordDecl
   CXXRecordDecl *Class = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_class);
+  
+  // Note: TemplateArgs are stored but not yet used in CXXRecordDecl
+  // This can be added later if needed for template specialization
+  (void)TemplateArgs; // Suppress unused warning
   
   // Add class to current scope before parsing body
   if (CurrentScope) {
@@ -1056,6 +1068,23 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
 
   consumeToken(); // consume '>'
 
+  // Check for concept definition (C++20)
+  if (Tok.is(TokenKind::kw_concept)) {
+    ConceptDecl *Concept = parseConceptDefinition(TemplateLoc);
+    if (!Concept) {
+      return nullptr;
+    }
+    // Return the concept's template (or the concept itself)
+    // For now, we need to return a TemplateDecl, so we return the concept's template
+    return Concept->getTemplate();
+  }
+
+  // Check for requires-clause (C++20)
+  Expr *RequiresClause = nullptr;
+  if (Tok.is(TokenKind::kw_requires)) {
+    RequiresClause = parseRequiresClause();
+  }
+
   // Parse the templated declaration
   Decl *TemplatedDecl = parseDeclaration();
   if (!TemplatedDecl) {
@@ -1068,6 +1097,11 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   // Add template parameters
   for (auto *Param : Params) {
     Template->addTemplateParameter(Param);
+  }
+
+  // Set requires-clause if present
+  if (RequiresClause) {
+    Template->setRequiresClause(RequiresClause);
   }
 
   return Template;
@@ -2681,6 +2715,111 @@ FriendDecl *Parser::parseFriendDeclaration(CXXRecordDecl *Class) {
 
   // Create FriendDecl
   return Context.create<FriendDecl>(FriendLoc, FriendFunc, QualType(), false);
+}
+
+//===----------------------------------------------------------------------===//
+// Requires Clause and Constraint Expression Parsing (C++20)
+//===----------------------------------------------------------------------===//
+
+/// parseRequiresClause - Parse a requires-clause.
+///
+/// requires-clause ::= 'requires' constraint-expression
+Expr *Parser::parseRequiresClause() {
+  assert(Tok.is(TokenKind::kw_requires) && "Expected 'requires'");
+  SourceLocation RequiresLoc = Tok.getLocation();
+  consumeToken(); // consume 'requires'
+
+  // Parse constraint expression
+  return parseConstraintExpression();
+}
+
+/// parseConstraintExpression - Parse a constraint-expression.
+///
+/// constraint-expression ::= logical-or-expression
+Expr *Parser::parseConstraintExpression() {
+  // Parse the constraint as a logical-or expression
+  // In C++20, constraints are primary expressions connected by &&
+  // For simplicity, we parse it as a general expression
+  return parseExpression();
+}
+
+/// parseConceptDefinition - Parse a concept definition (C++20).
+///
+/// concept-definition ::= 'template' '<' template-parameter-list '>' 'concept' identifier '=' constraint-expression ';'
+ConceptDecl *Parser::parseConceptDefinition(SourceLocation Loc) {
+  // Expect 'template' keyword
+  if (!Tok.is(TokenKind::kw_template)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  SourceLocation TemplateLoc = Tok.getLocation();
+  consumeToken(); // consume 'template'
+
+  // Parse template parameter list
+  if (!Tok.is(TokenKind::less)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  consumeToken(); // consume '<'
+
+  llvm::SmallVector<NamedDecl *, 8> Params;
+  parseTemplateParameters(Params);
+
+  if (!Tok.is(TokenKind::greater)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  consumeToken(); // consume '>'
+
+  // Expect 'concept' keyword
+  if (!Tok.is(TokenKind::kw_concept)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  consumeToken(); // consume 'concept'
+
+  // Parse concept name
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return nullptr;
+  }
+
+  llvm::StringRef ConceptName = Tok.getText();
+  SourceLocation ConceptNameLoc = Tok.getLocation();
+  consumeToken();
+
+  // Expect '='
+  if (!Tok.is(TokenKind::equal)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  consumeToken(); // consume '='
+
+  // Parse constraint expression
+  Expr *Constraint = parseConstraintExpression();
+  if (!Constraint) {
+    emitError(DiagID::err_expected_expression);
+    return nullptr;
+  }
+
+  // Expect ';'
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+  consumeToken(); // consume ';'
+
+  // Create TemplateDecl for the concept
+  TemplateDecl *Template = Context.create<TemplateDecl>(TemplateLoc, ConceptName, nullptr);
+  for (auto *Param : Params) {
+    Template->addTemplateParameter(Param);
+  }
+
+  // Create ConceptDecl
+  ConceptDecl *Concept = Context.create<ConceptDecl>(ConceptNameLoc, ConceptName, Constraint, Template);
+
+  return Concept;
 }
 
 } // namespace blocktype
