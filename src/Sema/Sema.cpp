@@ -230,11 +230,19 @@ bool Sema::isCompleteType(QualType T) const {
   // Pointer/reference types: pointee need not be complete
   if (Ty->isPointerType() || Ty->isReferenceType()) return true;
 
+  // Member pointer types are always complete
+  if (Ty->getTypeClass() == TypeClass::MemberPointer) return true;
+
   // Array types: element must be complete (except incomplete arrays)
   if (Ty->isArrayType()) {
     if (Ty->getTypeClass() == TypeClass::IncompleteArray) return false;
     if (Ty->getTypeClass() == TypeClass::ConstantArray) {
       auto *AT = static_cast<const ConstantArrayType *>(Ty);
+      return isCompleteType(QualType(AT->getElementType(), Qualifier::None));
+    }
+    // VariableArray: check element completeness
+    if (Ty->getTypeClass() == TypeClass::VariableArray) {
+      auto *AT = static_cast<const VariableArrayType *>(Ty);
       return isCompleteType(QualType(AT->getElementType(), Qualifier::None));
     }
     return true;
@@ -257,8 +265,48 @@ bool Sema::isCompleteType(QualType T) const {
     return !ET->getDecl()->enumerators().empty();
   }
 
+  // Typedef: check the underlying type
+  if (Ty->getTypeClass() == TypeClass::Typedef) {
+    auto *TT = static_cast<const TypedefType *>(Ty);
+    return isCompleteType(TT->getDecl()->getUnderlyingType());
+  }
+
+  // Elaborated type: check the named type
+  if (Ty->getTypeClass() == TypeClass::Elaborated) {
+    auto *ET = static_cast<const ElaboratedType *>(Ty);
+    return isCompleteType(QualType(ET->getNamedType(), Qualifier::None));
+  }
+
+  // Decltype: check the underlying type if available
+  if (Ty->getTypeClass() == TypeClass::Decltype) {
+    auto *DT = static_cast<const DecltypeType *>(Ty);
+    QualType Underlying = DT->getUnderlyingType();
+    if (!Underlying.isNull()) return isCompleteType(Underlying);
+    return false;
+  }
+
+  // Auto: complete only if deduced
+  if (Ty->getTypeClass() == TypeClass::Auto) {
+    auto *AT = static_cast<const AutoType *>(Ty);
+    if (AT->isDeduced()) return isCompleteType(AT->getDeducedType());
+    return false;
+  }
+
   // Void is never complete
   if (Ty->isVoidType()) return false;
+
+  // Template-dependent types are never complete
+  if (Ty->getTypeClass() == TypeClass::TemplateTypeParm ||
+      Ty->getTypeClass() == TypeClass::Dependent ||
+      Ty->getTypeClass() == TypeClass::Unresolved) {
+    return false;
+  }
+
+  // TemplateSpecialization: try to check if instantiated
+  if (Ty->getTypeClass() == TypeClass::TemplateSpecialization) {
+    // Not yet fully instantiated
+    return false;
+  }
 
   return true;
 }

@@ -184,6 +184,47 @@ public:
   /// Get or create an AutoType.
   QualType getAutoType();
 
+  //===--------------------------------------------------------------------===//
+  // Convenience type factories [Stage 4.2]
+  //===--------------------------------------------------------------------===//
+
+  /// Gets or creates a RecordType for the given RecordDecl.
+  QualType getRecordType(RecordDecl *D);
+
+  /// Gets or creates an EnumType for the given EnumDecl.
+  QualType getEnumType(EnumDecl *D);
+
+  /// Gets the built-in void type.
+  QualType getVoidType();
+
+  /// Gets the built-in bool type.
+  QualType getBoolType();
+
+  /// Gets the built-in int type.
+  QualType getIntType();
+
+  /// Gets the built-in float type.
+  QualType getFloatType();
+
+  /// Gets the built-in double type.
+  QualType getDoubleType();
+
+  /// Gets the built-in long type.
+  QualType getLongType();
+
+  /// Gets the nullptr_t type.
+  QualType getNullPtrType();
+
+  /// Gets a qualified type with the given CVR qualifiers.
+  QualType getQualifiedType(const Type *T, Qualifier Q);
+
+  /// Gets a pointer-to-member function type.
+  QualType getMemberFunctionType(const Type *ReturnType,
+                                  llvm::ArrayRef<const Type *> ParamTypes,
+                                  const Type *ClassType,
+                                  bool IsConst, bool IsVolatile,
+                                  bool IsVariadic);
+
 private:
   /// Destroys all nodes in reverse order of creation.
   void destroyAll();

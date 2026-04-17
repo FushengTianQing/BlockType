@@ -198,6 +198,72 @@ QualType ASTContext::getAutoType() {
   return QualType(AT, Qualifier::None);
 }
 
+//===----------------------------------------------------------------------===//
+// Convenience type factories [Stage 4.2]
+//===----------------------------------------------------------------------===//
+
+QualType ASTContext::getRecordType(RecordDecl *D) {
+  void *Mem = Allocator.Allocate(sizeof(RecordType), alignof(RecordType));
+  auto *RT = new (Mem) RecordType(D);
+  return QualType(RT, Qualifier::None);
+}
+
+QualType ASTContext::getEnumType(EnumDecl *D) {
+  void *Mem = Allocator.Allocate(sizeof(EnumType), alignof(EnumType));
+  auto *ET = new (Mem) EnumType(D);
+  return QualType(ET, Qualifier::None);
+}
+
+QualType ASTContext::getVoidType() {
+  return QualType(getBuiltinType(BuiltinKind::Void), Qualifier::None);
+}
+
+QualType ASTContext::getBoolType() {
+  return QualType(getBuiltinType(BuiltinKind::Bool), Qualifier::None);
+}
+
+QualType ASTContext::getIntType() {
+  return QualType(getBuiltinType(BuiltinKind::Int), Qualifier::None);
+}
+
+QualType ASTContext::getFloatType() {
+  return QualType(getBuiltinType(BuiltinKind::Float), Qualifier::None);
+}
+
+QualType ASTContext::getDoubleType() {
+  return QualType(getBuiltinType(BuiltinKind::Double), Qualifier::None);
+}
+
+QualType ASTContext::getLongType() {
+  return QualType(getBuiltinType(BuiltinKind::Long), Qualifier::None);
+}
+
+QualType ASTContext::getNullPtrType() {
+  return QualType(getBuiltinType(BuiltinKind::NullPtr), Qualifier::None);
+}
+
+QualType ASTContext::getQualifiedType(const Type *T, Qualifier Q) {
+  return QualType(T, Q);
+}
+
+QualType ASTContext::getMemberFunctionType(const Type *ReturnType,
+                                            llvm::ArrayRef<const Type *> ParamTypes,
+                                            const Type *ClassType,
+                                            bool IsConst, bool IsVolatile,
+                                            bool IsVariadic) {
+  // Create the function type first
+  FunctionType *FT = getFunctionType(ReturnType, ParamTypes, IsVariadic);
+
+  // Wrap in MemberPointerType
+  MemberPointerType *MPT = getMemberPointerType(ClassType, FT);
+
+  Qualifier Q = Qualifier::None;
+  if (IsConst)    Q = Q | Qualifier::Const;
+  if (IsVolatile) Q = Q | Qualifier::Volatile;
+
+  return QualType(MPT, Q);
+}
+
 ASTContext::~ASTContext() {
   destroyAll();
 }

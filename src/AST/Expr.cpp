@@ -618,4 +618,12 @@ void TemplateSpecializationExpr::dump(raw_ostream &OS, unsigned Indent) const {
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Expr base class
+//===----------------------------------------------------------------------===//
+
+bool Expr::isTypeDependent() const {
+  return ExprTy && ExprTy->isDependentType();
+}
+
 } // namespace blocktype

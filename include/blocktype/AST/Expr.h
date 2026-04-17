@@ -81,12 +81,21 @@ enum class CastKind {
 /// Expr - Base class for all expression nodes.
 class Expr : public ASTNode {
 protected:
-  Expr(SourceLocation Loc) : ASTNode(Loc) {}
+  QualType ExprTy;
+
+  Expr(SourceLocation Loc, QualType T = QualType())
+      : ASTNode(Loc), ExprTy(T) {}
 
 public:
+  /// getType - Returns the type of this expression.
+  virtual QualType getType() const { return ExprTy; }
+
+  /// Set the type of this expression (used by Sema during type checking).
+  void setType(QualType T) { ExprTy = T; }
+
   /// isTypeDependent - Determine whether this expression is type-dependent.
   /// An expression is type-dependent if its type depends on a template parameter.
-  virtual bool isTypeDependent() const = 0;
+  virtual bool isTypeDependent() const;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::ExprKind &&
