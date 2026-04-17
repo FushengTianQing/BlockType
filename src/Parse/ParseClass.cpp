@@ -48,8 +48,21 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc,
   // This is used for partial and explicit specializations
   llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
   if (Tok.is(TokenKind::less)) {
-    // Parse template argument list
-    TemplateArgs = parseTemplateArgumentList();
+    consumeToken(); // consume '<'
+    // Parse template argument list (stops at '>')
+    if (!Tok.is(TokenKind::greater)) {
+      TemplateArgs = parseTemplateArgumentList();
+    }
+    // Consume closing '>'
+    if (Tok.is(TokenKind::greater)) {
+      consumeToken();
+    } else if (Tok.is(TokenKind::greatergreater)) {
+      // Handle >> as two separate > tokens (common in nested templates)
+      // Consume as one >> and let the outer context handle the remaining >
+      consumeToken();
+    } else {
+      emitError(DiagID::err_expected);
+    }
   }
 
   // Pass template arguments to caller if requested
@@ -114,7 +127,18 @@ CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc,
   // Check for template specialization arguments (e.g., Pair<int, double>)
   llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
   if (Tok.is(TokenKind::less)) {
-    TemplateArgs = parseTemplateArgumentList();
+    consumeToken(); // consume '<'
+    if (!Tok.is(TokenKind::greater)) {
+      TemplateArgs = parseTemplateArgumentList();
+    }
+    // Consume closing '>'
+    if (Tok.is(TokenKind::greater)) {
+      consumeToken();
+    } else if (Tok.is(TokenKind::greatergreater)) {
+      consumeToken();
+    } else {
+      emitError(DiagID::err_expected);
+    }
   }
 
   // Pass template arguments to caller if requested

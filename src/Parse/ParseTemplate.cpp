@@ -834,12 +834,12 @@ Expr *Parser::parseTypeConstraint() {
 
 /// parseConstraintExpression - Parse a constraint-expression.
 ///
-/// constraint-expression ::= logical-or-expression
+/// constraint-expression ::= logical-or-expression (C++20 [temp.constr])
 Expr *Parser::parseConstraintExpression() {
-  // Parse the constraint as a logical-or expression
-  // In C++20, constraints are primary expressions connected by &&
-  // For simplicity, we parse it as a general expression
-  return parseExpression();
+  // Use LogicalOr precedence to allow || and && but reject
+  // comma expressions, assignments, and other operators that are
+  // not valid in C++20 constraint expressions.
+  return parseExpressionWithPrecedence(PrecedenceLevel::LogicalOr);
 }
 
 //===----------------------------------------------------------------------===//

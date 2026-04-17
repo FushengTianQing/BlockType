@@ -13,3 +13,36 @@ T add(T a, T b) {
 }
 // CHECK: FunctionTemplateDecl add
 // CHECK: RequiresClause
+
+// Test compound constraint expression: conjunction (&&)
+template<typename T>
+requires Addable<T> && (sizeof(T) > 1)
+T add2(T a, T b) {
+  return a + b;
+}
+// CHECK: FunctionTemplateDecl{{.*}}add2
+// CHECK-NEXT: RequiresClause
+
+// Test compound constraint expression: disjunction (||)
+template<typename T>
+requires Addable<T> || (sizeof(T) == 1)
+T maybeAdd(T a, T b) {
+  return a + b;
+}
+// CHECK: FunctionTemplateDecl{{.*}}maybeAdd
+// CHECK-NEXT: RequiresClause
+
+// Test complex nested constraint: && and || together
+template<typename T>
+concept Swappable = requires(T a) { a = a; };
+
+template<typename T>
+requires Addable<T> && Swappable<T>
+void process(T& a, T& b) {}
+// CHECK: FunctionTemplateDecl{{.*}}process
+// CHECK-NEXT: RequiresClause
+
+// Test concept with compound constraint expression
+template<typename T>
+concept Numeric = requires(T a) { a + a; } && requires(T a) { a * a; };
+// CHECK: ConceptDecl{{.*}}Numeric
