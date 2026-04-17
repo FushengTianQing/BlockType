@@ -117,11 +117,16 @@ void MemberExpr::dump(raw_ostream &OS, unsigned Indent) const {
 
 void ArraySubscriptExpr::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "ArraySubscriptExpr\n";
+  OS << "ArraySubscriptExpr";
+  if (Indices.size() > 1)
+    OS << " [" << Indices.size() << " indices]";
+  OS << "\n";
   if (Base)
     Base->dump(OS, Indent + 1);
-  if (Index)
-    Index->dump(OS, Indent + 1);
+  for (Expr *Idx : Indices) {
+    if (Idx)
+      Idx->dump(OS, Indent + 1);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -354,6 +359,23 @@ void LambdaExpr::dump(raw_ostream &OS, unsigned Indent) const {
     OS << " mutable";
   }
   OS << "\n";
+
+  if (TemplateParams) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateParams:\n";
+    TemplateParams->dump(OS, Indent + 2);
+  }
+
+  if (Attrs) {
+    printIndent(OS, Indent + 1);
+    OS << "Attributes:\n";
+    for (auto *Attr : Attrs->getAttributes()) {
+      if (Attr) {
+        printIndent(OS, Indent + 2);
+        OS << Attr->getFullName() << "\n";
+      }
+    }
+  }
 
   if (!Captures.empty()) {
     printIndent(OS, Indent + 1);

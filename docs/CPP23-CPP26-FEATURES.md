@@ -3,7 +3,7 @@
 > **审计日期**: 2026-04-17
 > **基于 commit**: 1486ff0
 > **总计**: 34 项特性 (C++23: 18 项, C++26: 16 项)
-> **已实现**: 5 项 ✅ | **部分实现**: 4 项 ⚠️ | **未实现**: 25 项 ❌
+> **已实现**: 10 项 ✅ | **部分实现**: 4 项 ⚠️ | **未实现**: 20 项 ❌
 
 ---
 
@@ -12,16 +12,16 @@
 | # | 特性 | 提案 | 状态 | 优先级 | 备注 |
 |---|------|------|------|--------|------|
 | 1 | Deducing this / 显式对象参数 | P0847R7 | ❌ | P1 | 无 AST 节点、无解析 |
-| 2 | `if consteval` | P1938R3 | ❌ | **P0** | `kw_consteval` 已定义(函数说明符)，`IfStmt` 需加 consteval 标志 |
-| 3 | 多维 `operator[]` | P2128R6 | ❌ | **P0** | 仅有单参数 `ArraySubscriptExpr`，需扩展为多参数 |
+| 2 | `if consteval` | P1938R3 | ✅ | — | `IfStmt` 添加 `IsConsteval`/`IsNegated` 标志，支持 `if consteval` 和 `if !consteval` |
+| 3 | 多维 `operator[]` | P2128R6 | ✅ | — | `ArraySubscriptExpr` 扩展为多参数，支持 `arr[i, j, k]` |
 | 4 | `auto(x)` / `auto{x}` decay-copy | P0849R8 | ❌ | P1 | 无代码 |
 | 5 | `static operator()` | P1169R4 | ❌ | P1 | 无代码 |
 | 6 | `static operator[]` | P2589R1 | ❌ | P1 | 无代码 |
 | 7 | `[[assume]]` 属性 | P1774R8 | ❌ | P1 | 属性系统存在但不识别 `assume` |
-| 8 | `#elifdef` / `#elifndef` | P2334R1 | ❌ | **P0** | 仅需预处理器扩展 |
+| 8 | `#elifdef` / `#elifndef` | P2334R1 | ✅ | — | `handleElifdefDirective()`/`handleElifndefDirective()`，支持中英文 |
 | 9 | `#warning` 预处理指令 | P2437R1 | ✅ | — | `Preprocessor.cpp:1432`，支持中英文 |
-| 10 | Lambda 模板参数 | P1102R2 | ❌ | **P0** | `parseLambdaExpression` 需添加 `<...>` 步骤 |
-| 11 | Lambda 属性 | P2173R1 | ❌ | **P0** | 复用 `parseAttributeSpecifier()` |
+| 10 | Lambda 模板参数 | P1102R2 | ✅ | — | `LambdaExpr` 添加 `TemplateParams`，支持 `[]<typename T>()` |
+| 11 | Lambda 属性 | P2173R1 | ✅ | — | `LambdaExpr` 添加 `Attrs`，支持 `[[nodiscard]]` 等属性 |
 | 12 | 占位符变量 `_` | P2169R4 (C++26) | ❌ | P1 | `_` 仅作为普通标识符 |
 | 13 | `Z`/`z` 字面量后缀 | P0330R8 | ✅ | — | `ParseExpr.cpp:629` 识别 `uz`/`Z` |
 | 14 | `\e` 转义序列 | P2314R4 | ✅ | — | `Lexer.cpp:334` |
@@ -30,7 +30,7 @@
 | 17 | `for` init-statement 中 `using` | P2360R0 | ❌ | P1 | 无代码 |
 | 18 | constexpr 放宽 | P2448R2 | ⚠️ | — | 部分放宽已通过其他方式实现 |
 
-**C++23 支持率: 3/18 ≈ 17%**
+**C++23 支持率: 8/18 ≈ 44%**
 
 ---
 
@@ -77,17 +77,17 @@ definePredefinedMacro("__cpp_pack_indexing", "202411L");   // ✅ 已实现
 
 ## 四、实现优先级与阶段规划
 
-### P0 — Phase 3 完成（解析器层面，1-3 天/项）
+### ~~P0 — Phase 3 完成~~ ✅ 全部完成（解析器层面）
 
-| 特性 | 涉及文件 | 工作量估算 |
-|------|---------|-----------|
-| `#elifdef` / `#elifndef` | `Preprocessor.cpp`, `TokenKinds.def` | 0.5 天 |
-| `if consteval` | `Stmt.h` (IfStmt 加 IsConsteval), `ParseStmt.cpp` | 1 天 |
-| 多维 `operator[]` | `Expr.h` (ArraySubscriptExpr 扩展), `ParseExpr.cpp` | 1 天 |
-| Lambda 模板参数 | `Expr.h` (LambdaExpr 加 TemplateParams), `ParseExprCXX.cpp` | 1.5 天 |
-| Lambda 属性 | `Expr.h` (LambdaExpr 加 Attrs), `ParseExprCXX.cpp` | 1 天 |
+| 特性 | 涉及文件 | 状态 |
+|------|---------|------|
+| `#elifdef` / `#elifndef` | `Preprocessor.cpp` + 中文映射 | ✅ 已实现 |
+| `if consteval` | `Stmt.h` (IfStmt), `ParseStmt.cpp` | ✅ 已实现 |
+| 多维 `operator[]` | `Expr.h` (ArraySubscriptExpr), `ParseExpr.cpp` | ✅ 已实现 |
+| Lambda 模板参数 | `Expr.h` (LambdaExpr), `ParseExprCXX.cpp` | ✅ 已实现 |
+| Lambda 属性 | `ParseExprCXX.cpp` (复用 `parseAttributeSpecifier`) | ✅ 已实现 |
 
-**P0 合计: ~5 天**
+**P0 合计: 全部完成**
 
 ### P1 — Phase 7 完成（需要 AST 扩展，3-5 天/项）
 

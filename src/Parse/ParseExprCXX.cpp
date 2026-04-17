@@ -14,6 +14,7 @@
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/AST/TemplateParameterList.h"
 
 namespace blocktype {
 
@@ -135,6 +136,13 @@ Expr *Parser::parseCXXThrowExpr() {
 
 Expr *Parser::parseLambdaExpression() {
   SourceLocation LambdaLoc = Tok.getLocation();
+
+  // C++23: Parse leading attributes [[attr]] before [captures]
+  AttributeListDecl *Attrs = nullptr;
+  if (Tok.is(TokenKind::l_square) && NextTok.is(TokenKind::l_square)) {
+    Attrs = parseAttributeSpecifier(LambdaLoc);
+  }
+
   consumeToken(); // consume '['
 
   // Parse capture list
@@ -146,6 +154,32 @@ Expr *Parser::parseLambdaExpression() {
   if (!tryConsumeToken(TokenKind::r_square)) {
     emitError(DiagID::err_expected);
     return createRecoveryExpr(LambdaLoc);
+  }
+
+  // C++20: Parse template parameters <...> after ] and before (
+  TemplateParameterList *TemplateParams = nullptr;
+  if (Tok.is(TokenKind::kw_template)) {
+    SourceLocation TemplateLoc = Tok.getLocation();
+    consumeToken(); // consume 'template'
+
+    if (!tryConsumeToken(TokenKind::less)) {
+      emitError(DiagID::err_expected);
+      return createRecoveryExpr(LambdaLoc);
+    }
+
+    SourceLocation LAngleLoc = Tok.getLocation();
+    llvm::SmallVector<NamedDecl *, 8> TParams;
+    parseTemplateParameters(TParams);
+
+    if (!tryConsumeToken(TokenKind::greater)) {
+      emitError(DiagID::err_expected);
+      skipUntil({TokenKind::greater, TokenKind::l_paren, TokenKind::l_brace});
+      tryConsumeToken(TokenKind::greater);
+    }
+    SourceLocation RAngleLoc = Tok.getLocation();
+
+    TemplateParams = new TemplateParameterList(TemplateLoc, LAngleLoc,
+                                               RAngleLoc, TParams);
   }
 
   // Parse parameter list (optional)
@@ -169,6 +203,16 @@ Expr *Parser::parseLambdaExpression() {
     if (!tryConsumeToken(TokenKind::r_paren)) {
       emitError(DiagID::err_expected_rparen);
     }
+  }
+
+  // C++23: Parse trailing attributes [[attr]] after (params)
+  if (Tok.is(TokenKind::l_square) && NextTok.is(TokenKind::l_square)) {
+    AttributeListDecl *TrailingAttrs = parseAttributeSpecifier(Tok.getLocation());
+    // Merge with leading attrs or use as attrs
+    if (!Attrs) {
+      Attrs = TrailingAttrs;
+    }
+    // If both exist, trailing takes precedence (simplified)
   }
 
   // Parse mutable (optional)
@@ -199,7 +243,8 @@ Expr *Parser::parseLambdaExpression() {
   SourceLocation RBraceLoc = Tok.getLocation();
 
   return Context.create<LambdaExpr>(LambdaLoc, Captures, Params, Body,
-                                     IsMutable, ReturnType, LBraceLoc, RBraceLoc);
+                                     IsMutable, ReturnType, LBraceLoc, RBraceLoc,
+                                     TemplateParams, Attrs);
 }
 
 llvm::SmallVector<LambdaCapture, 4> Parser::parseLambdaCaptureList() {

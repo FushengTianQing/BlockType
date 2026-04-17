@@ -352,16 +352,31 @@ public:
 };
 
 /// ArraySubscriptExpr - Array subscript expression (base[index]).
+/// C++23: supports multi-dimensional subscript: base[i, j, k]
 class ArraySubscriptExpr : public Expr {
   Expr *Base;
-  Expr *Index;
+  Expr *Index;                       // First index (backward compat)
+  llvm::SmallVector<Expr *, 2> Indices; // C++23: all indices
 
 public:
   ArraySubscriptExpr(SourceLocation Loc, Expr *Base, Expr *Index)
-      : Expr(Loc), Base(Base), Index(Index) {}
+      : Expr(Loc), Base(Base), Index(Index) {
+    if (Index)
+      Indices.push_back(Index);
+  }
+
+  /// C++23 multi-index constructor
+  ArraySubscriptExpr(SourceLocation Loc, Expr *Base,
+                     llvm::ArrayRef<Expr *> Indices)
+      : Expr(Loc), Base(Base),
+        Index(Indices.empty() ? nullptr : Indices[0]),
+        Indices(Indices.begin(), Indices.end()) {}
 
   Expr *getBase() const { return Base; }
   Expr *getIndex() const { return Index; }
+  llvm::ArrayRef<Expr *> getIndices() const { return Indices; }
+  unsigned getNumIndices() const { return Indices.size(); }
+  bool isMultiDimensional() const { return Indices.size() > 1; }
 
   NodeKind getKind() const override { return NodeKind::ArraySubscriptExprKind; }
 
@@ -921,23 +936,30 @@ class LambdaExpr : public Expr {
   QualType ReturnType;
   SourceLocation LBraceLoc;
   SourceLocation RBraceLoc;
+  TemplateParameterList *TemplateParams = nullptr; // C++20: lambda-template
+  class AttributeListDecl *Attrs = nullptr;         // C++23: lambda attributes
 
 public:
   LambdaExpr(SourceLocation Loc, llvm::ArrayRef<LambdaCapture> Captures,
              llvm::ArrayRef<ParmVarDecl *> Params, Stmt *Body,
              bool IsMutable = false, QualType ReturnType = QualType(),
              SourceLocation LBraceLoc = SourceLocation(),
-             SourceLocation RBraceLoc = SourceLocation())
+             SourceLocation RBraceLoc = SourceLocation(),
+             TemplateParameterList *TemplateParams = nullptr,
+             class AttributeListDecl *Attrs = nullptr)
       : Expr(Loc), Captures(Captures.begin(), Captures.end()),
         Params(Params.begin(), Params.end()), Body(Body),
         IsMutable(IsMutable), ReturnType(ReturnType),
-        LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc) {}
+        LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc),
+        TemplateParams(TemplateParams), Attrs(Attrs) {}
 
   llvm::ArrayRef<LambdaCapture> getCaptures() const { return Captures; }
   llvm::ArrayRef<ParmVarDecl *> getParams() const { return Params; }
   Stmt *getBody() const { return Body; }
   bool isMutable() const { return IsMutable; }
   QualType getReturnType() const { return ReturnType; }
+  TemplateParameterList *getTemplateParameters() const { return TemplateParams; }
+  class AttributeListDecl *getAttributes() const { return Attrs; }
 
   NodeKind getKind() const override { return NodeKind::LambdaExprKind; }
 

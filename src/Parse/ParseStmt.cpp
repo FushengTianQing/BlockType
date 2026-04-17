@@ -403,20 +403,36 @@ Stmt *Parser::parseIfStatement() {
   SourceLocation IfLoc = Tok.getLocation();
   consumeToken(); // consume 'if'
 
-  // Parse condition
-  if (!tryConsumeToken(TokenKind::l_paren)) {
-    emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(IfLoc);
+  // Check for C++23 if consteval / if !consteval
+  bool IsConsteval = false;
+  bool IsNegated = false;
+  if (Tok.is(TokenKind::kw_consteval)) {
+    IsConsteval = true;
+    consumeToken(); // consume 'consteval'
+  } else if (Tok.is(TokenKind::exclaim) && NextTok.is(TokenKind::kw_consteval)) {
+    IsConsteval = true;
+    IsNegated = true;
+    consumeToken(); // consume '!'
+    consumeToken(); // consume 'consteval'
   }
 
-  Expr *Cond = parseExpression();
-  if (!Cond) {
-    emitError(DiagID::err_expected_expression);
-    Cond = createRecoveryExpr(IfLoc);
-  }
+  Expr *Cond = nullptr;
+  if (!IsConsteval) {
+    // Parse condition (only for regular if)
+    if (!tryConsumeToken(TokenKind::l_paren)) {
+      emitError(DiagID::err_expected_lparen);
+      return Context.create<NullStmt>(IfLoc);
+    }
 
-  if (!tryConsumeToken(TokenKind::r_paren)) {
-    emitError(DiagID::err_expected_rparen);
+    Cond = parseExpression();
+    if (!Cond) {
+      emitError(DiagID::err_expected_expression);
+      Cond = createRecoveryExpr(IfLoc);
+    }
+
+    if (!tryConsumeToken(TokenKind::r_paren)) {
+      emitError(DiagID::err_expected_rparen);
+    }
   }
 
   // Parse then statement
@@ -435,7 +451,8 @@ Stmt *Parser::parseIfStatement() {
     }
   }
 
-  return Context.create<IfStmt>(IfLoc, Cond, ThenStmt, ElseStmt);
+  return Context.create<IfStmt>(IfLoc, Cond, ThenStmt, ElseStmt, nullptr,
+                                IsConsteval, IsNegated);
 }
 
 //===----------------------------------------------------------------------===//

@@ -364,14 +364,22 @@ Expr *Parser::parsePostfixExpression(Expr *Base) {
       break;
 
     case TokenKind::l_square: {
-      // Array subscript: base[index]
+      // Array subscript: base[index] (C++23: base[i, j, k])
       SourceLocation LLoc = Tok.getLocation();
       consumeToken();
 
-      // Parse index expression
-      Expr *Index = parseExpression();
-      if (!Index) {
-        Index = createRecoveryExpr(LLoc);
+      // Parse comma-separated index expressions (C++23 multi-dimensional)
+      llvm::SmallVector<Expr *, 2> Indices;
+      if (!Tok.is(TokenKind::r_square)) {
+        while (true) {
+          Expr *Idx = parseAssignmentExpression();
+          if (!Idx) {
+            Idx = createRecoveryExpr(LLoc);
+          }
+          Indices.push_back(Idx);
+          if (!tryConsumeToken(TokenKind::comma))
+            break;
+        }
       }
 
       // Expect ']'
@@ -381,8 +389,8 @@ Expr *Parser::parsePostfixExpression(Expr *Base) {
         tryConsumeToken(TokenKind::r_square);
       }
 
-      // Create ArraySubscriptExpr
-      Base = Context.create<ArraySubscriptExpr>(LLoc, Base, Index);
+      // Create ArraySubscriptExpr (multi-index constructor)
+      Base = Context.create<ArraySubscriptExpr>(LLoc, Base, Indices);
       break;
     }
 

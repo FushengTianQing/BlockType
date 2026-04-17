@@ -150,16 +150,22 @@ class IfStmt : public Stmt {
   Stmt *Then;
   Stmt *Else;
   VarDecl *CondVar; // Optional condition variable
+  bool IsConsteval : 1 = false;
+  bool IsNegated : 1 = false; // for `if !consteval`
 
 public:
   IfStmt(SourceLocation Loc, Expr *Cond, Stmt *Then, Stmt *Else,
-         VarDecl *CondVar = nullptr)
-      : Stmt(Loc), Cond(Cond), Then(Then), Else(Else), CondVar(CondVar) {}
+         VarDecl *CondVar = nullptr, bool IsConsteval = false,
+         bool IsNegated = false)
+      : Stmt(Loc), Cond(Cond), Then(Then), Else(Else), CondVar(CondVar),
+        IsConsteval(IsConsteval), IsNegated(IsNegated) {}
 
   Expr *getCond() const { return Cond; }
   Stmt *getThen() const { return Then; }
   Stmt *getElse() const { return Else; }
   VarDecl *getConditionVariable() const { return CondVar; }
+  bool isConsteval() const { return IsConsteval; }
+  bool isNegated() const { return IsNegated; }
 
   NodeKind getKind() const override { return NodeKind::IfStmtKind; }
 

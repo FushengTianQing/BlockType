@@ -73,6 +73,8 @@ static const std::unordered_map<std::string, std::string> ChineseDirectiveMap = 
     {"如果未定义", "ifndef"},
     {"否则", "else"},
     {"否则如果", "elif"},
+    {"否则如果定义", "elifdef"},
+    {"否则如果未定义", "elifndef"},
     {"结束如果", "endif"},
     {"错误", "error"},
     {"警告", "warning"},
@@ -365,6 +367,10 @@ void Preprocessor::handleDirective(Token &HashTok) {
     handleIfndefDirective(DirectiveTok);
   } else if (DirectiveName == "elif") {
     handleElifDirective(DirectiveTok);
+  } else if (DirectiveName == "elifdef") {
+    handleElifdefDirective(DirectiveTok);
+  } else if (DirectiveName == "elifndef") {
+    handleElifndefDirective(DirectiveTok);
   } else if (DirectiveName == "else") {
     handleElseDirective(DirectiveTok);
   } else if (DirectiveName == "endif") {
@@ -423,6 +429,10 @@ void Preprocessor::handleBilingualDirective(Token &DirectiveTok) {
     handleIfndefDirective(DirectiveTok);
   } else if (EnName == "elif") {
     handleElifDirective(DirectiveTok);
+  } else if (EnName == "elifdef") {
+    handleElifdefDirective(DirectiveTok);
+  } else if (EnName == "elifndef") {
+    handleElifndefDirective(DirectiveTok);
   } else if (EnName == "else") {
     handleElseDirective(DirectiveTok);
   } else if (EnName == "endif") {
@@ -1005,6 +1015,74 @@ void Preprocessor::handleElifDirective(Token &ElifTok) {
     bool Condition = evaluateCondition(ConditionTokens);
     CI.FoundNonSkip = Condition;
     Skipping = !Condition;
+  }
+}
+
+void Preprocessor::handleElifdefDirective(Token &ElifdefTok) {
+  if (ConditionalStack.empty()) {
+    Diags.report(ElifdefTok.getLocation(), DiagLevel::Error, "#elifdef without #if");
+    return;
+  }
+
+  ConditionalInfo &CI = ConditionalStack.back();
+  if (CI.FoundElse) {
+    Diags.report(ElifdefTok.getLocation(), DiagLevel::Error, "#elifdef after #else");
+    return;
+  }
+
+  // Lex the macro name
+  Token MacroNameTok;
+  if (!lexFromLexer(MacroNameTok)) {
+    Diags.report(ElifdefTok.getLocation(), DiagLevel::Error,
+                 "expected macro name after #elifdef");
+    return;
+  }
+
+  bool IsDefined = isMacroDefined(MacroNameTok.getText());
+
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
+
+  if (CI.WasSkipping || CI.FoundNonSkip) {
+    Skipping = true;
+  } else {
+    CI.FoundNonSkip = IsDefined;
+    Skipping = !IsDefined;
+  }
+}
+
+void Preprocessor::handleElifndefDirective(Token &ElifndefTok) {
+  if (ConditionalStack.empty()) {
+    Diags.report(ElifndefTok.getLocation(), DiagLevel::Error, "#elifndef without #if");
+    return;
+  }
+
+  ConditionalInfo &CI = ConditionalStack.back();
+  if (CI.FoundElse) {
+    Diags.report(ElifndefTok.getLocation(), DiagLevel::Error, "#elifndef after #else");
+    return;
+  }
+
+  // Lex the macro name
+  Token MacroNameTok;
+  if (!lexFromLexer(MacroNameTok)) {
+    Diags.report(ElifndefTok.getLocation(), DiagLevel::Error,
+                 "expected macro name after #elifndef");
+    return;
+  }
+
+  bool IsNotDefined = !isMacroDefined(MacroNameTok.getText());
+
+  // Skip to end of directive
+  Token Tok;
+  while (lexFromLexer(Tok) && !Tok.is(TokenKind::eod) && !Tok.is(TokenKind::eof)) {}
+
+  if (CI.WasSkipping || CI.FoundNonSkip) {
+    Skipping = true;
+  } else {
+    CI.FoundNonSkip = IsNotDefined;
+    Skipping = !IsNotDefined;
   }
 }
 

@@ -348,6 +348,12 @@ private:
   /// Evaluates a preprocessor expression.
   bool evaluateCondition(ArrayRef<Token> Tokens);
 
+  /// Handles #elifdef directive (C++23).
+  void handleElifdefDirective(Token &ElifdefTok);
+
+  /// Handles #elifndef directive (C++23).
+  void handleElifndefDirective(Token &ElifndefTok);
+
   /// Skips until #endif, #else, or #elif.
   void skipConditionalBlock();
 

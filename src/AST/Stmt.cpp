@@ -69,7 +69,11 @@ void DeclStmt::dump(raw_ostream &OS, unsigned Indent) const {
 
 void IfStmt::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "IfStmt: if\n";
+  OS << "IfStmt: if";
+  if (IsConsteval) {
+    OS << (IsNegated ? " !consteval" : " consteval");
+  }
+  OS << "\n";
   if (Cond)
     Cond->dump(OS, Indent + 1);
   if (Then)

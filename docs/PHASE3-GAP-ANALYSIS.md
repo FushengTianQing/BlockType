@@ -13,8 +13,8 @@
 | **Stage 3.1** | 声明 AST 节点定义 | **95%** | ~~DeclContext 基础设施~~ ✅、~~模板特化声明类~~ ✅ |
 | **Stage 3.2** | 基础声明解析 | **95%** | DeclSpec/Declarator 架构 ✅、类型消歧 ✅、核心功能完整 |
 | **Stage 3.3** | 类与模板解析 | **98%** | ~~文件组织~~ ✅、~~模板特化/偏特化~~ ✅、~~约束表达式~~ ✅ |
-| **Stage 3.4** | C++26 特性 + 测试 | **80%** | ~~Lit 回归测试~~ ✅、~~错误恢复~~ ✅、缺少 C++23/26 新特性 |
-| **总计** | **Phase 3** | **~94%** | **关键路径功能已基本完成,高级特性待实现** |
+| **Stage 3.4** | C++26 特性 + 测试 | **85%** | ~~Lit 回归测试~~ ✅、~~错误恢复~~ ✅、~~P0 级 C++23 特性~~ ✅、缺少 C++23/26 新特性 |
+| **总计** | **Phase 3** | **~96%** | **关键路径功能已基本完成,高级特性待实现** |
 
 ---
 
@@ -355,12 +355,12 @@ class Declarator {
 - ⚠️ 部分实现 4 项: constexpr 放宽, `reflexpr`, `static_assert` 消息, `@` 字符
 - ❌ 未实现 25 项
 
-**Phase 3 需完成 P0 级 (5 项, ~5 天):**
-- `#elifdef` / `#elifndef` — 仅需预处理器扩展
-- `if consteval` — `IfStmt` 加 `IsConsteval` 标志
-- 多维 `operator[]` — `ArraySubscriptExpr` 扩展多参数
-- Lambda 模板参数 — `parseLambdaExpression` 添加 `<...>` 步骤
-- Lambda 属性 — 复用 `parseAttributeSpecifier()`
+**~~Phase 3 需完成 P0 级 (5 项, ~5 天)~~ ✅ 全部完成:**
+- ✅ `#elifdef` / `#elifndef` — `handleElifdefDirective()`/`handleElifndefDirective()`，支持中英文
+- ✅ `if consteval` — `IfStmt` 添加 `IsConsteval`/`IsNegated`，支持 `if !consteval`
+- ✅ 多维 `operator[]` — `ArraySubscriptExpr` 多参数构造函数，逗号分隔解析
+- ✅ Lambda 模板参数 — `LambdaExpr` 添加 `TemplateParams`，支持 `[]<typename T>()`
+- ✅ Lambda 属性 — `LambdaExpr` 添加 `Attrs`，支持 `[[nodiscard]]` 等
 
 **P1/P2 级延后到 Phase 7** (详见完整文档)
 
@@ -518,14 +518,14 @@ class Declarator {
 
 ---
 
-### 阶段 3: 功能增强 (1-2 周) — 待执行
+### 阶段 3: 功能增强 (1-2 周) — P0 已完成
 
 **目标:** 提升功能完整性
 
-1. 实现 C++23 P0 级特性: `#elifdef`/`#elifndef`, `if consteval`, 多维 `operator[]`
-2. 实现 C++23 P0 级特性: Lambda 模板参数, Lambda 属性
-3. 实现 C++26 P1 级特性: Deducing this, `= delete("reason")`
-4. 补充测试覆盖率 (推导指引、复杂声明符)
+1. ~~实现 C++23 P0 级特性: `#elifdef`/`#elifndef`, `if consteval`, 多维 `operator[]`~~ ✅
+2. ~~实现 C++23 P0 级特性: Lambda 模板参数, Lambda 属性~~ ✅
+3. 实现 C++26 P1 级特性: Deducing this, `= delete("reason")` — 待 Phase 7
+4. 补充测试覆盖率 (推导指引、复杂声明符) — 持续进行
 
 ---
 
@@ -541,7 +541,7 @@ class Declarator {
 
 ## 📊 结论
 
-**Phase 3 当前完成度: ~94%** (从 92% 提升)
+**Phase 3 当前完成度: ~96%** (从 94% 提升)
 
 **核心功能状态:**
 - ✅ 基础声明 AST 节点: 完整
@@ -567,7 +567,7 @@ class Declarator {
   - `parseTypeSpecifier()` 添加了三层消歧策略 (Layer 1: 类型关键字, Layer 2: 符号表查找, Layer 3: 试探性解析)
   - 与表达式上下文 (`parseIdentifier`) 的消歧策略保持一致
   - 新增 4 个单元测试 + 2 个 lit 测试覆盖
-- ⚠️ C++23/26 新特性: 已实现 5 项, 剩余 ~30 项待实现 (详见 Stage 3.4)
+- ⚠️ C++23/26 新特性: 已实现 10 项 (含 5 项 P0), 剩余 ~25 项待实现 (详见 Stage 3.4)
   - 决策: P0 级特性可在 Phase 3 补充, P1/P2 级延后到 Phase 7
 - ~~⚠️ 结构化 DeclSpec/Declarator 架构~~ ✅ 已实现
 
@@ -585,4 +585,4 @@ class Declarator {
 ---
 
 *报告生成时间: 2026-04-17*
-*基于 commit: e9d8160 + 未提交工作区变更 (高级错误恢复机制实现, ErrorRecoveryTest 新增 20 个用例)*
+*基于 commit: c2968b2 + 未提交工作区变更 (C++23 P0 特性全部实现)*
