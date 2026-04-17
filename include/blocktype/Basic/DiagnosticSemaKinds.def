@@ -116,6 +116,57 @@ DIAG(err_case_not_in_switch,     Error, \
   "'case' 语句不在 switch 中")
 
 //===----------------------------------------------------------------------===//
+// Template errors
+//===----------------------------------------------------------------------===//
+
+DIAG(err_template_arg_different_kind, Error, \
+  "template argument for %0 must be a %1, not a %2", \
+  "模板参数 %0 必须是 %1，而非 %2")
+DIAG(err_template_arg_num_different, Error, \
+  "template argument list has %0 arguments, but %1 requires %2", \
+  "模板实参列表有 %0 个参数，但 %1 需要 %2 个")
+DIAG(err_template_not_in_scope, Error, \
+  "no template named '%0'", \
+  "没有名为 '%0' 的模板")
+DIAG(err_template_recursion, Error, \
+  "recursive template instantiation exceeded maximum depth", \
+  "递归模板实例化超过最大深度")
+DIAG(err_template_default_arg_not_in_scope, Error, \
+  "default argument for template parameter '%0' not yet parsed", \
+  "模板参数 '%0' 的默认实参尚未解析")
+DIAG(note_template_declared_here, Note, \
+  "template is declared here", \
+  "模板在此声明")
+DIAG(err_non_type_template_arg_type_mismatch, Error, \
+  "non-type template argument of type %0 cannot be converted to %1", \
+  "非类型模板实参类型 %0 无法转换为 %1")
+
+//===----------------------------------------------------------------------===//
+// Concept errors
+//===----------------------------------------------------------------------===//
+
+DIAG(err_concept_not_satisfied, Error, \
+  "constraint '%0' not satisfied", \
+  "约束 '%0' 未被满足")
+DIAG(err_concept_specialization_expr_error, Error, \
+  "concept specialization expression evaluates to false", \
+  "concept 特化表达式求值为 false")
+DIAG(note_constraint_substitution_failure, Note, \
+  "substitution failure: %0", \
+  "替换失败：%0")
+
+//===----------------------------------------------------------------------===//
+// Specialization errors
+//===----------------------------------------------------------------------===//
+
+DIAG(err_partial_spec_not_more_specialized, Error, \
+  "partial specialization is not more specialized than the primary template", \
+  "偏特化不比主模板更特化")
+DIAG(err_spec_partial_ambiguous, Error, \
+  "ambiguous partial specializations for %0", \
+  "%0 的偏特化存在歧义")
+
+//===----------------------------------------------------------------------===//
 // Warnings
 //===----------------------------------------------------------------------===//
 

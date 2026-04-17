@@ -27,7 +27,10 @@
 #include "blocktype/Sema/TypeCheck.h"
 #include "blocktype/Sema/AccessControl.h"
 #include "blocktype/Sema/ConstantExpr.h"
+#include "blocktype/Sema/TemplateInstantiation.h"
 #include "llvm/ADT/DenseMap.h"
+
+#include <memory>
 
 namespace blocktype {
 
@@ -95,6 +98,27 @@ public:
   explicit operator bool() const { return isUsable(); }
 };
 
+/// TypeResult - Wrapper for type semantic analysis results.
+class TypeResult {
+  QualType Val;
+  bool Invalid = false;
+
+public:
+  TypeResult() = default;
+  TypeResult(QualType T) : Val(T) {}
+
+  static TypeResult getInvalid() {
+    TypeResult R;
+    R.Invalid = true;
+    return R;
+  }
+
+  bool isInvalid() const { return Invalid; }
+  bool isUsable() const { return !Val.isNull() && !Invalid; }
+  QualType get() const { return Val; }
+  explicit operator bool() const { return isUsable(); }
+};
+
 /// Sema - Semantic analysis engine.
 ///
 /// Coordinates all semantic analysis activities:
@@ -113,6 +137,9 @@ class Sema {
   /// is the central dispatcher that delegates to specialized checkers.
   TypeCheck TC;
   ConstantExprEvaluator ConstEval;
+
+  /// Template instantiation engine [Stage 5.1]
+  std::unique_ptr<TemplateInstantiator> Instantiator;
 
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;
@@ -147,6 +174,12 @@ public:
 
   /// Access the constant expression evaluator.
   ConstantExprEvaluator &getConstEval() { return ConstEval; }
+
+  /// Access the template instantiation engine.
+  TemplateInstantiator &getTemplateInstantiator() { return *Instantiator; }
+
+  /// Access the symbol table.
+  SymbolTable &getSymbolTable() { return Symbols; }
 
   //===------------------------------------------------------------------===//
   // Scope management
@@ -289,6 +322,48 @@ public:
   void AddOverloadCandidate(FunctionDecl *F,
                              llvm::ArrayRef<Expr *> Args,
                              OverloadCandidateSet &Set);
+
+  //===------------------------------------------------------------------===//
+  // Template handling [Stage 5.1]
+  //===------------------------------------------------------------------===//
+
+  /// Process a class template declaration.
+  /// @param CTD  ClassTemplateDecl already created by Parser
+  /// @return     Semantic analysis result
+  DeclResult ActOnClassTemplateDecl(ClassTemplateDecl *CTD);
+
+  /// Process a function template declaration.
+  DeclResult ActOnFunctionTemplateDecl(FunctionTemplateDecl *FTD);
+
+  /// Process a variable template declaration.
+  DeclResult ActOnVarTemplateDecl(VarTemplateDecl *VTD);
+
+  /// Process an alias template declaration.
+  DeclResult ActOnTypeAliasTemplateDecl(TypeAliasTemplateDecl *TATD);
+
+  /// Process a Concept declaration.
+  DeclResult ActOnConceptDecl(ConceptDecl *CD);
+
+  /// Process a template-id reference (e.g., vector<int>).
+  /// @param Name      Template name
+  /// @param Args      Template arguments with source locations
+  /// @param NameLoc   Template name location
+  /// @param LAngleLoc < location
+  /// @param RAngleLoc > location
+  /// @return          Type or expression result
+  TypeResult ActOnTemplateId(llvm::StringRef Name,
+                              llvm::ArrayRef<TemplateArgumentLoc> Args,
+                              SourceLocation NameLoc,
+                              SourceLocation LAngleLoc,
+                              SourceLocation RAngleLoc);
+
+  /// Process an explicit specialization (template<> class X<T> { ... }).
+  DeclResult ActOnExplicitSpecialization(SourceLocation TemplateLoc,
+                                          SourceLocation LAngleLoc,
+                                          SourceLocation RAngleLoc);
+
+  /// Process an explicit instantiation (template class X<int>;).
+  DeclResult ActOnExplicitInstantiation(SourceLocation TemplateLoc, Decl *D);
 
   //===------------------------------------------------------------------===//
   // Diagnostics helpers [Stage 4.5]
