@@ -9,6 +9,8 @@
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/ConstantExpr.h"
+#include "blocktype/Sema/Lookup.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "llvm/Support/Casting.h"
 
@@ -692,6 +694,53 @@ QualType TemplateInstantiator::SubstituteDependentType(
   if (SubBase.isNull())
     return QualType(const_cast<DependentType *>(T), Qualifier::None);
 
+  // If the substituted base is still dependent, we cannot resolve the member.
+  // Preserve the DependentType with the substituted base.
+  if (SubBase->isDependentType())
+    return QualType(Context.getDependentType(SubBase.getTypePtr(), T->getName()),
+                    Qualifier::None);
+
+  // The base is now non-dependent. Try to resolve T::name by looking up
+  // the member in the concrete type (e.g., vector<int>::iterator →
+  // lookup "iterator" in vector<int>).
+  if (SubBase->isRecordType()) {
+    auto *RT = static_cast<const RecordType *>(SubBase.getTypePtr());
+    RecordDecl *RD = RT->getDecl();
+
+    // Only CXXRecordDecl supports qualified member lookup
+    if (auto *CXXRD = dyn_cast<CXXRecordDecl>(static_cast<ASTNode *>(RD))) {
+      // Build a NestedNameSpecifier for the substituted type
+      NestedNameSpecifier *NNS =
+          NestedNameSpecifier::Create(Context, nullptr, SubBase.getTypePtr());
+      LookupResult Result = SemaRef.LookupQualifiedName(T->getName(), NNS);
+
+      // If we found a type declaration, return the actual type.
+      if (TypeDecl *TD = Result.getAsTypeDecl()) {
+        if (auto *TagD = dyn_cast<TagDecl>(static_cast<ASTNode *>(TD))) {
+          if (auto *RD = dyn_cast<RecordDecl>(static_cast<ASTNode *>(TagD)))
+            return Context.getRecordType(RD);
+          // For EnumDecl, return the enum type
+          if (auto *ED = dyn_cast<EnumDecl>(static_cast<ASTNode *>(TagD)))
+            return Context.getEnumType(ED);
+        }
+        // TypedefDecl / TypeAliasDecl
+        if (auto *TDD = dyn_cast<TypedefNameDecl>(static_cast<ASTNode *>(TD))) {
+          QualType Underlying = TDD->getUnderlyingType();
+          if (!Underlying.isNull())
+            return Underlying;
+        }
+        // TemplateTypeParmDecl (a type parameter used as a member type)
+        if (auto *TTPD = dyn_cast<TemplateTypeParmDecl>(static_cast<ASTNode *>(TD)))
+          return QualType(Context.getTemplateTypeParmType(TTPD, TTPD->getIndex(),
+                                                          TTPD->getDepth()),
+                          Qualifier::None);
+      }
+    }
+  }
+
+  // Resolution failed — keep as DependentType with substituted base.
+  // This can happen for non-record types (e.g., int::name is ill-formed)
+  // or when the member simply doesn't exist.
   return QualType(Context.getDependentType(SubBase.getTypePtr(), T->getName()),
                   Qualifier::None);
 }
