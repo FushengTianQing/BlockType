@@ -1,4 +1,4 @@
-# 全面核查报告：Stage 4.2 + Stage 4.3
+# 全面核查报告：Stage 4.2 + Stage 4.3 （已经全部修复）
 
 一、Stage 4.2 核查
 
@@ -112,6 +112,16 @@ Task 4.2.3 类型完整性检查
 🔴 这是一个严重 BUG：Sema.cpp 中的 stub 定义会导致 Lookup.cpp 的实际实现被忽略，所有名字查找永远返回空结果！
 必须修复：删除 Sema.cpp 中第 327-353 行的 stub 代码。
 
+
+Expr 基类增强
+
+问题清单：
+
+🟡 Expr 子类构造函数没有传递 QualType 参数
+所有现有 Expr 子类（IntegerLiteral、FloatingLiteral 等）的构造函数没有更新来传递 QualType 给基类。虽然默认参数 QualType() 能编译，但所有现有表达式的 getType() 都返回空 QualType()。
+需要在子类构造时传入正确的类型（如 IntegerLiteral 应传入 IntType），或者在 Sema 构建表达式时通过 setType() 设置。这属于后续 Stage 的工作。
+
+
 -----------------------------------------
 
 修改总结
@@ -137,16 +147,20 @@ Sema.cpp stub 代码
 已确认 Stage 4.3 的 stub 代码（LookupUnqualifiedName 等）已在之前被移除，只剩一行注释 // Name lookup [Stage 4.3 — implemented in Lookup.cpp]，无需修改。
 
 
+5. Expr.h — 构造函数添加 QualType 参数：
 
+IntegerLiteral(Loc, Val, QualType) → Expr(Loc, T)
+FloatingLiteral(Loc, Val, QualType) → Expr(Loc, T)
+CharacterLiteral(Loc, Val, QualType) → Expr(Loc, T)
+CXXBoolLiteral(Loc, Val, QualType) → Expr(Loc, T)
+CXXNullPtrLiteral(Loc, QualType) → Expr(Loc, T)
+StringLiteral(Loc, Val, QualType) → Expr(Loc, T)
+DeclRefExpr(Loc, D) → 从 D->getType() 推导
+MemberExpr(Loc, Base, Member, IsArrow) → 从 Member->getType() 推导
+ParseExpr.cpp / Parser.cpp / ParseDecl.cpp — Parser 传入正确类型：
 
+Context.getIntType(), Context.getDoubleType(), Context.getCharType(), Context.getBoolType(), Context.getNullPtrType()
 -----------------------------------------
-Expr 基类增强
-
-问题清单：
-
-🟡 Expr 子类构造函数没有传递 QualType 参数
-所有现有 Expr 子类（IntegerLiteral、FloatingLiteral 等）的构造函数没有更新来传递 QualType 给基类。虽然默认参数 QualType() 能编译，但所有现有表达式的 getType() 都返回空 QualType()。
-需要在子类构造时传入正确的类型（如 IntegerLiteral 应传入 IntType），或者在 Sema 构建表达式时通过 setType() 设置。这属于后续 Stage 的工作。
 
 
 二、Stage 4.3 核查
