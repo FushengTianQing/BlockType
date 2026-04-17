@@ -361,16 +361,38 @@ QualType TemplateInstantiator::SubstituteType(
   const Type *Ty = T.getTypePtr();
 
   // TemplateTypeParmType → look up in mapping
-  if (auto *TTP = llvm::dyn_cast<TemplateTypeParmType>(Ty))
-    return SubstituteTemplateTypeParmType(TTP, Args);
+  // Preserve original CVR qualifiers on the substituted result.
+  // e.g., "const T" where T=int should produce "const int", not just "int".
+  if (auto *TTP = llvm::dyn_cast<TemplateTypeParmType>(Ty)) {
+    QualType Result = SubstituteTemplateTypeParmType(TTP, Args);
+    if (Result.isNull())
+      return Result;
+    // Merge original qualifiers into the substituted type
+    Qualifier OrigQuals = T.getQualifiers();
+    if (OrigQuals != Qualifier::None &&
+        Result.getQualifiers() != OrigQuals) {
+      return QualType(Result.getTypePtr(), OrigQuals | Result.getQualifiers());
+    }
+    return Result;
+  }
 
   // TemplateSpecializationType → recursively substitute inner args
   if (auto *TST = llvm::dyn_cast<TemplateSpecializationType>(Ty))
     return SubstituteTemplateSpecializationType(TST, Args);
 
   // DependentType → try to resolve
-  if (auto *DT = llvm::dyn_cast<DependentType>(Ty))
-    return SubstituteDependentType(DT, Args);
+  // Preserve original CVR qualifiers on the substituted result.
+  if (auto *DT = llvm::dyn_cast<DependentType>(Ty)) {
+    QualType Result = SubstituteDependentType(DT, Args);
+    if (Result.isNull())
+      return Result;
+    Qualifier OrigQuals = T.getQualifiers();
+    if (OrigQuals != Qualifier::None &&
+        Result.getQualifiers() != OrigQuals) {
+      return QualType(Result.getTypePtr(), OrigQuals | Result.getQualifiers());
+    }
+    return Result;
+  }
 
   // PointerType → recursively substitute pointee
   if (auto *PT = llvm::dyn_cast<PointerType>(Ty)) {

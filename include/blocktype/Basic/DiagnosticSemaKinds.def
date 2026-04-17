@@ -140,6 +140,18 @@ DIAG(note_template_declared_here, Note, \
 DIAG(err_non_type_template_arg_type_mismatch, Error, \
   "non-type template argument of type %0 cannot be converted to %1", \
   "非类型模板实参类型 %0 无法转换为 %1")
+DIAG(err_template_param_duplicate_name, Error, \
+  "template parameter '%0' is declared more than once", \
+  "模板参数 '%0' 被重复声明")
+DIAG(err_template_param_incomplete_type, Error, \
+  "non-type template parameter has incomplete type '%0'", \
+  "非类型模板参数具有不完整类型 '%0'")
+DIAG(err_template_template_param_nested_invalid, Error, \
+  "template template parameter '%0' has invalid nested parameter list", \
+  "模板模板参数 '%0' 具有无效的嵌套参数列表")
+DIAG(err_explicit_spec_no_primary, Error, \
+  "explicit specialization refers to unregistered template '%0'", \
+  "显式特化引用了未注册的模板 '%0'")
 
 //===----------------------------------------------------------------------===//
 // Concept errors

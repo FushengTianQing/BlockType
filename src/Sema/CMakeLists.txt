@@ -1,6 +1,7 @@
 add_library(blocktype-sema
   AccessControl.cpp
   ConstantExpr.cpp
+  ConstraintSatisfaction.cpp
   Conversion.cpp
   Lookup.cpp
   Overload.cpp

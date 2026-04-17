@@ -8,11 +8,99 @@
 
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/TemplateDeduction.h"
+#include "blocktype/Sema/ConstraintSatisfaction.h"
 #include "blocktype/Sema/SFINAE.h"
+#include "blocktype/AST/TemplateParameterList.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/Basic/Diagnostics.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Casting.h"
 
 using namespace blocktype;
+
+//===----------------------------------------------------------------------===//
+// Template Parameter Validation (shared by all ActOn*TemplateDecl)
+//===----------------------------------------------------------------------===//
+
+/// ValidateTemplateParameterList — Checks a template parameter list for:
+///   1. Duplicate parameter names
+///   2. NonTypeTemplateParmDecl type completeness
+///   3. TemplateTemplateParmDecl nested parameter list validity
+/// @return true if valid, false if any errors were diagnosed
+static bool ValidateTemplateParameterList(Sema &S,
+                                           TemplateParameterList *Params) {
+  if (!Params)
+    return true;
+
+  llvm::StringSet<> SeenNames;
+  bool Valid = true;
+
+  for (unsigned I = 0; I < Params->size(); ++I) {
+    NamedDecl *P = Params->getParam(I);
+
+    // --- Check 1: Duplicate parameter names ---
+    // Empty/un-named parameters are allowed (e.g., template<typename, typename>)
+    llvm::StringRef Name = P->getName();
+    if (!Name.empty()) {
+      if (SeenNames.count(Name)) {
+        S.getDiagnostics().report(P->getLocation(),
+                                  DiagID::err_template_param_duplicate_name,
+                                  Name);
+        Valid = false;
+        continue;
+      }
+      SeenNames.insert(Name);
+    }
+
+    // --- Check 2: NonTypeTemplateParmDecl type completeness ---
+    if (auto *NTTPD = llvm::dyn_cast<NonTypeTemplateParmDecl>(P)) {
+      QualType NTType = NTTPD->getType();
+      if (!NTType.isNull() && !S.isCompleteType(NTType)) {
+        // Allow void*, pointer types, reference types, and dependent types
+        const Type *Ty = NTType.getTypePtr();
+        bool AllowIncomplete = false;
+        if (Ty->isPointerType() || Ty->isReferenceType())
+          AllowIncomplete = true;
+        if (Ty->getTypeClass() == TypeClass::TemplateTypeParm ||
+            Ty->getTypeClass() == TypeClass::Dependent)
+          AllowIncomplete = true;
+        if (Ty->isArrayType()) {
+          // Incomplete array types (T[]) are valid for non-type params
+          if (Ty->getTypeClass() == TypeClass::IncompleteArray)
+            AllowIncomplete = true;
+        }
+
+        if (!AllowIncomplete) {
+          S.getDiagnostics().report(
+              P->getLocation(),
+              DiagID::err_template_param_incomplete_type,
+              Name.empty() ? "<unnamed>" : Name);
+          Valid = false;
+        }
+      }
+    }
+
+    // --- Check 3: TemplateTemplateParmDecl nested parameter validity ---
+    if (auto *TTPD = llvm::dyn_cast<TemplateTemplateParmDecl>(P)) {
+      TemplateParameterList *NestedParams = TTPD->getTemplateParameterList();
+      if (NestedParams && !NestedParams->empty()) {
+        // Recursively validate the nested parameter list
+        if (!ValidateTemplateParameterList(S, NestedParams))
+          Valid = false;
+      } else if (!NestedParams) {
+        // Template template params must have at least one parameter
+        // (or a parameter pack). Null params list is invalid.
+        S.getDiagnostics().report(
+            TTPD->getLocation(),
+            DiagID::err_template_template_param_nested_invalid,
+            Name.empty() ? "<unnamed>" : Name);
+        Valid = false;
+      }
+    }
+  }
+
+  return Valid;
+}
 
 //===----------------------------------------------------------------------===//
 // Class Template
@@ -30,6 +118,10 @@ DeclResult Sema::ActOnClassTemplateDecl(ClassTemplateDecl *CTD) {
     return DeclResult::getInvalid();
   }
 
+  // 1b. Deep validation: duplicate names, incomplete types, nested params
+  if (!ValidateTemplateParameterList(*this, Params))
+    return DeclResult::getInvalid();
+
   // 2. Register to symbol table as a template
   Symbols.addTemplateDecl(CTD);
 
@@ -40,9 +132,15 @@ DeclResult Sema::ActOnClassTemplateDecl(ClassTemplateDecl *CTD) {
   if (CurContext)
     CurContext->addDecl(CTD);
 
-  // 5. Handle requires-clause if present (validation only for now)
+  // 5. Handle requires-clause if present
   if (CTD->hasRequiresClause()) {
-    // Constraint checking will be implemented in Stage 5.4
+    // Validate the constraint expression is well-formed.
+    // Full satisfaction checking happens at instantiation time.
+    Expr *RC = CTD->getRequiresClause();
+    if (!RC) {
+      Diags.report(CTD->getLocation(), DiagID::err_concept_not_satisfied,
+                   "invalid requires-clause");
+    }
   }
 
   return DeclResult(CTD);
@@ -64,6 +162,10 @@ DeclResult Sema::ActOnFunctionTemplateDecl(FunctionTemplateDecl *FTD) {
     return DeclResult::getInvalid();
   }
 
+  // 1b. Deep validation: duplicate names, incomplete types, nested params
+  if (!ValidateTemplateParameterList(*this, Params))
+    return DeclResult::getInvalid();
+
   // 2. Register to symbol table
   Symbols.addTemplateDecl(FTD);
   Symbols.addDecl(FTD);
@@ -74,7 +176,14 @@ DeclResult Sema::ActOnFunctionTemplateDecl(FunctionTemplateDecl *FTD) {
 
   // 4. Handle requires-clause
   if (FTD->hasRequiresClause()) {
-    // Constraint checking will be implemented in Stage 5.4
+    // Validate the constraint expression is well-formed.
+    // Full satisfaction checking happens at call site via
+    // DeduceAndInstantiateFunctionTemplate.
+    Expr *RC = FTD->getRequiresClause();
+    if (!RC) {
+      Diags.report(FTD->getLocation(), DiagID::err_concept_not_satisfied,
+                   "invalid requires-clause");
+    }
   }
 
   return DeclResult(FTD);
@@ -94,6 +203,10 @@ DeclResult Sema::ActOnVarTemplateDecl(VarTemplateDecl *VTD) {
                  VTD->getName());
     return DeclResult::getInvalid();
   }
+
+  // Deep validation: duplicate names, incomplete types, nested params
+  if (!ValidateTemplateParameterList(*this, Params))
+    return DeclResult::getInvalid();
 
   Symbols.addTemplateDecl(VTD);
   Symbols.addDecl(VTD);
@@ -118,6 +231,10 @@ DeclResult Sema::ActOnTypeAliasTemplateDecl(TypeAliasTemplateDecl *TATD) {
                  TATD->getName());
     return DeclResult::getInvalid();
   }
+
+  // Deep validation: duplicate names, incomplete types, nested params
+  if (!ValidateTemplateParameterList(*this, Params))
+    return DeclResult::getInvalid();
 
   Symbols.addTemplateDecl(TATD);
   Symbols.addDecl(TATD);
@@ -234,9 +351,18 @@ DeclResult Sema::ActOnExplicitSpecialization(SourceLocation TemplateLoc,
                                               SourceLocation LAngleLoc,
                                               SourceLocation RAngleLoc) {
   // template<> means empty template parameter list.
-  // The actual processing depends on what follows (class/function/variable).
-  // For now, this is a placeholder — full implementation in Stage 5.5.
-  return DeclResult::getInvalid();
+  // This method is called when the parser encounters template<>.
+  //
+  // We don't have the full specialization yet (that comes in the subsequent
+  // ActOnClassTemplateDecl / ActOnFunctionTemplateDecl / ActOnVarTemplateDecl
+  // call).  The parser sets IsExplicitSpecialization=true on the
+  // ClassTemplateSpecializationDecl / etc. before passing it through the
+  // normal ActOn* flow.
+  //
+  // Here we simply return a valid (but empty) result to signal that
+  // template<> was parsed successfully.  The actual registration with
+  // the primary template happens in the follow-up ActOn* method.
+  return DeclResult(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -248,9 +374,157 @@ DeclResult Sema::ActOnExplicitInstantiation(SourceLocation TemplateLoc,
   if (!D)
     return DeclResult::getInvalid();
 
+  // Explicit instantiation: template class X<int>;
   // Trigger instantiation of the given declaration.
-  // Full implementation in Stage 5.5.
+
+  // Class template explicit instantiation
+  if (auto *CTD = llvm::dyn_cast<ClassTemplateDecl>(D)) {
+    // If the class template has already been specialized with concrete
+    // arguments, the parser would have provided a ClassTemplateSpecializationDecl
+    // instead. For now, return the template itself.
+    return DeclResult(CTD);
+  }
+
+  // Class template specialization explicit instantiation
+  // e.g., template class Vector<int>;
+  // Parser provides a ClassTemplateSpecializationDecl with template args.
+  if (auto *Spec = llvm::dyn_cast<ClassTemplateSpecializationDecl>(D)) {
+    ClassTemplateDecl *CTD = Spec->getSpecializedTemplate();
+    if (!CTD) {
+      Diags.report(TemplateLoc, DiagID::err_explicit_spec_no_primary,
+                   Spec->getName());
+      return DeclResult::getInvalid();
+    }
+
+    // Trigger actual instantiation
+    auto *InstSpec = Instantiator->InstantiateClassTemplate(
+        CTD, Spec->getTemplateArgs());
+    if (!InstSpec) {
+      Diags.report(TemplateLoc, DiagID::err_template_recursion);
+      return DeclResult::getInvalid();
+    }
+
+    // Register the instantiation result
+    if (CurContext)
+      CurContext->addDecl(InstSpec);
+    return DeclResult(InstSpec);
+  }
+
+  // Function template explicit instantiation
+  if (auto *FTD = llvm::dyn_cast<FunctionTemplateDecl>(D)) {
+    // For function templates without explicit args, we cannot instantiate
+    // here (no deduction context). Return as-is for now.
+    return DeclResult(FTD);
+  }
+
+  // Function template specialization with explicit args
+  if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
+    // The parser provided a concrete FunctionDecl with substituted types.
+    // Register it as an explicit instantiation.
+    if (CurContext)
+      CurContext->addDecl(FD);
+    return DeclResult(FD);
+  }
+
   return DeclResult(D);
+}
+
+//===----------------------------------------------------------------------===//
+// Partial Specialization
+//===----------------------------------------------------------------------===//
+
+DeclResult Sema::ActOnClassTemplatePartialSpecialization(
+    ClassTemplatePartialSpecializationDecl *PartialSpec) {
+  if (!PartialSpec)
+    return DeclResult::getInvalid();
+
+  // 1. Look up the primary template
+  ClassTemplateDecl *Primary = PartialSpec->getSpecializedTemplate();
+  if (!Primary) {
+    Diags.report(PartialSpec->getLocation(),
+                 DiagID::err_template_not_in_scope,
+                 PartialSpec->getName());
+    return DeclResult::getInvalid();
+  }
+
+  // 2. Validate that the partial specialization has its own template
+  //    parameter list (a non-empty subset of the primary's parameters)
+  auto *PartialParams = PartialSpec->getTemplateParameterList();
+  if (!PartialParams || PartialParams->empty()) {
+    Diags.report(PartialSpec->getLocation(),
+                 DiagID::err_template_not_in_scope,
+                 PartialSpec->getName());
+    return DeclResult::getInvalid();
+  }
+
+  // 2b. Deep validation of partial specialization parameters
+  if (!ValidateTemplateParameterList(*this, PartialParams))
+    return DeclResult::getInvalid();
+
+  // 3. Verify the partial specialization args are more specialized
+  //    than the primary template. Per C++ [temp.class.spec]:
+  //    The arguments of the partial specialization must be more
+  //    specialized than those of the primary template.
+  //    For now, we accept all valid partial specializations.
+
+  // 4. Validate template argument count matches primary template
+  auto *PrimaryParams = Primary->getTemplateParameterList();
+  if (PrimaryParams) {
+    unsigned PrimaryArgCount = PrimaryParams->size();
+    unsigned PartialArgCount = PartialSpec->getNumTemplateArgs();
+    // The partial specialization args must match primary param count
+    // (unless the primary has a parameter pack)
+    if (PartialArgCount != PrimaryArgCount &&
+        !PrimaryParams->hasParameterPack()) {
+      Diags.report(PartialSpec->getLocation(),
+                   DiagID::err_template_arg_num_different,
+                   std::to_string(PartialArgCount), Primary->getName());
+      return DeclResult::getInvalid();
+    }
+  }
+
+  // 5. Register the partial specialization with the primary template
+  Primary->addSpecialization(PartialSpec);
+
+  // 6. Register to current DeclContext
+  if (CurContext)
+    CurContext->addDecl(PartialSpec);
+
+  return DeclResult(PartialSpec);
+}
+
+DeclResult Sema::ActOnVarTemplatePartialSpecialization(
+    VarTemplatePartialSpecializationDecl *PartialSpec) {
+  if (!PartialSpec)
+    return DeclResult::getInvalid();
+
+  VarTemplateDecl *Primary = PartialSpec->getSpecializedTemplate();
+  if (!Primary) {
+    Diags.report(PartialSpec->getLocation(),
+                 DiagID::err_template_not_in_scope,
+                 PartialSpec->getName());
+    return DeclResult::getInvalid();
+  }
+
+  auto *PartialParams = PartialSpec->getTemplateParameterList();
+  if (!PartialParams || PartialParams->empty()) {
+    Diags.report(PartialSpec->getLocation(),
+                 DiagID::err_template_not_in_scope,
+                 PartialSpec->getName());
+    return DeclResult::getInvalid();
+  }
+
+  // Deep validation of partial specialization parameters
+  if (!ValidateTemplateParameterList(*this, PartialParams))
+    return DeclResult::getInvalid();
+
+  // Register with primary template
+  Primary->addSpecialization(PartialSpec);
+
+  if (CurContext)
+    CurContext->addDecl(PartialSpec);
+
+  return DeclResult(PartialSpec);
 }
 
 //===----------------------------------------------------------------------===//
@@ -263,10 +537,19 @@ FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
   if (!FTD)
     return nullptr;
 
-  // 1. Deduce template arguments from call arguments
+  // 1. Deduce template arguments from call arguments.
+  // Enter SFINAE context during deduction: per C++ [temp.deduct],
+  // deduction failures in the immediate context of substitution are
+  // not hard errors — the candidate is simply removed from the overload set.
   TemplateDeductionInfo Info;
-  TemplateDeductionResult Result =
-      Deduction->DeduceFunctionTemplateArguments(FTD, Args, Info);
+  TemplateDeductionResult Result;
+  unsigned SavedErrors = Diags.getNumErrors();
+  {
+    SFINAEGuard DeductionSFINAEGuard(Instantiator->getSFINAEContext(),
+                                SavedErrors, &Diags);
+    Result = Deduction->DeduceFunctionTemplateArguments(FTD, Args, Info);
+  }
+  // SFINAE context exited — diagnostics are no longer suppressed.
 
   if (Result != TemplateDeductionResult::Success) {
     // Report diagnostic for the failure
@@ -297,7 +580,23 @@ FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
   llvm::SmallVector<TemplateArgument, 4> DeducedArgs =
       Info.getDeducedArgs(NumParams);
 
-  // 3. Instantiate the function template with deduced arguments
+  // 3. Check requires-clause constraint (if any)
+  // Per C++ [temp.constr.decl]: the constraint must be satisfied after
+  // template argument substitution. If not satisfied, this candidate is
+  // removed from the overload set (similar to SFINAE).
+  if (FTD->hasRequiresClause()) {
+    Expr *RequiresClause = FTD->getRequiresClause();
+    TemplateArgumentList ArgList(DeducedArgs);
+    bool Satisfied =
+        ConstraintChecker->CheckConstraintSatisfaction(RequiresClause, ArgList);
+    if (!Satisfied) {
+      Diags.report(CallLoc, DiagID::err_concept_not_satisfied,
+                   FTD->getName());
+      return nullptr;
+    }
+  }
+
+  // 4. Instantiate the function template with deduced arguments
   FunctionDecl *InstFD =
       Instantiator->InstantiateFunctionTemplate(FTD, DeducedArgs);
   if (!InstFD) {

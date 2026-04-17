@@ -30,6 +30,10 @@ class DiagnosticsEngine {
   const SourceManager *SM = nullptr;
   DiagnosticLanguage Lang = DiagnosticLanguage::English;
 
+  /// Error suppression nesting count. When > 0, all diagnostics are
+  /// silently discarded (SFINAE / overload resolution suppression).
+  unsigned SuppressCount = 0;
+
 public:
   explicit DiagnosticsEngine(llvm::raw_ostream &Out = llvm::errs())
     : OS(Out) {}
@@ -69,6 +73,26 @@ public:
   unsigned getNumWarnings() const { return NumWarnings; }
   bool hasErrorOccurred() const { return NumErrors > 0; }
   void reset() { NumErrors = 0; NumWarnings = 0; }
+
+  //===------------------------------------------------------------------===//
+  // SFINAE / Error suppression
+  //===------------------------------------------------------------------===//
+
+  /// Enter a diagnostic suppression context. All subsequent report() calls
+  /// are silently discarded until popSuppression() is called.
+  /// Typically used by SFINAEGuard during template argument deduction and
+  /// overload resolution to prevent hard errors in the "immediate context".
+  void pushSuppression() { ++SuppressCount; }
+
+  /// Exit a diagnostic suppression context. Restores normal diagnostic
+  /// emission when the suppression nesting count reaches zero.
+  void popSuppression() { if (SuppressCount > 0) --SuppressCount; }
+
+  /// Returns true if diagnostics are currently being suppressed.
+  bool isSuppressed() const { return SuppressCount > 0; }
+
+  /// Returns the current suppression nesting depth.
+  unsigned getSuppressCount() const { return SuppressCount; }
 
   /// Get the severity level for a diagnostic ID
   static DiagLevel getDiagnosticLevel(DiagID ID);

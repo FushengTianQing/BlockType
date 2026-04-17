@@ -29,6 +29,7 @@
 #include "blocktype/Sema/ConstantExpr.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
+#include "blocktype/Sema/ConstraintSatisfaction.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <memory>
@@ -145,6 +146,9 @@ class Sema {
   /// Template argument deduction engine [Stage 5.2]
   std::unique_ptr<TemplateDeduction> Deduction;
 
+  /// Concept constraint satisfaction checker [Stage 5.4]
+  std::unique_ptr<ConstraintSatisfaction> ConstraintChecker;
+
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;
 
@@ -184,6 +188,9 @@ public:
 
   /// Access the template deduction engine.
   TemplateDeduction &getTemplateDeduction() { return *Deduction; }
+
+  /// Access the concept constraint checker.
+  ConstraintSatisfaction &getConstraintChecker() { return *ConstraintChecker; }
 
   /// Access the symbol table.
   SymbolTable &getSymbolTable() { return Symbols; }
@@ -371,6 +378,16 @@ public:
 
   /// Process an explicit instantiation (template class X<int>;).
   DeclResult ActOnExplicitInstantiation(SourceLocation TemplateLoc, Decl *D);
+
+  /// Process a class template partial specialization.
+  /// @param PartialSpec  The partial specialization decl (already created by Parser)
+  /// @return             Semantic analysis result
+  DeclResult ActOnClassTemplatePartialSpecialization(
+      ClassTemplatePartialSpecializationDecl *PartialSpec);
+
+  /// Process a variable template partial specialization.
+  DeclResult ActOnVarTemplatePartialSpecialization(
+      VarTemplatePartialSpecializationDecl *PartialSpec);
 
   /// Deduce template arguments and instantiate a function template.
   /// Used by ActOnCallExpr when the callee is a function template.

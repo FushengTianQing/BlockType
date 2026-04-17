@@ -43,6 +43,17 @@ std::string DiagnosticsEngine::formatMessage(llvm::StringRef Msg,
 //===----------------------------------------------------------------------===//
 
 void DiagnosticsEngine::report(SourceLocation Loc, DiagLevel Level, llvm::StringRef Message) {
+  // SFINAE / overload resolution suppression: silently discard all
+  // diagnostics while SuppressCount > 0.
+  if (SuppressCount > 0) {
+    // Still track suppressed errors so hasNewErrors() works, but do not emit.
+    if (Level == DiagLevel::Error || Level == DiagLevel::Fatal)
+      ++NumErrors;
+    else if (Level == DiagLevel::Warning)
+      ++NumWarnings;
+    return;
+  }
+
   printDiagnostic(Loc, Level, Message);
   
   if (Level == DiagLevel::Error || Level == DiagLevel::Fatal)
@@ -80,6 +91,16 @@ void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
                                SourceLocation RangeStart, SourceLocation RangeEnd,
                                llvm::StringRef ExtraText) {
   DiagLevel Level = getDiagnosticLevel(ID);
+
+  // SFINAE suppression
+  if (SuppressCount > 0) {
+    if (Level == DiagLevel::Error || Level == DiagLevel::Fatal)
+      ++NumErrors;
+    else if (Level == DiagLevel::Warning)
+      ++NumWarnings;
+    return;
+  }
+
   llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
   std::string Message = ExtraText.empty()
       ? formatMessage(RawMsg, {})

@@ -14,6 +14,11 @@ add_executable(blocktype-sema-test
   AccessControlTest.cpp
   ConstantExprTest.cpp
   NameLookupTest.cpp
+  TemplateInstantiationTest.cpp
+  TemplateDeductionTest.cpp
+  ConceptTest.cpp
+  SFINAETest.cpp
+  VariadicTemplateTest.cpp
 )
 
 target_include_directories(blocktype-sema-test PUBLIC

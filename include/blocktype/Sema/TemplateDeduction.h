@@ -98,14 +98,16 @@ public:
   // === Function Template Argument Deduction ===
 
   /// Deduce function template arguments from call expressions.
-  /// @param FTD        Function template declaration
-  /// @param CallArgs   Call argument expressions
-  /// @param Info       Output: deduction results
-  /// @return           Deduction result code
+  /// @param FTD             Function template declaration
+  /// @param CallArgs        Call argument expressions
+  /// @param Info            Output: deduction results
+  /// @param ExplicitArgs    Explicitly specified template arguments (may be empty)
+  /// @return                Deduction result code
   TemplateDeductionResult
-  DeduceFunctionTemplateArguments(FunctionTemplateDecl *FTD,
-                                  llvm::ArrayRef<Expr *> CallArgs,
-                                  TemplateDeductionInfo &Info);
+  DeduceFunctionTemplateArguments(
+      FunctionTemplateDecl *FTD, llvm::ArrayRef<Expr *> CallArgs,
+      TemplateDeductionInfo &Info,
+      llvm::ArrayRef<TemplateArgument> ExplicitArgs = {});
 
   // === Type Deduction ===
 
@@ -131,9 +133,10 @@ public:
   // === Partial Ordering ===
 
   /// Determine if P1 is more specialized than P2.
-  /// Implements C++ [temp.deduct.partial] partial ordering algorithm.
+  /// Implements C++ [temp.deduct.partial] partial ordering algorithm
+  /// using standard bidirectional deduction.
   /// @return true if P1 is more specialized than P2
-  static bool isMoreSpecialized(TemplateDecl *P1, TemplateDecl *P2);
+  bool isMoreSpecialized(TemplateDecl *P1, TemplateDecl *P2);
 
 private:
   // Recursive deduction for various type combinations
@@ -163,7 +166,15 @@ private:
   QualType collapseReferences(QualType Inner, bool OuterIsLValue);
 
   /// Generate a unique synthetic type for partial ordering.
-  static QualType generateDeducedType(NamedDecl *Param);
+  /// Creates a unique TemplateTypeParmType for each parameter position.
+  QualType generateDeducedType(NamedDecl *Param, unsigned UniqueID);
+
+  /// Substitute template parameters in ParamType with unique synthetic types
+  /// for partial ordering deduction.
+  QualType transformForPartialOrdering(
+      QualType ParamType,
+      llvm::ArrayRef<NamedDecl *> Params,
+      unsigned &UniqueIDCounter);
 };
 
 } // namespace blocktype

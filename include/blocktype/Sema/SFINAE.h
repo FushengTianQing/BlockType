@@ -14,9 +14,12 @@
 #pragma once
 
 #include "blocktype/AST/Type.h"
+#include "blocktype/Basic/Diagnostics.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace blocktype {
+
+class DiagnosticsEngine;
 
 /// SFINAEContext - Manages the SFINAE (Substitution Failure Is Not An Error)
 /// context during template argument deduction and overload resolution.
@@ -47,6 +50,10 @@ class SFINAEContext {
   /// Diagnostic trap count at the point of SFINAE entry.
   /// Used to determine if any new errors were emitted during substitution.
   unsigned ErrorCountAtEntry = 0;
+
+  /// Pointer to the DiagnosticsEngine for error suppression.
+  /// Set by SFINAEGuard when it knows the DiagnosticsEngine.
+  DiagnosticsEngine *Diags = nullptr;
 
 public:
   /// Enter a SFINAE context. Increments nesting level.
@@ -96,19 +103,40 @@ public:
   bool hasNewErrors(unsigned CurrentErrorCount) const {
     return CurrentErrorCount > ErrorCountAtEntry;
   }
+
+  /// Set the DiagnosticsEngine for suppression integration.
+  void setDiagnostics(DiagnosticsEngine *D) { Diags = D; }
+  DiagnosticsEngine *getDiagnostics() const { return Diags; }
 };
 
 /// RAII guard for SFINAE context entry/exit.
+/// When constructed with a DiagnosticsEngine, automatically pushes/pops
+/// diagnostic suppression so that errors during substitution are silently
+/// discarded (the core SFINAE mechanism).
 class SFINAEGuard {
   SFINAEContext &Ctx;
+  DiagnosticsEngine *Diags;
 
 public:
-  explicit SFINAEGuard(SFINAEContext &C, unsigned CurrentErrorCount = 0)
-      : Ctx(C) {
+  /// Construct an SFINAE guard.
+  /// @param C              The SFINAEContext to enter/exit
+  /// @param CurrentErrorCount  Current error count (for hasNewErrors)
+  /// @param Diagnostics    Optional DiagnosticsEngine to suppress during SFINAE
+  explicit SFINAEGuard(SFINAEContext &C, unsigned CurrentErrorCount = 0,
+                        DiagnosticsEngine *Diagnostics = nullptr)
+      : Ctx(C), Diags(Diagnostics) {
     Ctx.enterSFINAE(CurrentErrorCount);
+    // Suppress diagnostics while in SFINAE context
+    if (Diags)
+      Diags->pushSuppression();
   }
 
-  ~SFINAEGuard() { Ctx.exitSFINAE(); }
+  ~SFINAEGuard() {
+    // Restore diagnostic emission before exiting SFINAE context
+    if (Diags)
+      Diags->popSuppression();
+    Ctx.exitSFINAE();
+  }
 
   // Non-copyable, non-movable
   SFINAEGuard(const SFINAEGuard &) = delete;

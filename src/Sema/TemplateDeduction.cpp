@@ -11,6 +11,7 @@
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/AST/Decl.h"
 #include "llvm/Support/Casting.h"
 
 using namespace blocktype;
@@ -40,7 +41,8 @@ TemplateDeductionInfo::getDeducedArgs(unsigned NumParams) const {
 TemplateDeductionResult
 TemplateDeduction::DeduceFunctionTemplateArguments(
     FunctionTemplateDecl *FTD, llvm::ArrayRef<Expr *> CallArgs,
-    TemplateDeductionInfo &Info) {
+    TemplateDeductionInfo &Info,
+    llvm::ArrayRef<TemplateArgument> ExplicitArgs) {
   FunctionDecl *Pattern =
       llvm::dyn_cast_or_null<FunctionDecl>(FTD->getTemplatedDecl());
   if (!Pattern)
@@ -58,6 +60,11 @@ TemplateDeduction::DeduceFunctionTemplateArguments(
 
   // Deduce from each parameter/argument pair
   Info.reset();
+
+  // First, seed any explicitly specified template arguments
+  for (unsigned I = 0; I < ExplicitArgs.size(); ++I) {
+    Info.addDeducedArg(I, ExplicitArgs[I]);
+  }
   for (unsigned I = 0; I < NumParams && I < CallArgs.size(); ++I) {
     ParmVarDecl *PVD = Pattern->getParamDecl(I);
     QualType ParamType = PVD->getType();
@@ -266,6 +273,50 @@ TemplateDeduction::DeduceFromTemplateSpecializationType(
     const TemplateSpecializationType *Param,
     const TemplateSpecializationType *Arg,
     TemplateDeductionInfo &Info) {
+  // Check if the parameter's template is a template template parameter.
+  // e.g., template<template<typename> class T> void f(T<int>)
+  // In this case, Param has template name "T" and we need to deduce T = Arg's template.
+  TemplateDecl *ParamTemplate = Param->getTemplateDecl();
+  if (auto *TTPD = llvm::dyn_cast_or_null<TemplateTemplateParmDecl>(ParamTemplate)) {
+    // Deduce the template template parameter to the argument's template.
+    unsigned Index = TTPD->getIndex();
+    TemplateDecl *ArgTemplate = Arg->getTemplateDecl();
+    if (!ArgTemplate)
+      return TemplateDeductionResult::NonDeducedMismatch;
+
+    if (Info.hasDeducedArg(Index)) {
+      TemplateArgument Prev = Info.getDeducedArg(Index);
+      if (Prev.isTemplate() && Prev.getAsTemplate() == ArgTemplate)
+        return TemplateDeductionResult::Success;
+      return TemplateDeductionResult::Inconsistent;
+    }
+
+    Info.addDeducedArg(Index, TemplateArgument(ArgTemplate));
+
+    // Still need to recursively deduce inner template arguments
+    auto ParamArgs = Param->getTemplateArgs();
+    auto ArgArgs = Arg->getTemplateArgs();
+
+    if (ParamArgs.size() != ArgArgs.size())
+      return TemplateDeductionResult::NonDeducedMismatch;
+
+    for (unsigned I = 0; I < ParamArgs.size(); ++I) {
+      const TemplateArgument &PA = ParamArgs[I];
+      const TemplateArgument &AA = ArgArgs[I];
+
+      if (PA.isType() && AA.isType()) {
+        TemplateDeductionResult Result =
+            DeduceTemplateArguments(PA.getAsType(), AA.getAsType(), Info);
+        if (Result != TemplateDeductionResult::Success)
+          return Result;
+      } else if (PA.getKind() != AA.getKind()) {
+        return TemplateDeductionResult::NonDeducedMismatch;
+      }
+    }
+
+    return TemplateDeductionResult::Success;
+  }
+
   // Template names must match
   if (Param->getTemplateName() != Arg->getTemplateName())
     return TemplateDeductionResult::NonDeducedMismatch;
@@ -406,88 +457,133 @@ bool TemplateDeduction::isMoreSpecialized(TemplateDecl *P1,
   if (!FD1 || !FD2)
     return false;
 
-  // Algorithm (C++ [temp.deduct.partial]):
-  // 1. For each template, transform function parameters by replacing each
-  //    template parameter with a unique synthetic type.
-  // 2. Attempt deduction in both directions:
-  //    - P1_at_P2: use P1's pattern to deduce P2's parameters
-  //    - P2_at_P1: use P2's pattern to deduce P1's parameters
-  // 3. P1 is more specialized if P2_at_P1 succeeds but P1_at_P2 fails.
-
   unsigned N1 = FD1->getNumParams();
   unsigned N2 = FD2->getNumParams();
   if (N1 != N2)
     return false;
 
-  // Score-based approach: compute a "specificity" score for each template.
-  // A type is more specialized if it has more concrete structure:
-  //   - TemplateTypeParmType: least specialized (score 0)
-  //   - PointerType/ReferenceType wrapping T: +1 per level
-  //   - TemplateSpecializationType: +2 per fully-specified arg
-  //   - Concrete types (int, etc.): most specialized
-  auto computeSpecificity = [](QualType T) -> int {
-    if (T.isNull())
-      return 0;
+  // Standard bidirectional deduction per C++ [temp.deduct.partial]:
+  //
+  // P1 is more specialized than P2 if:
+  //   - Deduction of P2's pattern from P1's synthesized args SUCCEEDS, AND
+  //   - Deduction of P1's pattern from P2's synthesized args FAILS
+  //
+  // Step 1: Generate unique synthetic types for P1's template parameters.
+  //         Call them S1_0, S1_1, S1_2, ...
+  // Step 2: Substitute P2's function parameter types with P1's params → P2_syn.
+  //         Then deduce P2_syn from (S1_0, S1_1, ...) → this tests if P2
+  //         accepts P1's pattern.
+  // Step 3: Generate unique synthetic types for P2's template parameters.
+  //         Call them S2_0, S2_1, S2_2, ...
+  // Step 4: Substitute P1's function parameter types with P2's params → P1_syn.
+  //         Then deduce P1_syn from (S2_0, S2_1, ...) → this tests if P1
+  //         accepts P2's pattern.
 
-    int Score = 0;
-    const Type *Ty = T.getTypePtr();
-
-    // Recursively decompose the type
-    while (Ty) {
-      if (llvm::isa<TemplateTypeParmType>(Ty)) {
-        // Bare template parameter: least specialized
-        break;
-      } else if (auto *PT = llvm::dyn_cast<PointerType>(Ty)) {
-        Score += 1;
-        Ty = PT->getPointeeType();
-      } else if (auto *RT = llvm::dyn_cast<ReferenceType>(Ty)) {
-        Score += 1;
-        Ty = RT->getReferencedType();
-      } else if (auto *TST = llvm::dyn_cast<TemplateSpecializationType>(Ty)) {
-        // Template specialization: each concrete arg adds specificity
-        Score += 2;
-        // Check if args are themselves template params (less specialized)
-        for (const auto &Arg : TST->getTemplateArgs()) {
-          if (Arg.isType()) {
-            if (llvm::isa<TemplateTypeParmType>(Arg.getAsType().getTypePtr()))
-              Score -= 1; // Deduction-dependent arg is less specific
-            else
-              Score += 1; // Concrete arg is more specific
-          }
-        }
-        break;
-      } else if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
-        Score += 1;
-        Ty = AT->getElementType();
-      } else if (auto *FT = llvm::dyn_cast<FunctionType>(Ty)) {
-        Score += 1;
-        // Score return type
-        const Type *Ret = FT->getReturnType();
-        if (Ret && !llvm::isa<TemplateTypeParmType>(Ret))
-          Score += 1;
-        break;
-      } else {
-        // BuiltinType, RecordType, EnumType, etc. → concrete type
-        Score += 3;
-        break;
-      }
-    }
-    return Score;
-  };
-
-  int P1Score = 0, P2Score = 0;
+  // Direction 1: Can P2 deduce from P1's synthesized args?
+  unsigned UniqueID1 = 0;
+  TemplateDeductionInfo Info12;
+  bool P2_deduce_from_P1 = true;
   for (unsigned I = 0; I < N1; ++I) {
-    P1Score += computeSpecificity(FD1->getParamDecl(I)->getType());
-    P2Score += computeSpecificity(FD2->getParamDecl(I)->getType());
+    QualType P1ParamType = FD1->getParamDecl(I)->getType();
+    QualType P1SynthArg = transformForPartialOrdering(
+        P1ParamType, P1Params->getParams(), UniqueID1);
+
+    QualType P2ParamType = FD2->getParamDecl(I)->getType();
+    TemplateDeductionResult R =
+        DeduceTemplateArguments(P2ParamType, P1SynthArg, Info12);
+    if (R != TemplateDeductionResult::Success) {
+      P2_deduce_from_P1 = false;
+      break;
+    }
   }
 
-  // P1 is more specialized than P2 if it has a higher specificity score
-  return P1Score > P2Score;
+  // Direction 2: Can P1 deduce from P2's synthesized args?
+  unsigned UniqueID2 = 0;
+  TemplateDeductionInfo Info21;
+  bool P1_deduce_from_P2 = true;
+  for (unsigned I = 0; I < N2; ++I) {
+    QualType P2ParamType = FD2->getParamDecl(I)->getType();
+    QualType P2SynthArg = transformForPartialOrdering(
+        P2ParamType, P2Params->getParams(), UniqueID2);
+
+    QualType P1ParamType = FD1->getParamDecl(I)->getType();
+    TemplateDeductionResult R =
+        DeduceTemplateArguments(P1ParamType, P2SynthArg, Info21);
+    if (R != TemplateDeductionResult::Success) {
+      P1_deduce_from_P2 = false;
+      break;
+    }
+  }
+
+  // Per C++ [temp.deduct.partial]:
+  // P1 is more specialized if P2 can deduce from P1 but NOT vice versa.
+  // If both succeed, neither is more specialized (ambiguous).
+  // If both fail, neither is more specialized.
+  return P2_deduce_from_P1 && !P1_deduce_from_P2;
 }
 
-QualType
-TemplateDeduction::generateDeducedType(NamedDecl *Param) {
-  // In a full implementation, this would create a unique synthetic type
-  // via ASTContext for partial ordering deduction.
-  return QualType(); // placeholder
+QualType TemplateDeduction::generateDeducedType(NamedDecl *Param,
+                                                  unsigned UniqueID) {
+  // Generate a unique synthetic type for partial ordering.
+  // Per C++ [temp.deduct.partial], we use a unique invented type for each
+  // template parameter position. We create a fresh TemplateTypeParmType
+  // with a unique depth/index combination.
+  if (auto *TTPD = llvm::dyn_cast<TemplateTypeParmDecl>(Param)) {
+    // Create a synthetic TemplateTypeParmType with a unique index.
+    // We use UniqueID * 100 + original index to ensure uniqueness.
+    unsigned SynthIndex = UniqueID;
+    ASTContext &Ctx = SemaRef.getASTContext();
+    auto *SynthType = Ctx.getTemplateTypeParmType(TTPD, SynthIndex,
+                                                   /*Depth=*/999, false);
+    return QualType(SynthType, Qualifier::None);
+  }
+  // For non-type and template template params, return null (not handled yet)
+  return QualType();
+}
+
+QualType TemplateDeduction::transformForPartialOrdering(
+    QualType ParamType,
+    llvm::ArrayRef<NamedDecl *> Params,
+    unsigned &UniqueIDCounter) {
+  // Substitute template parameters in ParamType with unique synthetic types.
+  // This creates the "A" type used in partial ordering deduction.
+  if (ParamType.isNull())
+    return ParamType;
+
+  const Type *Ty = ParamType.getTypePtr();
+
+  // TemplateTypeParmType → replace with synthetic
+  if (auto *TTP = llvm::dyn_cast<TemplateTypeParmType>(Ty)) {
+    unsigned Index = TTP->getIndex();
+    if (Index < Params.size()) {
+      return generateDeducedType(Params[Index], UniqueIDCounter++);
+    }
+    return ParamType;
+  }
+
+  // PointerType → recurse on pointee
+  if (auto *PT = llvm::dyn_cast<PointerType>(Ty)) {
+    QualType Inner = transformForPartialOrdering(
+        QualType(PT->getPointeeType(), Qualifier::None), Params,
+        UniqueIDCounter);
+    if (Inner.isNull()) return QualType();
+    return QualType(SemaRef.getASTContext().getPointerType(Inner.getTypePtr()),
+                     ParamType.getQualifiers());
+  }
+
+  // ReferenceType → recurse on referenced
+  if (auto *RT = llvm::dyn_cast<ReferenceType>(Ty)) {
+    QualType Inner = transformForPartialOrdering(
+        QualType(RT->getReferencedType(), Qualifier::None), Params,
+        UniqueIDCounter);
+    if (Inner.isNull()) return QualType();
+    if (RT->isLValueReference())
+      return QualType(SemaRef.getASTContext().getLValueReferenceType(
+                          Inner.getTypePtr()), ParamType.getQualifiers());
+    return QualType(SemaRef.getASTContext().getRValueReferenceType(
+                        Inner.getTypePtr()), ParamType.getQualifiers());
+  }
+
+  // For other types, return as-is (no template params to substitute)
+  return ParamType;
 }

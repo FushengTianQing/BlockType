@@ -17,6 +17,7 @@
 #include "blocktype/AST/ASTNode.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/DeclContext.h"
+#include "blocktype/AST/Type.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/raw_ostream.h"
@@ -359,6 +360,12 @@ LookupResult Sema::LookupQualifiedName(llvm::StringRef Name,
 
   case NestedNameSpecifier::TypeSpec: {
     const blocktype::Type *T = NNS->getAsType();
+    // Dependent type qualifier (e.g., T::foo): cannot resolve at template
+    // definition time. Return empty result; name resolution is deferred
+    // until template instantiation provides concrete types.
+    if (T && T->isDependentType()) {
+      return Result;
+    }
     if (T && T->isRecordType()) {
       auto *RT = static_cast<const RecordType *>(T);
       RecordDecl *RD = RT->getDecl();

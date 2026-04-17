@@ -9,6 +9,7 @@
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
+#include "blocktype/Sema/ConstraintSatisfaction.h"
 #include "blocktype/Sema/SFINAE.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
@@ -25,7 +26,8 @@ Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
   : Context(C), Diags(D), Symbols(C),
     TC(C, D), ConstEval(C),
     Instantiator(std::make_unique<TemplateInstantiator>(*this)),
-    Deduction(std::make_unique<TemplateDeduction>(*this)) {
+    Deduction(std::make_unique<TemplateDeduction>(*this)),
+    ConstraintChecker(std::make_unique<ConstraintSatisfaction>(*this)) {
   PushScope(ScopeFlags::TranslationUnitScope);
 }
 
