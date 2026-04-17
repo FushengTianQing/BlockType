@@ -20,6 +20,8 @@
 
 namespace blocktype {
 
+class FunctionDecl; // Forward declaration
+
 /// ConversionRank - The rank of an implicit conversion sequence.
 ///
 /// Following the C++ standard [over.ics.rank]:

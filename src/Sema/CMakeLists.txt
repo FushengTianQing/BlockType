@@ -1,8 +1,13 @@
 add_library(blocktype-sema
+  AccessControl.cpp
+  ConstantExpr.cpp
+  Conversion.cpp
   Lookup.cpp
+  Overload.cpp
   Scope.cpp
   Sema.cpp
   SymbolTable.cpp
+  TypeCheck.cpp
   TypeDeduction.cpp
 )
 
