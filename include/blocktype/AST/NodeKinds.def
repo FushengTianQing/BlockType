@@ -85,6 +85,10 @@ EXPR(ReflexprExpr, Expr)
 // Coroutine
 EXPR(CoawaitExpr, Expr)
 
+// Dependent name resolution (two-phase lookup)
+EXPR(CXXDependentScopeMemberExpr, Expr)
+EXPR(DependentScopeDeclRefExpr, Expr)
+
 // Error recovery
 EXPR(RecoveryExpr, Expr)
 

@@ -52,33 +52,28 @@ Task 5.1.3 — 模板名称查找与 Sema 集成 ⚠️ 部分缺失
 
 E5.1.3.2 扩展名称查找处理模板名	✅ 已修复
 
-E5.1.3.3 依赖类型查找	❌	未实现
+E5.1.3.3 依赖类型查找	✅	完整实现（Layer 1-4）
 
-
+实施方案见 `docs/dev status/IMPL-PLAN-dependent-lookup.md`，分 4 层实现：
 
 问题：
 
-❌❌❌1. LookupUnqualifiedName 未处理模板名：开发文档要求"当 Name 匹配到 ClassTemplateDecl/FunctionTemplateDecl 时，需要正确返回"。
+1. LookupUnqualifiedName 未处理模板名：开发文档要求"当 Name 匹配到 ClassTemplateDecl/FunctionTemplateDecl 时，需要正确返回"。
    → 状态：✅ 已修复（b536aaf）— LookupUnqualifiedName 全局回退中添加了 lookupTemplate/lookupConcept 查找；LookupTypeName 中 ClassTemplateDecl 被识别为有效类型名
 
-但实际上优先级很低，因为：
-
-Parser 尚未产生模板作用域 — TemplateScope 标志已定义但 Parser 从未使用它（没有 pushScope(TemplateScope) 调用）。模板参数列表的解析在 Parser 中还没构建 AST 作用域链。
-
-当前编译器没有两阶段名称查找 — 这是 C++ 模板编译的完整特性，需要 Parser 在遇到模板定义时标记依赖名称，实例化时重新查找。BlockType 当前的模板系统是"先实例化再查找"的简化模型，不需要两阶段。
-
-依赖名称查找的完整实现 需要额外基础设施：UnresolvedLookupExpr、DependentScopeDeclRefExpr 等 AST 节点来表示未解析的依赖名称。
+2. 依赖类型查找未实现：开发文档要求检查 isDependentType() 区分依赖/非依赖名称。
+   → 状态：✅ 已修复 — 完整 4 层实现：
+   - **Layer 1** (fdba823): Parser 在解析 `template<typename T>` 后 `pushScope(TemplateScope)`，将模板参数加入 Scope，使 `lookupInScope("T")` 可见
+   - **Layer 2** (53d7b6f): `LookupResult` 新增 `isDependent` 标志；`LookupUnqualifiedName` 检测 scope 链中的 `TemplateScope`，空查找时标记为依赖
+   - **Layer 3** (6904d76): `SubstituteDependentType` 替换 BaseType 后，如果 SubBase 为非依赖 RecordType，通过 `LookupQualifiedName` 真正解析 `T::name` 成员
+   - **Layer 4**: 新增 `CXXDependentScopeMemberExpr` + `DependentScopeDeclRefExpr` AST 节点；`Sema::isDependentContext()` 检测模板上下文；`SubstituteExpr` 处理新节点并在实例化时解析为具体 `MemberExpr`/`DeclRefExpr`
 
 结论
-层面	当前能力	是否阻塞
-LookupQualifiedName	✅ 已能检测依赖类型 NNS	不阻塞
-LookupUnqualifiedName 依赖检测	Scope 有 TemplateScope 标志，但 Parser 未使用	代码层面无阻塞
-完整两阶段查找	需要 DependentScopeDeclRefExpr 等 AST 节点	Phase 6+
-建议：标记为"已部分完成，完整两阶段查找为 Phase 6+ 工作"。当前 LookupQualifiedName 的 isDependentType() 检测已覆盖最常见的依赖类型场景（T::foo），LookupUnqualifiedName 的成员查找延迟不阻塞当前模板系统功能。
-
-
-❌❌❌2. 依赖类型查找未实现：开发文档要求检查 isDependentType() 区分依赖/非依赖名称。
-   → 状态：✅ 已修复 — LookupQualifiedName 新增 isDependentType() 检测，当 NNS 限定符为依赖类型（如 T::foo）时返回空结果，延迟到模板实例化时解析。LookupUnqualifiedName 的成员查找依赖检测需要 Scope 携带依赖信息，作为后续 TODO。❌❌❌
+层面	当前能力	状态
+LookupQualifiedName	✅ isDependentType() 检测依赖 NNS	已完成
+LookupUnqualifiedName 依赖检测	✅ TemplateScope 检测 + Dependent 标记	已完成
+SubstituteDependentType	✅ 真正解析 T::name 成员	已完成
+完整两阶段查找	✅ 新 AST 节点 + 实例化时解析	已完成
 
 
 Task 5.1.4 — 模板相关诊断 ID
@@ -166,7 +161,7 @@ isMoreSpecialized 实现	⚠️	使用评分法，非标准算法
 | #6 | FindExistingSpecialization 线性扫描 | ⏳ 性能优化 | — |
 | #7 | QualifiedType/cv-qualifier 保留 | ✅ 已修复 | Stage 5.5 |
 | #8 | LookupUnqualifiedName 模板名查找 | ✅ 已修复 | b536aaf |
-| #9 | 依赖类型查找 | ✅ 已修复 | Stage 5.5 |
+| #9 | 依赖类型查找 | ✅ 已修复 | Stage 5.5 Layer 1-4 |
 | #10 | 显式指定模板实参 | ✅ 已修复 | Stage 5.5 |
 | #11 | CV 限定符剥离 | ✅ 已修复 | b536aaf |
 | #12 | collapseReferences 不完整 | ✅ 已修复 | b536aaf |

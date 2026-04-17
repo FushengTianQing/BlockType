@@ -9,6 +9,7 @@
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Stmt.h"
+#include "blocktype/Sema/Lookup.h"  // NestedNameSpecifier definition
 #include "llvm/Support/raw_ostream.h"
 
 namespace blocktype {
@@ -558,6 +559,50 @@ void ReflexprExpr::dump(raw_ostream &OS, unsigned Indent) const {
     OS << "Argument:\n";
     Argument->dump(OS, Indent + 2);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// CXXDependentScopeMemberExpr
+//===----------------------------------------------------------------------===//
+
+void CXXDependentScopeMemberExpr::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "CXXDependentScopeMemberExpr " << (IsArrow ? "->" : ".") << MemberName << "\n";
+
+  if (Base) {
+    printIndent(OS, Indent + 1);
+    OS << "Base:\n";
+    Base->dump(OS, Indent + 2);
+  } else if (!BaseType.isNull()) {
+    printIndent(OS, Indent + 1);
+    OS << "BaseType: ";
+    BaseType.dump(OS);
+    OS << "\n";
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// DependentScopeDeclRefExpr
+//===----------------------------------------------------------------------===//
+
+void DependentScopeDeclRefExpr::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "DependentScopeDeclRefExpr ";
+  if (Qualifier) {
+    // Print qualifier kind without calling getAsString() to avoid
+    // cross-library dependency (NestedNameSpecifier methods are in Sema).
+    switch (Qualifier->getKind()) {
+    case NestedNameSpecifier::Global: OS << "::"; break;
+    case NestedNameSpecifier::Namespace:
+      OS << "<ns>::"; break;
+    case NestedNameSpecifier::TypeSpec:
+    case NestedNameSpecifier::TemplateTypeSpec:
+      OS << "<type>::"; break;
+    case NestedNameSpecifier::Identifier:
+      OS << Qualifier->getAsIdentifier() << "::"; break;
+    }
+  }
+  OS << DeclName << "\n";
 }
 
 //===----------------------------------------------------------------------===//

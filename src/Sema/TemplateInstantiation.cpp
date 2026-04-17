@@ -11,6 +11,7 @@
 #include "blocktype/Sema/ConstantExpr.h"
 #include "blocktype/Sema/Lookup.h"
 #include "blocktype/AST/Decl.h"
+#include "blocktype/AST/Expr.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "llvm/Support/Casting.h"
 
@@ -498,6 +499,76 @@ Expr *TemplateInstantiator::SubstituteExpr(Expr *E,
       return E;
     }
     // For other DeclRefExprs, return as-is (non-dependent)
+    return E;
+  }
+
+  // CXXDependentScopeMemberExpr → resolve member access on dependent type
+  if (auto *DSME = llvm::dyn_cast<CXXDependentScopeMemberExpr>(E)) {
+    // Substitute the base type
+    QualType SubBaseType = SubstituteType(DSME->getBaseType(), Args);
+    if (SubBaseType.isNull())
+      SubBaseType = DSME->getBaseType();
+
+    // If the substituted base is still dependent, preserve the expression
+    // with the substituted base type
+    if (SubBaseType->isDependentType()) {
+      return Context.create<CXXDependentScopeMemberExpr>(
+          DSME->getLocation(), DSME->getBase(), SubBaseType,
+          DSME->isArrow(), DSME->getMemberName());
+    }
+
+    // Base is now concrete — look up the member
+    if (SubBaseType->isRecordType()) {
+      auto *RT = static_cast<const RecordType *>(SubBaseType.getTypePtr());
+      RecordDecl *RD = RT->getDecl();
+      // Only CXXRecordDecl inherits DeclContext and supports member lookup
+      auto *CXXRD = dyn_cast<CXXRecordDecl>(static_cast<ASTNode *>(RD));
+      if (CXXRD) {
+        DeclContext *DC = static_cast<DeclContext *>(CXXRD);
+        if (NamedDecl *Found = DC->lookup(DSME->getMemberName())) {
+          if (auto *VD = dyn_cast<ValueDecl>(static_cast<ASTNode *>(Found))) {
+            return Context.create<MemberExpr>(
+                DSME->getLocation(), DSME->getBase(), VD,
+                DSME->isArrow());
+          }
+        }
+      }
+    }
+
+    // Resolution failed — return as-is (will produce an error later)
+    return E;
+  }
+
+  // DependentScopeDeclRefExpr → resolve qualified dependent name reference
+  if (auto *DSDRE = llvm::dyn_cast<DependentScopeDeclRefExpr>(E)) {
+    NestedNameSpecifier *NNS = DSDRE->getQualifier();
+
+    // Try to resolve the qualifier's type
+    if (NNS && NNS->getKind() == NestedNameSpecifier::TypeSpec) {
+      const Type *NNS_TYPE = NNS->getAsType();
+      QualType SubType = SubstituteType(QualType(NNS_TYPE, Qualifier::None), Args);
+
+      if (!SubType.isNull() && !SubType->isDependentType()) {
+        // Build a new NNS with the substituted type
+        NestedNameSpecifier *SubNNS =
+            NestedNameSpecifier::Create(Context, nullptr, SubType.getTypePtr());
+
+        // Try qualified lookup
+        LookupResult Result = SemaRef.LookupQualifiedName(
+            DSDRE->getDeclName(), SubNNS);
+
+        if (Result.isSingleResult()) {
+          NamedDecl *Found = Result.getFoundDecl();
+          if (auto *VD = dyn_cast<ValueDecl>(static_cast<ASTNode *>(Found))) {
+            return Context.create<DeclRefExpr>(DSDRE->getLocation(), VD);
+          }
+          // For type results, return the expression as-is — type substitution
+          // in the enclosing context will handle it.
+        }
+      }
+    }
+
+    // Could not resolve — return as-is
     return E;
   }
 

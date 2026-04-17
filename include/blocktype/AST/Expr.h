@@ -23,6 +23,9 @@
 
 namespace blocktype {
 
+// Forward declarations
+class NestedNameSpecifier;
+
 //===----------------------------------------------------------------------===//
 // Operator Kinds
 //===----------------------------------------------------------------------===//
@@ -1326,6 +1329,90 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CoawaitExprKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Dependent Name Resolution (Two-Phase Lookup)
+//===----------------------------------------------------------------------===//
+
+/// CXXDependentScopeMemberExpr - Represents a member access expression where
+/// the base type is dependent (e.g., x.member where x has type T).
+///
+/// Created during template definition parsing when the base expression's type
+/// depends on a template parameter. Resolved during template instantiation by
+/// SubstituteExpr which replaces it with a concrete MemberExpr.
+///
+/// Examples:
+///   t.foo()       where t is of type T
+///   T::value      where T is a template type parameter
+///   this->member  inside a template class
+class CXXDependentScopeMemberExpr : public Expr {
+  Expr *Base;                    // Base expression (may be null for T::foo)
+  QualType BaseType;             // Type of the base (used when Base is null)
+  bool IsArrow;                  // true if -> (false if .)
+  llvm::StringRef MemberName;    // Name of the member being accessed
+
+public:
+  CXXDependentScopeMemberExpr(SourceLocation Loc, Expr *Base,
+                               QualType BaseType, bool IsArrow,
+                               llvm::StringRef MemberName)
+      : Expr(Loc), Base(Base), BaseType(BaseType), IsArrow(IsArrow),
+        MemberName(MemberName) {}
+
+  Expr *getBase() const { return Base; }
+  QualType getBaseType() const { return BaseType; }
+  bool isArrow() const { return IsArrow; }
+  llvm::StringRef getMemberName() const { return MemberName; }
+
+  NodeKind getKind() const override {
+    return NodeKind::CXXDependentScopeMemberExprKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// Always type-dependent — the member type is unknown until instantiation.
+  bool isTypeDependent() const override { return true; }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::CXXDependentScopeMemberExprKind;
+  }
+};
+
+/// DependentScopeDeclRefExpr - Represents a reference to a name in a dependent
+/// scope, e.g., T::type or typename T::value_type.
+///
+/// Created during template definition parsing when a qualified name refers to
+/// a dependent type's member. Resolved during instantiation by SubstituteExpr
+/// which replaces it with a concrete DeclRefExpr or MemberExpr.
+///
+/// Examples:
+///   T::iterator          where T is a template type parameter
+///   Container::value_type where Container is dependent
+class DependentScopeDeclRefExpr : public Expr {
+  NestedNameSpecifier *Qualifier;  // The qualifying scope (e.g., T::)
+  llvm::StringRef DeclName;        // The name being referenced (e.g., type)
+
+public:
+  DependentScopeDeclRefExpr(SourceLocation Loc,
+                              NestedNameSpecifier *Qualifier,
+                              llvm::StringRef DeclName)
+      : Expr(Loc), Qualifier(Qualifier), DeclName(DeclName) {}
+
+  NestedNameSpecifier *getQualifier() const { return Qualifier; }
+  llvm::StringRef getDeclName() const { return DeclName; }
+
+  NodeKind getKind() const override {
+    return NodeKind::DependentScopeDeclRefExprKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// Always type-dependent — the referenced type is unknown until instantiation.
+  bool isTypeDependent() const override { return true; }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::DependentScopeDeclRefExprKind;
   }
 };
 

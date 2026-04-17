@@ -161,6 +161,13 @@ class Sema {
   /// Translation unit being processed.
   TranslationUnitDecl *CurTU = nullptr;
 
+  /// Template definition nesting depth.
+  /// Incremented when entering a template definition body,
+  /// decremented when exiting.  When > 0, we are inside a
+  /// template definition and name lookup should account for
+  /// dependent names (two-phase lookup).
+  unsigned TemplateDefinitionDepth = 0;
+
 public:
   Sema(ASTContext &C, DiagnosticsEngine &D);
   ~Sema();
@@ -202,6 +209,27 @@ public:
   void PushScope(ScopeFlags Flags);
   void PopScope();
   Scope *getCurrentScope() const { return CurrentScope; }
+
+  /// Returns true if we are currently inside a template definition body.
+  /// Checks both the explicit depth counter and the scope chain for
+  /// TemplateScope flags.
+  bool isDependentContext() const {
+    if (TemplateDefinitionDepth > 0) return true;
+    // Also check if the current scope chain has a TemplateScope.
+    for (Scope *S = CurrentScope; S; S = S->getParent()) {
+      if (S->hasFlags(ScopeFlags::TemplateScope))
+        return true;
+    }
+    return false;
+  }
+
+  /// Enter a template definition body. Increments the nesting depth.
+  void EnterTemplateDefinition() { ++TemplateDefinitionDepth; }
+
+  /// Exit a template definition body. Decrements the nesting depth.
+  void ExitTemplateDefinition() {
+    if (TemplateDefinitionDepth > 0) --TemplateDefinitionDepth;
+  }
 
   //===------------------------------------------------------------------===//
   // DeclContext management
