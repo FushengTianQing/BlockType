@@ -2,6 +2,7 @@
 
 #include "blocktype/Basic/SourceLocation.h"
 #include "blocktype/Basic/DiagnosticIDs.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -17,6 +18,11 @@ enum class DiagnosticLanguage {
 };
 
 /// DiagnosticsEngine - Handles diagnostic reporting with multi-language support
+///
+/// Supports printf-style %0, %1, ... parameter substitution in diagnostic
+/// messages. For example, if a diagnostic message is "use of undeclared
+/// identifier '%0'", calling report(Loc, ID, "x") will produce:
+///   "use of undeclared identifier 'x'"
 class DiagnosticsEngine {
   unsigned NumErrors = 0;
   unsigned NumWarnings = 0;
@@ -37,18 +43,27 @@ public:
   /// Get the current diagnostic language
   DiagnosticLanguage getLanguage() const { return Lang; }
 
-  /// Report a diagnostic with a custom message
+  //===------------------------------------------------------------------===//
+  // report overloads
+  //===------------------------------------------------------------------===//
+
+  /// Report a diagnostic with a custom message (no substitution).
   void report(SourceLocation Loc, DiagLevel Level, llvm::StringRef Message);
 
-  /// Report a diagnostic with a diagnostic ID
+  /// Report a diagnostic with a diagnostic ID (no parameters).
   void report(SourceLocation Loc, DiagID ID);
 
-  /// Report a diagnostic with a diagnostic ID and additional text
-  void report(SourceLocation Loc, DiagID ID, llvm::StringRef ExtraText);
+  /// Report a diagnostic with one %0 substitution parameter.
+  void report(SourceLocation Loc, DiagID ID, llvm::StringRef Arg0);
 
-  /// Report a diagnostic with source range (for highlighting)
-  void report(SourceLocation Loc, DiagID ID, SourceLocation RangeStart, 
-              SourceLocation RangeEnd, llvm::StringRef ExtraText = "");
+  /// Report a diagnostic with two %0/%1 substitution parameters.
+  void report(SourceLocation Loc, DiagID ID,
+              llvm::StringRef Arg0, llvm::StringRef Arg1);
+
+  /// Report a diagnostic with source range (for highlighting).
+  void report(SourceLocation Loc, DiagID ID,
+              SourceLocation RangeStart, SourceLocation RangeEnd,
+              llvm::StringRef ExtraText = "");
 
   unsigned getNumErrors() const { return NumErrors; }
   unsigned getNumWarnings() const { return NumWarnings; }
@@ -66,6 +81,11 @@ public:
 
   /// Get severity name in current language
   const char* getSeverityName(DiagLevel Level) const;
+
+  /// Format a message by replacing %0, %1, ... with the provided arguments.
+  /// Returns the formatted string.
+  static std::string formatMessage(llvm::StringRef Msg,
+                                   llvm::ArrayRef<llvm::StringRef> Args);
 
 private:
   void printDiagnostic(SourceLocation Loc, DiagLevel Level, llvm::StringRef Message);

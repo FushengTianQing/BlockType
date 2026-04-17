@@ -113,17 +113,13 @@ bool AccessControl::CheckMemberAccess(NamedDecl *Member,
   // Access denied — report appropriate diagnostic
   if (Access == AccessSpecifier::AS_private) {
     Diags.report(AccessLoc, DiagID::err_access_private,
-                 "'" + Member->getName().str() +
-                 "' is a private member of '" +
-                 MemberClass->getName().str() + "'");
+                 Member->getName(), MemberClass->getName());
     return false;
   }
 
   if (Access == AccessSpecifier::AS_protected) {
     Diags.report(AccessLoc, DiagID::err_access_protected,
-                 "'" + Member->getName().str() +
-                 "' is a protected member of '" +
-                 MemberClass->getName().str() + "'");
+                 Member->getName(), MemberClass->getName());
     return false;
   }
 
@@ -202,7 +198,7 @@ bool AccessControl::CheckBaseClassAccess(CXXRecordDecl *Base,
     }
 
     Diags.report(AccessLoc, DiagID::err_access_private,
-                 Base->getName().str() + " (private base)");
+                 Base->getName(), "private base");
     return false;
   }
 
@@ -237,7 +233,7 @@ bool AccessControl::CheckBaseClassAccess(CXXRecordDecl *Base,
     }
 
     Diags.report(AccessLoc, DiagID::err_access_protected,
-                 Base->getName().str() + " (protected base)");
+                 Base->getName(), "protected base");
     return false;
   }
 

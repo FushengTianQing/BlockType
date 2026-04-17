@@ -4,6 +4,44 @@
 
 namespace blocktype {
 
+//===----------------------------------------------------------------------===//
+// formatMessage — %0, %1, ... parameter substitution
+//===----------------------------------------------------------------------===//
+
+std::string DiagnosticsEngine::formatMessage(llvm::StringRef Msg,
+                                             llvm::ArrayRef<llvm::StringRef> Args) {
+  std::string Result;
+  Result.reserve(Msg.size() + 64);
+
+  for (size_t I = 0; I < Msg.size(); ++I) {
+    if (Msg[I] == '%' && I + 1 < Msg.size()) {
+      char Next = Msg[I + 1];
+      if (Next >= '0' && Next <= '9') {
+        unsigned ArgIndex = static_cast<unsigned>(Next - '0');
+        if (ArgIndex < Args.size()) {
+          Result += Args[ArgIndex];
+        } else {
+          // No argument for this placeholder — keep as-is
+          Result += '%';
+          Result += Next;
+        }
+        ++I; // Skip the digit
+        continue;
+      }
+      // Not a %N pattern — output the % literally
+      Result += '%';
+      continue;
+    }
+    Result += Msg[I];
+  }
+
+  return Result;
+}
+
+//===----------------------------------------------------------------------===//
+// report overloads
+//===----------------------------------------------------------------------===//
+
 void DiagnosticsEngine::report(SourceLocation Loc, DiagLevel Level, llvm::StringRef Message) {
   printDiagnostic(Loc, Level, Message);
   
@@ -19,20 +57,33 @@ void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID) {
   report(Loc, Level, Message);
 }
 
-void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID, llvm::StringRef ExtraText) {
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID, llvm::StringRef Arg0) {
   DiagLevel Level = getDiagnosticLevel(ID);
-  std::string Message = std::string(getDiagnosticMessage(ID, Lang)) + ": " + ExtraText.str();
-  report(Loc, Level, Message);
+  llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
+  std::string Formatted = formatMessage(RawMsg, {Arg0});
+  // If the message had no %0 placeholder, append the arg for backward compat
+  if (RawMsg.find("%0") == llvm::StringRef::npos && !Arg0.empty()) {
+    Formatted += ": " + Arg0.str();
+  }
+  report(Loc, Level, Formatted);
 }
 
-void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID, 
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
+                                llvm::StringRef Arg0, llvm::StringRef Arg1) {
+  DiagLevel Level = getDiagnosticLevel(ID);
+  llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
+  std::string Formatted = formatMessage(RawMsg, {Arg0, Arg1});
+  report(Loc, Level, Formatted);
+}
+
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
                                SourceLocation RangeStart, SourceLocation RangeEnd,
                                llvm::StringRef ExtraText) {
   DiagLevel Level = getDiagnosticLevel(ID);
-  std::string Message = std::string(getDiagnosticMessage(ID, Lang));
-  if (!ExtraText.empty()) {
-    Message += ": " + ExtraText.str();
-  }
+  llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
+  std::string Message = ExtraText.empty()
+      ? formatMessage(RawMsg, {})
+      : formatMessage(RawMsg, {}) + ": " + ExtraText.str();
   printDiagnostic(Loc, Level, Message);
   
   // Print source line with highlighting if SourceManager is available
@@ -45,6 +96,10 @@ void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
   else if (Level == DiagLevel::Warning)
     ++NumWarnings;
 }
+
+//===----------------------------------------------------------------------===//
+// Diagnostic message lookup
+//===----------------------------------------------------------------------===//
 
 DiagLevel DiagnosticsEngine::getDiagnosticLevel(DiagID ID) {
   switch (ID) {
@@ -116,6 +171,10 @@ const char* DiagnosticsEngine::getSeverityName(DiagLevel Level) const {
   }
   return "unknown";
 }
+
+//===----------------------------------------------------------------------===//
+// Printing helpers
+//===----------------------------------------------------------------------===//
 
 void DiagnosticsEngine::printDiagnostic(SourceLocation Loc, DiagLevel Level, llvm::StringRef Message) {
   // Print location
