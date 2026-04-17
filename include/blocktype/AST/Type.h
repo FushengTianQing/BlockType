@@ -85,6 +85,12 @@ enum class BuiltinKind {
 /// Type - Base class for all types.
 class Type {
   TypeClass Kind;
+  /// ⚠️ TODO (Phase 4): Complete canonical type system implementation
+  /// This field stores the canonical (normalized) type for type comparison.
+  /// Phase 4 semantic analysis should implement:
+  /// - Automatic canonical type computation during type creation
+  /// - Typedef and type alias resolution
+  /// - Template type substitution and normalization
   const Type *CanonicalType = nullptr; // Canonical type for type comparison
 
 protected:
@@ -112,6 +118,14 @@ public:
 
   /// getCanonicalType - Returns the canonical type.
   /// The canonical type is the unique representative of an equivalence class.
+  /// 
+  /// ⚠️ TODO (Phase 4): Complete canonical type normalization
+  /// Current implementation simply returns the stored CanonicalType or self.
+  /// Full implementation should:
+  /// - Recursively normalize typedef types to their underlying types
+  /// - Handle type aliases and using declarations
+  /// - Ensure type equivalence classes are properly merged
+  /// - Support semantic analysis phase type checking
   const Type *getCanonicalType() const {
     return CanonicalType ? CanonicalType : this;
   }
@@ -584,6 +598,12 @@ public:
   bool isBooleanType() const { return Ty && Ty->isBooleanType(); }
 
   // Canonical type
+  /// ⚠️ TODO (Phase 4): Complete canonical type normalization
+  /// Current implementation delegates to Type::getCanonicalType().
+  /// Full implementation needed for semantic analysis to properly handle:
+  /// - Typedef and type alias resolution
+  /// - Template type substitution
+  /// - Type equivalence checking
   QualType getCanonicalType() const {
     return QualType(Ty ? Ty->getCanonicalType() : nullptr, Quals);
   }
