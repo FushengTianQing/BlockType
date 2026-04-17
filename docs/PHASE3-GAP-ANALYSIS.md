@@ -13,8 +13,8 @@
 | **Stage 3.1** | 声明 AST 节点定义 | **95%** | ~~DeclContext 基础设施~~ ✅、~~模板特化声明类~~ ✅ |
 | **Stage 3.2** | 基础声明解析 | **95%** | DeclSpec/Declarator 架构 ✅、类型消歧 ✅、核心功能完整 |
 | **Stage 3.3** | 类与模板解析 | **98%** | ~~文件组织~~ ✅、~~模板特化/偏特化~~ ✅、~~约束表达式~~ ✅ |
-| **Stage 3.4** | C++26 特性 + 测试 | **70%** | ~~Lit 回归测试~~ ✅、缺少 C++23/26 新特性 |
-| **总计** | **Phase 3** | **~92%** | **关键路径功能已基本完成,高级特性待实现** |
+| **Stage 3.4** | C++26 特性 + 测试 | **80%** | ~~Lit 回归测试~~ ✅、~~错误恢复~~ ✅、缺少 C++23/26 新特性 |
+| **总计** | **Phase 3** | **~94%** | **关键路径功能已基本完成,高级特性待实现** |
 
 ---
 
@@ -335,12 +335,12 @@ class Declarator {
 - ✅ Decltype
 
 **单元测试:**
-- ✅ `DeclarationTest.cpp` (581 行)
+- ✅ `ErrorRecoveryTest.cpp` (307 行)
 - ✅ `ParserTest.cpp` (784 行)
 - ✅ `StatementTest.cpp` (345 行)
-- ✅ `ErrorRecoveryTest.cpp` (214 行)
 - ✅ `AccessControlTest.cpp` (134 行)
-- 总计: 2058 行解析测试
+- ✅ `DeclarationTest.cpp` (581 行)
+- 总计: 2151 行解析测试
 
 ---
 
@@ -395,23 +395,28 @@ class Declarator {
 
 ---
 
-#### 3. 高级错误恢复机制不完整 ⚠️
+#### 3. ~~高级错误恢复机制不完整~~ ✅ 已实现
 
-**规划要求:**
-- `skipUntilNextDeclaration()` - 跳到下一个声明
-- `skipUntilBalanced()` - 括号匹配恢复
-- `tryRecoverMissingSemicolon()` - 缺失分号恢复
+**已实现的方法 (Parser.h / Parser.cpp):**
+- ✅ `skipUntilBalanced()` — 括号匹配跳过恢复 (跟踪 `()`, `{}`, `[]` 嵌套层级)
+- ✅ `skipUntilNextDeclaration()` — 声明级恢复 (跳过垃圾代码直到下一个声明边界)
+- ✅ `tryRecoverMissingSemicolon()` — 缺失分号智能恢复 (检测新声明/语句开始并自动插入)
+- ✅ `isDeclarationStart()` / `isStatementStart()` — 判断当前 token 是否开始新声明/语句
+- ✅ 改进 `expectAndConsume()` — 提供 "expected 'X' but got 'Y'" 风格的具体错误信息
 
-**现状:**
-- ⚠️ 有基本的错误恢复 (`ErrorRecoveryTest.cpp`)
-- ❌ 缺少声明级别的专门恢复策略
-- ❌ 缺少智能错误提示和建议
+**新增诊断 ID:**
+- ✅ `err_expected_semi_or_decl` — 期望 ';' 或新声明
+- ✅ `err_expected_token_and_got` — 期望某 token 但得到另一 token
+- ✅ `note_insert_semicolon` — 提示可能遗漏了 ';'
+- ✅ `note_matching_paren/brace/square` — 匹配括号位置提示
+- ✅ `note_previous_declaration` — 前一个声明位置
 
-**设计决策 (开发者必读):**
-- 声明级恢复策略应在 `Parser` 中实现（添加 `skipUntilNextDeclaration()` 方法），
-  不要在 Sema 中用 try-catch 模拟。
-- 智能错误提示应通过 `DiagnosticsEngine` 的扩展实现，不要在各处散落
-  `OS << "did you mean..."` 式的临时诊断。
+**测试覆盖:**
+- ✅ 34 个 ErrorRecoveryTest 用例 (从 14 个新增到 34 个)
+- 覆盖: 声明级恢复、括号匹配跳过、缺失分号恢复、多错误连续恢复
+
+**`parseTranslationUnit` 已更新:**
+- 使用 `skipUntilNextDeclaration()` 替代简单的 `consumeToken()` 恢复策略
 
 ---
 
@@ -467,10 +472,11 @@ class Declarator {
    - 已完成: 9 种 TemplateArgumentKind + TemplateArgumentLoc
    - 含决策说明: Expression→Integral 转换规则、Pack 用法
 
-9. **高级错误恢复**
-   - 影响: 用户体验
-   - 工作量: 中等
-   - 建议: 后期优化
+9. **~~高级错误恢复~~** ✅ 已实现
+   - 已完成: `skipUntilBalanced()`, `skipUntilNextDeclaration()`, `tryRecoverMissingSemicolon()`
+   - 已完成: 改进 `expectAndConsume()` 提供具体错误信息
+   - 已完成: 新增 6 个诊断 ID (Note 级别匹配提示等)
+   - 测试: 34 个 ErrorRecoveryTest 用例全部通过
 
 ---
 
@@ -535,7 +541,7 @@ class Declarator {
 
 ## 📊 结论
 
-**Phase 3 当前完成度: ~92%** (从 89% 提升)
+**Phase 3 当前完成度: ~94%** (从 92% 提升)
 
 **核心功能状态:**
 - ✅ 基础声明 AST 节点: 完整
@@ -549,6 +555,15 @@ class Declarator {
 
 **关键缺失:**
 - ~~⚠️ 模板特化表达式在类声明中的歧义解析~~ ✅ **已修复**
+  - `parseTypeSpecifier()` 添加了三层消歧策略 (Layer 1: 类型关键字, Layer 2: 符号表查找, Layer 3: 试探性解析)
+  - 与表达式上下文 (`parseIdentifier`) 的消歧策略保持一致
+  - 新增 4 个单元测试 + 2 个 lit 测试覆盖
+- ~~⚠️ 高级错误恢复机制不完整~~ ✅ **已实现**
+  - `skipUntilBalanced()` 括号匹配跳过
+  - `skipUntilNextDeclaration()` 声明级恢复
+  - `tryRecoverMissingSemicolon()` 智能分号恢复
+  - `parseTranslationUnit` 已使用新恢复策略
+  - 34 个 ErrorRecoveryTest 用例全部通过
   - `parseTypeSpecifier()` 添加了三层消歧策略 (Layer 1: 类型关键字, Layer 2: 符号表查找, Layer 3: 试探性解析)
   - 与表达式上下文 (`parseIdentifier`) 的消歧策略保持一致
   - 新增 4 个单元测试 + 2 个 lit 测试覆盖
@@ -570,4 +585,4 @@ class Declarator {
 ---
 
 *报告生成时间: 2026-04-17*
-*基于 commit: 1486ff0 + 未提交工作区变更 (ParseType.cpp 模板约束增强, DeclarationTest.cpp/TemplateTest 新增测试)*
+*基于 commit: e9d8160 + 未提交工作区变更 (高级错误恢复机制实现, ErrorRecoveryTest 新增 20 个用例)*

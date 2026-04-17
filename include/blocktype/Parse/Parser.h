@@ -141,7 +141,27 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Skips tokens until one of the stop tokens is found.
+  /// Does NOT handle nested brackets — use skipUntilBalanced() for that.
   void skipUntil(std::initializer_list<TokenKind> StopTokens);
+
+  /// Skips tokens until one of the stop tokens is found, properly
+  /// handling nested brackets (parentheses, braces, square brackets).
+  /// Returns true if a stop token was found, false if EOF was reached.
+  bool skipUntilBalanced(std::initializer_list<TokenKind> StopTokens);
+
+  /// Skips to the start of the next top-level declaration.
+  /// Declaration boundaries: semicolons (at correct nesting), closing braces,
+  /// and tokens that start declarations (keywords like class, struct, enum,
+  /// namespace, template, using, typedef, extern, static_assert, etc.).
+  /// Returns true if a declaration start was found, false if EOF.
+  bool skipUntilNextDeclaration();
+
+  /// Tries to recover from a missing semicolon.
+  /// If the current token looks like it could start a new statement or
+  /// declaration, emits a note about the missing ';' and returns true
+  /// (the caller should continue parsing from the current token).
+  /// Otherwise returns false and the caller should do its own recovery.
+  bool tryRecoverMissingSemicolon();
 
   /// Emits an error at the given location.
   void emitError(SourceLocation Loc, DiagID ID);
@@ -149,8 +169,17 @@ public:
   /// Emits an error at the current token location.
   void emitError(DiagID ID);
 
+  /// Emits an error with additional context text (e.g., "expected 'X' but got 'Y'").
+  void emitError(DiagID ID, llvm::StringRef Expected, llvm::StringRef Got);
+
   /// Creates a recovery expression for error recovery.
   Expr *createRecoveryExpr(SourceLocation Loc);
+
+  /// Returns true if the current token can start a declaration.
+  bool isDeclarationStart();
+
+  /// Returns true if the current token can start a statement.
+  bool isStatementStart();
 
   /// Look up a member in a class type.
   /// Returns nullptr if the member is not found or if the base type is not a class.

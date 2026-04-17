@@ -15,6 +15,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Stmt.h"
+#include "blocktype/AST/Decl.h"
 
 using namespace blocktype;
 
@@ -209,6 +210,98 @@ TEST_F(ErrorRecoveryTest, ExtraClosingBrackets) {
   // just weren't consumed. This is expected behavior - the caller should
   // check if there are remaining tokens.
   EXPECT_FALSE(hasErrors());
+}
+
+//===----------------------------------------------------------------------===//
+// Declaration-Level Recovery Tests
+//===----------------------------------------------------------------------===//
+
+TEST_F(ErrorRecoveryTest, SkipToNextDeclaration) {
+  parse("int x @@@ int y;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  // Should recover and parse "int y;" successfully
+  ASSERT_NE(TU, nullptr);
+  EXPECT_GE(TU->decls().size(), 1u);
+}
+
+TEST_F(ErrorRecoveryTest, SkipNestedBrackets) {
+  parse("int a = (1 + @@@); int b;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+  // Should recover past the broken expression and parse "int b;"
+  EXPECT_GE(TU->decls().size(), 1u);
+}
+
+TEST_F(ErrorRecoveryTest, RecoveryAcrossMultipleErrors) {
+  parse("int x @@@ int y ### int z;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+}
+
+TEST_F(ErrorRecoveryTest, MissingSemicolonBetweenDeclarations) {
+  parse("int x int y;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+  // "int x" then "int y;" — should detect missing ';' and recover
+}
+
+TEST_F(ErrorRecoveryTest, GarbageBetweenValidDeclarations) {
+  parse("int a; @@@@ int b;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+  // Should parse "int a;", skip "@@@@", and parse "int b;"
+  EXPECT_GE(TU->decls().size(), 2u);
+}
+
+TEST_F(ErrorRecoveryTest, MissingSemicolonBeforeClass) {
+  parse("int x class Foo {};");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+}
+
+TEST_F(ErrorRecoveryTest, MissingSemicolonBeforeNamespace) {
+  parse("int x namespace N {}");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+}
+
+TEST_F(ErrorRecoveryTest, RecoveryInNamespaceBody) {
+  parse("namespace N { int x @@@ int y; }");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  ASSERT_NE(TU, nullptr);
+}
+
+//===----------------------------------------------------------------------===//
+// skipUntilBalanced Tests
+//===----------------------------------------------------------------------===//
+
+TEST_F(ErrorRecoveryTest, BalancedParenSkip) {
+  parse("void f() { foo(1, @@@, 3); }");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  EXPECT_NE(TU, nullptr);
+}
+
+TEST_F(ErrorRecoveryTest, BalancedBraceSkip) {
+  parse("int x = { 1, @@@, 3 }; int y;");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  EXPECT_NE(TU, nullptr);
+}
+
+TEST_F(ErrorRecoveryTest, NestedBracketsSkip) {
+  parse("void f() { foo(bar(@@@), 2); }");
+  auto *TU = P->parseTranslationUnit();
+  EXPECT_TRUE(hasErrors());
+  EXPECT_NE(TU, nullptr);
 }
 
 } // anonymous namespace

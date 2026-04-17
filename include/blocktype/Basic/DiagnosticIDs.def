@@ -104,6 +104,22 @@ DIAG(warn_pp_embed_not_implemented, Warning, \
   "#embed not implemented yet", \
   "#embed 尚未实现")
 
+DIAG(note_insert_semicolon, Note, \
+  "did you forget a ';'?", \
+  "是否遗漏了 ';'？")
+DIAG(note_matching_paren, Note, \
+  "to match this '('", \
+  "匹配此 '('")
+DIAG(note_matching_brace, Note, \
+  "to match this '{'", \
+  "匹配此 '{'")
+DIAG(note_matching_square, Note, \
+  "to match this '['", \
+  "匹配此 '['")
+DIAG(note_previous_declaration, Note, \
+  "previous declaration starts here", \
+  "前一个声明从这里开始")
+
 DIAG(note_pp_macro_defined_here, Note, \
   "macro defined here", \
   "宏在此定义")
@@ -142,6 +158,12 @@ DIAG(err_expected_type, Error, \
 DIAG(err_expected_expression, Error, \
   "expected expression", \
   "期望表达式")
+DIAG(err_expected_semi_or_decl, Error, \
+  "expected ';' at end of declaration or a new declaration", \
+  "期望 ';' 结束声明或新的声明")
+DIAG(err_expected_token_and_got, Error, \
+  "expected '%0' but got '%1'", \
+  "期望 '%0' 但得到 '%1'")
 DIAG(err_member_access_denied, Error, \
   "member '%0' is %1", \
   "成员 '%0' 是 %1，无法访问")
