@@ -67,17 +67,17 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.1.1.1** 创建 `include/BlockType-cc/Sema/Sema.h`：
+- **E4.1.1.1** 创建 `include/BlockType/Sema/Sema.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/ASTContext.h"
-  #include "BlockType-cc/AST/Decl.h"
-  #include "BlockType-cc/AST/Expr.h"
-  #include "BlockType-cc/AST/Stmt.h"
-  #include "BlockType-cc/Basic/Diagnostics.h"
-  #include "BlockType-cc/Sema/SymbolTable.h"
-  #include "BlockType-cc/Sema/Scope.h"
+  #include "BlockType/AST/ASTContext.h"
+  #include "BlockType/AST/Decl.h"
+  #include "BlockType/AST/Expr.h"
+  #include "BlockType/AST/Stmt.h"
+  #include "BlockType/Basic/Diagnostics.h"
+  #include "BlockType/Sema/SymbolTable.h"
+  #include "BlockType/Sema/Scope.h"
   #include "llvm/ADT/DenseMap.h"
   #include <memory>
   
@@ -133,7 +133,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 - **E4.1.1.2** 实现 `src/Sema/Sema.cpp` 核心逻辑：
   ```cpp
-  #include "BlockType-cc/Sema/Sema.h"
+  #include "BlockType/Sema/Sema.h"
   
   namespace BlockType {
   
@@ -172,7 +172,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 Sema 主类。
+> 请为 BlockType 实现 Sema 主类。
 >
 > **核心职责**：
 > 1. 协调符号表、作用域链、类型系统
@@ -208,12 +208,12 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.1.2.1** 创建 `include/BlockType-cc/Sema/SymbolTable.h`：
+- **E4.1.2.1** 创建 `include/BlockType/Sema/SymbolTable.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Decl.h"
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/AST/Decl.h"
+  #include "BlockType/Basic/LLVM.h"
   #include "llvm/ADT/DenseMap.h"
   #include "llvm/ADT/StringMap.h"
   #include <vector>
@@ -288,7 +288,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现符号表。
+> 请为 BlockType 实现符号表。
 >
 > **符号分类**：
 > - 普通符号：变量、函数、枚举值
@@ -319,11 +319,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.1.3.1** 创建 `include/BlockType-cc/Sema/Scope.h`：
+- **E4.1.3.1** 创建 `include/BlockType/Sema/Scope.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Decl.h"
+  #include "BlockType/AST/Decl.h"
   #include "llvm/ADT/SmallPtrSet.h"
   #include "llvm/ADT/StringMap.h"
   
@@ -411,7 +411,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现作用域管理。
+> 请为 BlockType 实现作用域管理。
 >
 > **作用域类型**：
 > - Global：文件作用域，包含全局变量、函数
@@ -445,7 +445,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.1.4.1** 扩展 `include/BlockType-cc/AST/Decl.h`：
+- **E4.1.4.1** 扩展 `include/BlockType/AST/Decl.h`：
   ```cpp
   class DeclContext {
     DeclContext *Parent = nullptr;
@@ -495,7 +495,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 DeclContext。
+> 请为 BlockType 实现 DeclContext。
 >
 > **DeclContext 的作用**：
 > - 表示可以包含声明的实体（命名空间、类、函数等）
@@ -531,11 +531,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.2.1.1** 创建 `include/BlockType-cc/AST/Type.h`：
+- **E4.2.1.1** 创建 `include/BlockType/AST/Type.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/Basic/LLVM.h"
   #include "llvm/ADT/FoldingSet.h"
   
   namespace BlockType {
@@ -610,11 +610,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   } // namespace BlockType
   ```
 
-- **E4.2.1.2** 创建 `include/BlockType-cc/AST/QualType.h`：
+- **E4.2.1.2** 创建 `include/BlockType/AST/QualType.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Type.h"
+  #include "BlockType/AST/Type.h"
   #include "llvm/ADT/PointerIntPair.h"
   
   namespace BlockType {
@@ -655,7 +655,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现类型系统基础。
+> 请为 BlockType 实现类型系统基础。
 >
 > **内建类型分类**：
 > - Void：void 类型
@@ -694,7 +694,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.2.2.1** 扩展 `include/BlockType-cc/AST/Type.h`：
+- **E4.2.2.1** 扩展 `include/BlockType/AST/Type.h`：
   ```cpp
   class PointerType : public Type {
     QualType Pointee;
@@ -747,7 +747,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现派生类型。
+> 请为 BlockType 实现派生类型。
 >
 > **指针类型**：
 > - 存储被指向类型
@@ -786,12 +786,12 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.2.3.1** 创建 `include/BlockType-cc/Sema/TypeDeduction.h`：
+- **E4.2.3.1** 创建 `include/BlockType/Sema/TypeDeduction.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Type.h"
-  #include "BlockType-cc/AST/Expr.h"
+  #include "BlockType/AST/Type.h"
+  #include "BlockType/AST/Expr.h"
   
   namespace BlockType {
   
@@ -842,7 +842,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现类型推导。
+> 请为 BlockType 实现类型推导。
 >
 > **auto 推导规则**（C++11 起）：
 > 1. auto x = expr；推导为 expr 的类型（去除引用）
@@ -875,7 +875,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.2.4.1** 扩展 `include/BlockType-cc/AST/Type.h`：
+- **E4.2.4.1** 扩展 `include/BlockType/AST/Type.h`：
   ```cpp
   class RecordType : public Type {
     RecordDecl *Decl;
@@ -906,7 +906,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现用户定义类型。
+> 请为 BlockType 实现用户定义类型。
 >
 > **RecordType**：
 > - 表示类、结构、联合
@@ -938,7 +938,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.2.5.1** 扩展 `include/BlockType-cc/AST/ASTContext.h`：
+- **E4.2.5.1** 扩展 `include/BlockType/AST/ASTContext.h`：
   ```cpp
   class ASTContext {
     // 内建类型缓存
@@ -989,7 +989,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现类型工厂。
+> 请为 BlockType 实现类型工厂。
 >
 > **类型唯一化**：
 > - 相同的类型只创建一个实例
@@ -1022,12 +1022,12 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.3.1.1** 创建 `include/BlockType-cc/Sema/Lookup.h`：
+- **E4.3.1.1** 创建 `include/BlockType/Sema/Lookup.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Decl.h"
-  #include "BlockType-cc/Sema/Scope.h"
+  #include "BlockType/AST/Decl.h"
+  #include "BlockType/Sema/Scope.h"
   #include "llvm/ADT/SmallVector.h"
   
   namespace BlockType {
@@ -1099,7 +1099,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现非限定名字查找。
+> 请为 BlockType 实现非限定名字查找。
 >
 > **查找顺序**：
 > 1. 当前块作用域
@@ -1134,7 +1134,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.3.2.1** 扩展 `include/BlockType-cc/Sema/Lookup.h`：
+- **E4.3.2.1** 扩展 `include/BlockType/Sema/Lookup.h`：
   ```cpp
   class NestedNameSpecifier {
   public:
@@ -1186,7 +1186,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现限定名字查找。
+> 请为 BlockType 实现限定名字查找。
 >
 > **NestedNameSpecifier**：
 > - 表示 A::B::C 中的 A::B:: 部分
@@ -1218,11 +1218,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.3.3.1** 创建 `include/BlockType-cc/Sema/ADL.h`：
+- **E4.3.3.1** 创建 `include/BlockType/Sema/ADL.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Sema/Lookup.h"
+  #include "BlockType/Sema/Lookup.h"
   
   namespace BlockType {
   
@@ -1278,7 +1278,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 ADL。
+> 请为 BlockType 实现 ADL。
 >
 > **ADL 规则**：
 > - 函数调用时，除了普通查找，还在参数类型所在的命名空间中查找
@@ -1318,13 +1318,13 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.4.1.1** 创建 `include/BlockType-cc/Sema/Overload.h`：
+- **E4.4.1.1** 创建 `include/BlockType/Sema/Overload.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Decl.h"
-  #include "BlockType-cc/AST/Expr.h"
-  #include "BlockType-cc/AST/Type.h"
+  #include "BlockType/AST/Decl.h"
+  #include "BlockType/AST/Expr.h"
+  #include "BlockType/AST/Type.h"
   #include "llvm/ADT/SmallVector.h"
   
   namespace BlockType {
@@ -1359,7 +1359,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现重载候选收集。
+> 请为 BlockType 实现重载候选收集。
 >
 > **候选来源**：
 > 1. 普通查找结果
@@ -1392,11 +1392,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.4.2.1** 创建 `include/BlockType-cc/Sema/Conversion.h`：
+- **E4.4.2.1** 创建 `include/BlockType/Sema/Conversion.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Type.h"
+  #include "BlockType/AST/Type.h"
   
   namespace BlockType {
   
@@ -1453,7 +1453,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现参数转换和候选排序。
+> 请为 BlockType 实现参数转换和候选排序。
 >
 > **转换序列**：
 > 1. 标准转换序列：左值转换 → 数值提升/转换 → 限定符调整
@@ -1536,7 +1536,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现最佳函数选择。
+> 请为 BlockType 实现最佳函数选择。
 >
 > **决议流程**：
 > 1. 收集候选
@@ -1572,12 +1572,12 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.5.1.1** 创建 `include/BlockType-cc/Sema/TypeCheck.h`：
+- **E4.5.1.1** 创建 `include/BlockType/Sema/TypeCheck.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Expr.h"
-  #include "BlockType-cc/AST/Type.h"
+  #include "BlockType/AST/Expr.h"
+  #include "BlockType/AST/Type.h"
   
   namespace BlockType {
   
@@ -1605,7 +1605,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现类型检查。
+> 请为 BlockType 实现类型检查。
 >
 > **赋值检查**：
 > - const 对象不可赋值
@@ -1637,11 +1637,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.5.2.1** 创建 `include/BlockType-cc/Sema/AccessControl.h`：
+- **E4.5.2.1** 创建 `include/BlockType/Sema/AccessControl.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Decl.h"
+  #include "BlockType/AST/Decl.h"
   
   namespace BlockType {
   
@@ -1665,7 +1665,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现访问控制检查。
+> 请为 BlockType 实现访问控制检查。
 >
 > **访问级别**：
 > - public：任何代码可访问
@@ -1722,7 +1722,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现语义诊断系统。
+> 请为 BlockType 实现语义诊断系统。
 >
 > **诊断级别**：
 > - Error：必须修复
@@ -1756,11 +1756,11 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
 
 **开发要点：**
 
-- **E4.5.4.1** 创建 `include/BlockType-cc/Sema/ConstantExpr.h`：
+- **E4.5.4.1** 创建 `include/BlockType/Sema/ConstantExpr.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/AST/Expr.h"
+  #include "BlockType/AST/Expr.h"
   #include "llvm/ADT/APInt.h"
   #include "llvm/ADT/APFloat.h"
   
@@ -1787,7 +1787,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现常量表达式求值。
+> 请为 BlockType 实现常量表达式求值。
 >
 > **常量表达式场景**：
 > - 数组大小：int arr[10];
@@ -1845,7 +1845,7 @@ Phase 4 包含 5 个 Stage，共 15 个 Task，预计 5 周完成。
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 建立语义分析测试。
+> 请为 BlockType 建立语义分析测试。
 >
 > **单元测试重点**：
 > - 符号表增删查

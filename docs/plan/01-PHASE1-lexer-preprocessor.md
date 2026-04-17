@@ -60,19 +60,19 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.1.1** 创建 `include/BlockType-cc/Lex/Token.h`，定义 Token 结构：
+- **E1.1.1** 创建 `include/BlockType/Lex/Token.h`，定义 Token 结构：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Basic/SourceLocation.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Basic/SourceLocation.h"
   
   namespace BlockType {
   
   enum class TokenKind {
   #define TOKEN(X) X,
   #define KEYWORD(X, Y) kw_##X,
-  #include "BlockType-cc/Lex/TokenKinds.def"
+  #include "BlockType/Lex/TokenKinds.def"
   #undef TOKEN
   #undef KEYWORD
     NUM_TOKENS
@@ -104,7 +104,7 @@ Token 流 (to Parser)
   } // namespace BlockType
   ```
 
-- **E1.1.2** 创建 `include/BlockType-cc/Lex/TokenKinds.def`：
+- **E1.1.2** 创建 `include/BlockType/Lex/TokenKinds.def`：
   ```
   // TokenKinds.def - Token 和关键字定义
   
@@ -296,7 +296,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 定义完整的 Token 系统。
+> 请为 BlockType 定义完整的 Token 系统。
 >
 > **TokenKinds.def 格式**：
 > - 使用宏定义，方便扩展
@@ -331,11 +331,11 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.2.1** 创建 `include/BlockType-cc/Lex/TokenKinds.h`：
+- **E1.2.1** 创建 `include/BlockType/Lex/TokenKinds.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Lex/Token.h"
+  #include "BlockType/Lex/Token.h"
   
   namespace BlockType {
   
@@ -377,7 +377,7 @@ Token 流 (to Parser)
 
 - **E1.2.2** 实现 `src/Lex/TokenKinds.cpp`：
   ```cpp
-  #include "BlockType-cc/Lex/TokenKinds.h"
+  #include "BlockType/Lex/TokenKinds.h"
   
   namespace BlockType {
   
@@ -385,7 +385,7 @@ Token 流 (to Parser)
     switch (Kind) {
   #define TOKEN(X) case TokenKind::X: return #X;
   #define KEYWORD(X, Y) case TokenKind::kw_##X: return #X;
-  #include "BlockType-cc/Lex/TokenKinds.def"
+  #include "BlockType/Lex/TokenKinds.def"
       default: return "UNKNOWN";
     }
   }
@@ -405,7 +405,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 Token 辅助函数。
+> 请为 BlockType 实现 Token 辅助函数。
 >
 > **getTokenName**：
 > - 返回 Token 的可读名称
@@ -435,12 +435,12 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.3.1** 创建 `include/BlockType-cc/Basic/SourceManager.h`：
+- **E1.3.1** 创建 `include/BlockType/Basic/SourceManager.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Basic/SourceLocation.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Basic/SourceLocation.h"
   #include <memory>
   #include <vector>
   
@@ -487,7 +487,7 @@ Token 流 (to Parser)
 - **E1.3.2** 实现 `src/Basic/SourceManager.cpp`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 SourceManager。
+> 请为 BlockType 实现 SourceManager。
 >
 > **核心功能**：
 > - 管理多个源文件
@@ -523,13 +523,13 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.2.1** 创建 `include/BlockType-cc/Lex/Lexer.h`：
+- **E1.2.1** 创建 `include/BlockType/Lex/Lexer.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Basic/SourceLocation.h"
-  #include "BlockType-cc/Lex/Token.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Basic/SourceLocation.h"
+  #include "BlockType/Lex/Token.h"
   
   namespace BlockType {
   
@@ -579,9 +579,9 @@ Token 流 (to Parser)
 
 - **E1.2.2** 实现 `src/Lex/Lexer.cpp` 基础框架：
   ```cpp
-  #include "BlockType-cc/Lex/Lexer.h"
-  #include "BlockType-cc/Basic/SourceManager.h"
-  #include "BlockType-cc/Basic/Diagnostics.h"
+  #include "BlockType/Lex/Lexer.h"
+  #include "BlockType/Basic/SourceManager.h"
+  #include "BlockType/Basic/Diagnostics.h"
   
   namespace BlockType {
   
@@ -647,7 +647,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 Lexer 基础架构。
+> 请为 BlockType 实现 Lexer 基础架构。
 >
 > **Lexer 类设计**：
 > - 持有 SourceManager 和 DiagnosticsEngine 引用
@@ -738,7 +738,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现标识符和关键字识别。
+> 请为 BlockType 实现标识符和关键字识别。
 >
 > **标识符规则**：
 > - 首字符：字母（a-z, A-Z）或下划线
@@ -839,7 +839,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现数字字面量解析。
+> 请为 BlockType 实现数字字面量解析。
 >
 > **整数格式**：
 > - 十进制：123, 123'456（C++14 分隔符）
@@ -962,7 +962,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现字符和字符串字面量解析。
+> 请为 BlockType 实现字符和字符串字面量解析。
 >
 > **字符字面量**：
 > - 普通：'a', 'Z', '0'
@@ -1065,7 +1065,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现运算符和标点符号解析。
+> 请为 BlockType 实现运算符和标点符号解析。
 >
 > **最长匹配原则**：
 > - 读入尽可能长的合法 Token
@@ -1160,7 +1160,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现注释处理。
+> 请为 BlockType 实现注释处理。
 >
 > **注释类型**：
 > - 行注释：// 直到行尾
@@ -1193,12 +1193,12 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.3.1** 创建 `include/BlockType-cc/Lex/Preprocessor.h`：
+- **E1.3.1** 创建 `include/BlockType/Lex/Preprocessor.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Lex/Token.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Lex/Token.h"
   #include <memory>
   #include <vector>
   
@@ -1253,7 +1253,7 @@ Token 流 (to Parser)
 - **E1.3.2** 实现 `src/Lex/Preprocessor.cpp` 基础框架
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现预处理器基础架构。
+> 请为 BlockType 实现预处理器基础架构。
 >
 > **核心功能**：
 > - 从 Lexer 获取 Token
@@ -1326,7 +1326,7 @@ Token 流 (to Parser)
 - **E1.3.4** 实现 #define 和 #undef
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现预处理指令处理。
+> 请为 BlockType 实现预处理指令处理。
 >
 > **预处理指令列表**：
 > - #include：文件包含
@@ -1403,7 +1403,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现宏展开。
+> 请为 BlockType 实现宏展开。
 >
 > **对象宏**：
 > - 简单替换：#define PI 3.14
@@ -1442,11 +1442,11 @@ Token 流 (to Parser)
 
 **开发要点：**
 
-- **E1.3.9** 创建 `include/BlockType-cc/Lex/HeaderSearch.h`：
+- **E1.3.9** 创建 `include/BlockType/Lex/HeaderSearch.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/Basic/LLVM.h"
   #include <vector>
   #include <string>
   
@@ -1486,7 +1486,7 @@ Token 流 (to Parser)
 - **E1.3.10** 实现 `src/Lex/HeaderSearch.cpp`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现头文件搜索。
+> 请为 BlockType 实现头文件搜索。
 >
 > **Include 语法**：
 > - #include <header>：系统头文件，尖括号搜索
@@ -1542,7 +1542,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现 C++26 预处理新特性。
+> 请为 BlockType 实现 C++26 预处理新特性。
 >
 > **#embed 指令（P1967）**：
 > - 语法：#embed <filename> [limit(n)] [suffix(s)]
@@ -1583,7 +1583,7 @@ Token 流 (to Parser)
 - **E1.4.3** 支持合约属性（[[pre:]], [[post:]], [[assert:]]）
 
 **开发关键点提示：**
-> 请为 BlockType-cc 添加 C++26 新 Token 支持。
+> 请为 BlockType 添加 C++26 新 Token 支持。
 >
 > **reflexpr 关键字**：
 > - 用于静态反射
@@ -1655,7 +1655,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 建立 Lexer 和 Preprocessor 测试。
+> 请为 BlockType 建立 Lexer 和 Preprocessor 测试。
 >
 > **测试覆盖**：
 > - 所有 Token 类型
@@ -1689,7 +1689,7 @@ Token 流 (to Parser)
 - **E1.4.1** 创建测试文件：
   ```lit
   // tests/lit/lex/identifiers.test
-  // RUN: %BlockType-cc -dump-tokens %s | FileCheck %s
+  // RUN: %BlockType -dump-tokens %s | FileCheck %s
   
   int main() {}
   // CHECK: int 'int'
@@ -1703,7 +1703,7 @@ Token 流 (to Parser)
 - **E1.4.2** 创建预处理器测试：
   ```lit
   // tests/lit/preprocess/macro.test
-  // RUN: %BlockType-cc -E %s | FileCheck %s
+  // RUN: %BlockType -E %s | FileCheck %s
   
   #define PI 3.14
   double x = PI;
@@ -1711,7 +1711,7 @@ Token 流 (to Parser)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 建立 Lexer Lit 测试。
+> 请为 BlockType 建立 Lexer Lit 测试。
 >
 > **测试类别**：
 > - 词法分析测试：lex/*.test
@@ -1752,7 +1752,7 @@ Token 流 (to Parser)
 - **E1.4.3** 实现宏展开缓存
 
 **开发关键点提示：**
-> 请为 BlockType-cc 优化 Lexer 性能。
+> 请为 BlockType 优化 Lexer 性能。
 >
 > **优化点**：
 > - Token 缓冲区：预读多个 Token，减少函数调用

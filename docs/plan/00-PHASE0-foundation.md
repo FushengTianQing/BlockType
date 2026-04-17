@@ -22,12 +22,12 @@ Phase 0 包含 4 个 Stage，共 12 个 Task，预计 2 周完成。
 **Phase 0 架构图：**
 
 ```
-BlockType-cc/
+BlockType/
 ├── CMakeLists.txt              # 主构建配置
 ├── cmake/                      # CMake 模块
 │   ├── LLVM.cmake             # LLVM 配置
 │   └── CompilerOptions.cmake  # 编译选项
-├── include/BlockType-cc/
+├── include/BlockType/
 │   ├── Basic/                 # 基础设施
 │   ├── Lex/                   # 词法分析
 │   ├── Parse/                 # 语法分析
@@ -59,7 +59,7 @@ BlockType-cc/
 - **E0.1.1** 创建根目录 `CMakeLists.txt`：
   ```cmake
   cmake_minimum_required(VERSION 3.20)
-  project(BlockType-cc
+  project(BlockType
     VERSION 0.1.0
     DESCRIPTION "A C++26 compiler built with AI"
     LANGUAGES CXX
@@ -99,11 +99,11 @@ BlockType-cc/
 - **E0.1.3** 创建 `cmake/LLVM.cmake` 配置 LLVM 依赖
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建 CMake 基础配置。
+> 请为 BlockType 创建 CMake 基础配置。
 >
 > **根目录 CMakeLists.txt**：
 > - CMake 最低版本 3.20
-> - 项目名 BlockType-cc，版本 0.1.0
+> - 项目名 BlockType，版本 0.1.0
 > - C++23 标准，不使用扩展
 > - 默认 Release 构建类型
 > - 导出 compile_commands.json
@@ -173,7 +173,7 @@ BlockType-cc/
 - **E0.2.3** 配置交叉编译支持（Linux x86_64 + macOS arm64）
 
 **开发关键点提示：**
-> 请为 BlockType-cc 集成 LLVM。
+> 请为 BlockType 集成 LLVM。
 >
 > **LLVM 版本**：最低 18.x
 >
@@ -215,7 +215,7 @@ BlockType-cc/
   BUILD_TYPE=${1:-Release}
   BUILD_DIR="build-${BUILD_TYPE,,}"
   
-  echo "Building BlockType-cc in ${BUILD_TYPE} mode..."
+  echo "Building BlockType in ${BUILD_TYPE} mode..."
   
   cmake -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
@@ -224,7 +224,7 @@ BlockType-cc/
   
   cmake --build "${BUILD_DIR}" -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
   
-  echo "Build complete. Binary at ${BUILD_DIR}/bin/BlockType-cc"
+  echo "Build complete. Binary at ${BUILD_DIR}/bin/BlockType"
   ```
 
 - **E0.3.2** 创建 `scripts/test.sh`：
@@ -242,7 +242,7 @@ BlockType-cc/
 - **E0.3.3** 创建 `scripts/clean.sh`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建编译脚本。
+> 请为 BlockType 创建编译脚本。
 >
 > **scripts/build.sh**：
 > - 接受参数：Release | Debug
@@ -276,10 +276,10 @@ BlockType-cc/
 
 - **E0.2.1** 创建目录结构：
   ```
-  BlockType-cc/
+  BlockType/
   ├── CMakeLists.txt
   ├── cmake/
-  ├── include/BlockType-cc/
+  ├── include/BlockType/
   │   ├── Basic/
   │   ├── Lex/
   │   ├── Parse/
@@ -304,23 +304,23 @@ BlockType-cc/
 - **E0.2.2** 每个模块创建 CMakeLists.txt：
   ```cmake
   # src/Basic/CMakeLists.txt
-  add_library(BlockType-cc-basic
+  add_library(BlockType-basic
     SourceLocation.cpp
     Diagnostics.cpp
     FileManager.cpp
     # ...
   )
-  target_include_directories(BlockType-cc-basic PUBLIC
+  target_include_directories(BlockType-basic PUBLIC
     ${PROJECT_SOURCE_DIR}/include
   )
-  BlockType_cc_add_compile_options(BlockType-cc-basic)
+  BlockType_cc_add_compile_options(BlockType-basic)
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建项目目录结构。
+> 请为 BlockType 创建项目目录结构。
 >
 > **目录说明**：
-> - include/BlockType-cc/：公共头文件
+> - include/BlockType/：公共头文件
 > - src/：源代码实现
 > - tests/unit/：GTest 单元测试
 > - tests/lit/：Lit 回归测试
@@ -348,7 +348,7 @@ BlockType-cc/
 
 **开发要点：**
 
-- **E0.2.1** 创建 `include/BlockType-cc/Basic/LLVM.h`：
+- **E0.2.1** 创建 `include/BlockType/Basic/LLVM.h`：
   ```cpp
   #pragma once
   
@@ -370,11 +370,11 @@ BlockType-cc/
   }
   ```
 
-- **E0.2.2** 创建 `include/BlockType-cc/Basic/SourceLocation.h`：
+- **E0.2.2** 创建 `include/BlockType/Basic/SourceLocation.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/Basic/LLVM.h"
   
   namespace BlockType {
   
@@ -408,12 +408,12 @@ BlockType-cc/
   } // namespace BlockType
   ```
 
-- **E0.2.3** 创建 `include/BlockType-cc/Basic/Diagnostics.h`：
+- **E0.2.3** 创建 `include/BlockType/Basic/Diagnostics.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Basic/SourceLocation.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Basic/SourceLocation.h"
   
   namespace BlockType {
   
@@ -434,20 +434,20 @@ BlockType-cc/
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建基础类型定义。
+> 请为 BlockType 创建基础类型定义。
 >
-> **include/BlockType-cc/Basic/LLVM.h**：
+> **include/BlockType/Basic/LLVM.h**：
 > - 引入常用的 LLVM ADT 类型
 > - 放在 BlockType 命名空间中
 > - StringRef, SmallVector, ArrayRef, raw_ostream 等
 >
-> **include/BlockType-cc/Basic/SourceLocation.h**：
+> **include/BlockType/Basic/SourceLocation.h**：
 > - SourceLocation 类：表示源代码位置
 > - 内部使用 unsigned ID 表示（引用 SourceManager 中的位置）
 > - SourceRange 类：表示源代码范围
 > - 提供比较操作符
 >
-> **include/BlockType-cc/Basic/Diagnostics.h**：
+> **include/BlockType/Basic/Diagnostics.h**：
 > - DiagLevel 枚举：Ignored, Note, Remark, Warning, Error, Fatal
 > - DiagnosticsEngine 类：诊断引擎
 > - report() 方法：报告诊断
@@ -463,11 +463,11 @@ BlockType-cc/
 
 **开发要点：**
 
-- **E0.3.1** 创建 `include/BlockType-cc/Basic/FileEntry.h`：
+- **E0.3.1** 创建 `include/BlockType/Basic/FileEntry.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/Basic/LLVM.h"
   
   namespace BlockType {
   
@@ -486,12 +486,12 @@ BlockType-cc/
   } // namespace BlockType
   ```
 
-- **E0.3.2** 创建 `include/BlockType-cc/Basic/FileManager.h`：
+- **E0.3.2** 创建 `include/BlockType/Basic/FileManager.h`：
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
-  #include "BlockType-cc/Basic/FileEntry.h"
+  #include "BlockType/Basic/LLVM.h"
+  #include "BlockType/Basic/FileEntry.h"
   #include <memory>
   #include <map>
   
@@ -512,7 +512,7 @@ BlockType-cc/
 - **E0.3.3** 实现 `src/Basic/FileManager.cpp`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现文件管理器。
+> 请为 BlockType 实现文件管理器。
 >
 > **FileEntry 类**：
 > - 文件名、路径、大小
@@ -562,25 +562,25 @@ BlockType-cc/
 - **E0.3.2** 创建测试模板：
   ```cmake
   # tests/unit/CMakeLists.txt
-  add_executable(BlockType-cc-tests
+  add_executable(BlockType-tests
     Basic/SourceLocationTest.cpp
     Basic/FileManagerTest.cpp
     # ...
   )
   
-  target_link_libraries(BlockType-cc-tests
-    BlockType-cc-basic
+  target_link_libraries(BlockType-tests
+    BlockType-basic
     GTest::gtest_main
   )
   
-  gtest_discover_tests(BlockType-cc-tests)
+  gtest_discover_tests(BlockType-tests)
   ```
 
 - **E0.3.3** 创建第一个测试：
   ```cpp
   // tests/unit/Basic/SourceLocationTest.cpp
   #include <gtest/gtest.h>
-  #include "BlockType-cc/Basic/SourceLocation.h"
+  #include "BlockType/Basic/SourceLocation.h"
   
   using namespace BlockType;
   
@@ -598,7 +598,7 @@ BlockType-cc/
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 集成 Google Test。
+> 请为 BlockType 集成 Google Test。
 >
 > **GTest 配置**：
 > - 使用 FetchContent 下载 GTest v1.14.0
@@ -629,14 +629,14 @@ BlockType-cc/
   ```python
   import lit.formats
   
-  config.name = "BlockType-cc"
+  config.name = "BlockType"
   config.test_format = lit.formats.ShTest(True)
   config.suffixes = ['.test']
   config.test_source_root = os.path.dirname(__file__)
   config.test_exec_root = os.path.join(config.binary_dir, 'tests', 'lit')
   
   # 工具路径
-  config.substitutions.append(('%BlockType-cc', os.path.join(config.binary_dir, 'bin', 'BlockType-cc')))
+  config.substitutions.append(('%BlockType', os.path.join(config.binary_dir, 'bin', 'BlockType')))
   config.substitutions.append(('%FileCheck', 'FileCheck'))
   ```
 
@@ -652,19 +652,19 @@ BlockType-cc/
 - **E0.3.3** 创建第一个 Lit 测试：
   ```lit
   // tests/lit/basic/version.test
-  // RUN: %BlockType-cc --version | FileCheck %s
+  // RUN: %BlockType --version | FileCheck %s
   
-  // CHECK: BlockType-cc version {{[0-9]+\.[0-9]+\.[0-9]+}}
+  // CHECK: BlockType version {{[0-9]+\.[0-9]+\.[0-9]+}}
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 配置 LLVM Lit 测试框架。
+> 请为 BlockType 配置 LLVM Lit 测试框架。
 >
 > **lit.cfg 配置**：
-> - 测试名称：BlockType-cc
+> - 测试名称：BlockType
 > - 测试格式：ShTest
 > - 测试后缀：.test
-> - 配置 %BlockType-cc 和 %FileCheck 替换
+> - 配置 %BlockType 和 %FileCheck 替换
 >
 > **CMake 集成**：
 > - 使用 configure_file 生成 lit.site.cfg
@@ -688,7 +688,7 @@ BlockType-cc/
   ```cpp
   #pragma once
   
-  #include "BlockType-cc/Basic/LLVM.h"
+  #include "BlockType/Basic/LLVM.h"
   #include <gtest/gtest.h>
   
   namespace BlockType {
@@ -712,7 +712,7 @@ BlockType-cc/
 - **E0.3.2** 实现 `tests/TestHelpers.cpp`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建测试辅助工具。
+> 请为 BlockType 创建测试辅助工具。
 >
 > **TestHelpers.h**：
 > - createTempFile()：创建临时文件，用于文件相关测试
@@ -788,7 +788,7 @@ BlockType-cc/
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 配置 GitHub Actions CI/CD。
+> 请为 BlockType 配置 GitHub Actions CI/CD。
 >
 > **CI 流水线**：
 > - Linux (ubuntu-22.04) + macOS (macos-14) 双平台
@@ -817,7 +817,7 @@ BlockType-cc/
 
 - **E0.4.1** 创建 `README.md`：
   ```markdown
-  # BlockType-cc
+  # BlockType
   
   A C++26 compiler built with AI assistance.
   
@@ -846,7 +846,7 @@ BlockType-cc/
 - **E0.4.4** 创建 `CONTRIBUTING.md`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 创建项目文档。
+> 请为 BlockType 创建项目文档。
 >
 > **README.md**：
 > - 项目介绍
@@ -920,7 +920,7 @@ BlockType-cc/
   ```
 
 **开发关键点提示：**
-> 请为 BlockType-cc 配置编码规范工具。
+> 请为 BlockType 配置编码规范工具。
 >
 > **.clang-format**：
 > - 基于 LLVM 风格
@@ -955,12 +955,12 @@ BlockType-cc/
   set(BlockType_CC_VERSION_PATCH 0)
   
   configure_file(
-    ${PROJECT_SOURCE_DIR}/include/BlockType-cc/Config/Version.h.in
-    ${PROJECT_BINARY_DIR}/include/BlockType-cc/Config/Version.h
+    ${PROJECT_SOURCE_DIR}/include/BlockType/Config/Version.h.in
+    ${PROJECT_BINARY_DIR}/include/BlockType/Config/Version.h
   )
   ```
 
-- **E0.4.2** 创建 `include/BlockType-cc/Config/Version.h.in`：
+- **E0.4.2** 创建 `include/BlockType/Config/Version.h.in`：
   ```cpp
   #pragma once
   
@@ -974,7 +974,7 @@ BlockType-cc/
 - **E0.4.3** 创建 `scripts/release.sh`
 
 **开发关键点提示：**
-> 请为 BlockType-cc 实现版本号管理。
+> 请为 BlockType 实现版本号管理。
 >
 > **版本号格式**：MAJOR.MINOR.PATCH
 >
@@ -991,7 +991,7 @@ BlockType-cc/
 > - 创建 Git tag
 > - 打包发布
 
-**Checkpoint：** `BlockType-cc --version` 输出正确版本号
+**Checkpoint：** `BlockType --version` 输出正确版本号
 
 ---
 
