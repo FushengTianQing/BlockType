@@ -19,6 +19,8 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/APFloat.h"
 
+#include <optional>
+
 namespace blocktype {
 
 /// EvalResult - Result of constant expression evaluation.
@@ -111,13 +113,13 @@ public:
   EvalResult Evaluate(Expr *E);
 
   /// Evaluate as a boolean constant.
-  llvm::Optional<bool> EvaluateAsBooleanCondition(Expr *E);
+  std::optional<bool> EvaluateAsBooleanCondition(Expr *E);
 
   /// Evaluate as an integer constant.
-  llvm::Optional<llvm::APSInt> EvaluateAsInt(Expr *E);
+  std::optional<llvm::APSInt> EvaluateAsInt(Expr *E);
 
   /// Evaluate as a floating-point constant.
-  llvm::Optional<llvm::APFloat> EvaluateAsFloat(Expr *E);
+  std::optional<llvm::APFloat> EvaluateAsFloat(Expr *E);
 
   /// Check if an expression is a constant expression (without evaluating).
   bool isConstantExpr(Expr *E);
@@ -130,12 +132,14 @@ private:
   EvalResult EvaluateExpr(Expr *E);
   EvalResult EvaluateIntegerLiteral(IntegerLiteral *E);
   EvalResult EvaluateFloatingLiteral(FloatingLiteral *E);
-  EvalResult EvaluateBooleanLiteral(BooleanLiteral *E);
+  EvalResult EvaluateBooleanLiteral(CXXBoolLiteral *E);
+  EvalResult EvaluateCharacterLiteral(CharacterLiteral *E);
   EvalResult EvaluateBinaryOperator(BinaryOperator *E);
   EvalResult EvaluateUnaryOperator(UnaryOperator *E);
   EvalResult EvaluateConditionalOperator(ConditionalOperator *E);
   EvalResult EvaluateDeclRefExpr(DeclRefExpr *E);
   EvalResult EvaluateCastExpr(CastExpr *E);
+  EvalResult EvaluateCallExpr(CallExpr *E);
 };
 
 } // namespace blocktype
