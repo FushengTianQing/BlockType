@@ -224,7 +224,7 @@ void NamespaceDecl::dump(raw_ostream &OS, unsigned Indent) const {
   if (IsInline)
     OS << " inline";
   OS << "\n";
-  for (auto *D : Decls) {
+  for (auto *D : DeclContext::decls()) {
     D->dump(OS, Indent + 2);
   }
 }
@@ -236,7 +236,7 @@ void NamespaceDecl::dump(raw_ostream &OS, unsigned Indent) const {
 void TranslationUnitDecl::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
   OS << "TranslationUnitDecl\n";
-  for (auto *D : Decls) {
+  for (auto *D : DeclContext::decls()) {
     D->dump(OS, Indent + 2);
   }
 }
@@ -673,7 +673,7 @@ void LinkageSpecDecl::dump(raw_ostream &OS, unsigned Indent) const {
   else
     OS << "\n";
 
-  for (auto *D : Decls) {
+  for (auto *D : DeclContext::decls()) {
     D->dump(OS, Indent + 2);
   }
 

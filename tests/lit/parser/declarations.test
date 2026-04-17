@@ -1,0 +1,34 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test variable declaration
+int x = 42;
+// CHECK: VarDecl x
+
+// Test static variable
+static int count = 0;
+// CHECK: VarDecl count static
+
+// Test function declaration
+int square(int n) {
+  return n * n;
+}
+// CHECK: FunctionDecl square
+
+// Test function with noexcept
+void noThrow() noexcept {
+}
+// CHECK: FunctionDecl noThrow
+
+// Test inline function
+inline int getVal() { return 1; }
+// CHECK: FunctionDecl getVal
+
+// Test constexpr
+constexpr int factorial(int n) {
+  return n <= 1 ? 1 : n * factorial(n - 1);
+}
+// CHECK: FunctionDecl factorial
+
+// Test extern "C"
+extern "C" int c_func();
+// CHECK: LinkageSpecDecl

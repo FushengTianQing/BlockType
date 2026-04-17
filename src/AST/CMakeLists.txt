@@ -4,6 +4,7 @@ add_library(blocktype-ast
   ASTContext.cpp
   ASTDumper.cpp
   Decl.cpp
+  DeclContext.cpp
   Expr.cpp
   Stmt.cpp
   TemplateParameterList.cpp

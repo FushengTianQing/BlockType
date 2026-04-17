@@ -1,0 +1,30 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test namespace declaration
+namespace MyNS {
+  int x;
+  class Inner {};
+}
+// CHECK: NamespaceDecl MyNS
+// CHECK: VarDecl x
+// CHECK: CXXRecordDecl Inner
+
+// Test nested namespace
+namespace Outer {
+  namespace Inner {
+    int value;
+  }
+}
+// CHECK: NamespaceDecl Outer
+// CHECK: NamespaceDecl Inner
+// CHECK: VarDecl value
+
+// Test inline namespace
+inline namespace V2 {
+  int version;
+}
+// CHECK: NamespaceDecl V2 inline
+
+// Test namespace alias
+namespace AB = Outer::Inner;
+// CHECK: NamespaceAliasDecl AB

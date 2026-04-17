@@ -1,0 +1,15 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test concept definition (C++20)
+template<typename T>
+concept Addable = requires(T a) { a + a; };
+// CHECK: ConceptDecl Addable
+
+// Test template with requires clause (C++20)
+template<typename T>
+requires requires(T a) { a + a; }
+T add(T a, T b) {
+  return a + b;
+}
+// CHECK: FunctionTemplateDecl add
+// CHECK: RequiresClause

@@ -1,0 +1,24 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test using declaration
+namespace NS {
+  int x;
+}
+using NS::x;
+// CHECK: UsingDecl x
+
+// Test using directive
+using namespace NS;
+// CHECK: UsingDirectiveDecl NS
+
+// Test using alias (type alias)
+using IntPtr = int*;
+// CHECK: TypeAliasDecl IntPtr
+
+// Test typedef
+typedef int MyInt;
+// CHECK: TypedefDecl MyInt
+
+// Test static_assert
+static_assert(true, "ok");
+// CHECK: StaticAssertDecl

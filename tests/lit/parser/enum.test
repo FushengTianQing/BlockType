@@ -1,0 +1,24 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test enum declaration
+enum Color { Red, Green, Blue };
+// CHECK: EnumDecl Color
+// CHECK: EnumConstantDecl Red
+// CHECK: EnumConstantDecl Green
+// CHECK: EnumConstantDecl Blue
+
+// Test scoped enum
+enum class Direction { North, South, East, West };
+// CHECK: EnumDecl Direction
+// CHECK: EnumConstantDecl North
+
+// Test enum with underlying type
+enum class SmallInt : char { A, B, C };
+// CHECK: EnumDecl SmallInt
+
+// Test friend declaration
+class Friendly {
+  friend class Helper;
+  friend void helperFunc(int x);
+};
+// CHECK: FriendDecl

@@ -13,6 +13,7 @@
 #pragma once
 
 #include "blocktype/AST/ASTNode.h"
+#include "blocktype/AST/DeclContext.h"
 #include "blocktype/AST/TemplateParameterList.h"
 #include "blocktype/AST/Type.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -358,17 +359,20 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// EnumDecl - Enum declaration.
-class EnumDecl : public TagDecl {
+class EnumDecl : public TagDecl, public DeclContext {
   llvm::SmallVector<EnumConstantDecl *, 8> Enumerators;
   QualType UnderlyingType; // The underlying type (e.g., int for "enum E : int")
   bool IsScoped = false;   // Whether this is an enum class/struct
 
 public:
   EnumDecl(SourceLocation Loc, llvm::StringRef Name)
-      : TagDecl(Loc, Name, TK_enum) {}
+      : TagDecl(Loc, Name, TK_enum), DeclContext(DeclContextKind::Enum) {}
 
   llvm::ArrayRef<EnumConstantDecl *> enumerators() const { return Enumerators; }
-  void addEnumerator(EnumConstantDecl *D) { Enumerators.push_back(D); }
+  void addEnumerator(EnumConstantDecl *D) {
+    Enumerators.push_back(D);
+    DeclContext::addDecl(D);
+  }
 
   QualType getUnderlyingType() const { return UnderlyingType; }
   void setUnderlyingType(QualType T) { UnderlyingType = T; }
@@ -416,7 +420,7 @@ public:
 
 /// CXXRecordDecl - C++ class declaration with additional features like
 /// base classes, member functions, access control, etc.
-class CXXRecordDecl : public RecordDecl {
+class CXXRecordDecl : public RecordDecl, public DeclContext {
 public:
   /// BaseSpecifier - Describes a base class.
   class BaseSpecifier {
@@ -451,9 +455,10 @@ private:
 
 public:
   CXXRecordDecl(SourceLocation Loc, llvm::StringRef Name, TagKind TK = TK_class)
-      : RecordDecl(Loc, Name, TK), HasDefaultConstructor(false),
-        HasCopyConstructor(false), HasMoveConstructor(false),
-        HasDestructor(false), CurrentAccess(TK == TK_class ? 0 : 2) {} // class默认private, struct/union默认public
+      : RecordDecl(Loc, Name, TK), DeclContext(DeclContextKind::CXXRecord),
+        HasDefaultConstructor(false), HasCopyConstructor(false),
+        HasMoveConstructor(false), HasDestructor(false),
+        CurrentAccess(TK == TK_class ? 0 : 2) {}
 
   // Base classes
   llvm::ArrayRef<BaseSpecifier> bases() const { return Bases; }
@@ -466,7 +471,11 @@ public:
 
   // Members
   llvm::ArrayRef<Decl *> members() const { return Members; }
-  void addMember(Decl *D) { Members.push_back(D); }
+  void addMember(Decl *D) { Members.push_back(D); DeclContext::addDecl(D); }
+
+  /// Access the DeclContext interface.
+  DeclContext *getDeclContext() { return this; }
+  const DeclContext *getDeclContext() const { return this; }
 
   // Special members
   bool hasDefaultConstructor() const { return HasDefaultConstructor; }
@@ -706,16 +715,21 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// NamespaceDecl - Namespace declaration.
-class NamespaceDecl : public NamedDecl {
-  llvm::SmallVector<Decl *, 16> Decls;
+class NamespaceDecl : public NamedDecl, public DeclContext {
   bool IsInline;
 
 public:
   NamespaceDecl(SourceLocation Loc, llvm::StringRef Name, bool IsInline = false)
-      : NamedDecl(Loc, Name), IsInline(IsInline) {}
+      : NamedDecl(Loc, Name), DeclContext(DeclContextKind::Namespace),
+        IsInline(IsInline) {}
 
-  llvm::ArrayRef<Decl *> decls() const { return Decls; }
-  void addDecl(Decl *D) { Decls.push_back(D); }
+  void addDecl(Decl *D) { DeclContext::addDecl(D); }
+  void addDecl(NamedDecl *D) { DeclContext::addDecl(D); }
+
+  llvm::ArrayRef<Decl *> decls() const { return DeclContext::decls(); }
+
+  DeclContext *getDeclContext() { return this; }
+  const DeclContext *getDeclContext() const { return this; }
 
   bool isInline() const { return IsInline; }
 
@@ -733,14 +747,21 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// TranslationUnitDecl - The top-level declaration for a translation unit.
-class TranslationUnitDecl : public Decl {
-  llvm::SmallVector<Decl *, 32> Decls;
-
+class TranslationUnitDecl : public Decl, public DeclContext {
 public:
-  TranslationUnitDecl(SourceLocation Loc) : Decl(Loc) {}
+  TranslationUnitDecl(SourceLocation Loc)
+      : Decl(Loc), DeclContext(DeclContextKind::TranslationUnit) {}
 
-  llvm::ArrayRef<Decl *> decls() const { return Decls; }
-  void addDecl(Decl *D) { Decls.push_back(D); }
+  /// Add a declaration to the translation unit.
+  void addDecl(Decl *D) { DeclContext::addDecl(D); }
+  void addDecl(NamedDecl *D) { DeclContext::addDecl(D); }
+
+  /// Get all declarations.
+  llvm::ArrayRef<Decl *> decls() const { return DeclContext::decls(); }
+
+  /// Access the DeclContext interface.
+  DeclContext *getDeclContext() { return this; }
+  const DeclContext *getDeclContext() const { return this; }
 
   NodeKind getKind() const override { return NodeKind::TranslationUnitDeclKind; }
 
@@ -1192,24 +1213,28 @@ public:
 
 /// LinkageSpecDecl - Linkage specification declaration.
 /// Example: extern "C" { void foo(); } or extern "C++" { ... }
-class LinkageSpecDecl : public Decl {
+class LinkageSpecDecl : public Decl, public DeclContext {
 public:
   enum Language { C, CXX };
 
 private:
   Language Lang;
-  llvm::SmallVector<Decl *, 8> Decls;
   bool HasBraces;
 
 public:
   LinkageSpecDecl(SourceLocation Loc, Language L, bool HasBraces = true)
-      : Decl(Loc), Lang(L), HasBraces(HasBraces) {}
+      : Decl(Loc), DeclContext(DeclContextKind::LinkageSpec), Lang(L),
+        HasBraces(HasBraces) {}
 
   Language getLanguage() const { return Lang; }
   bool hasBraces() const { return HasBraces; }
 
-  llvm::ArrayRef<Decl *> decls() const { return Decls; }
-  void addDecl(Decl *D) { Decls.push_back(D); }
+  void addDecl(Decl *D) { DeclContext::addDecl(D); }
+  void addDecl(NamedDecl *D) { DeclContext::addDecl(D); }
+  llvm::ArrayRef<Decl *> decls() const { return DeclContext::decls(); }
+
+  DeclContext *getDeclContext() { return this; }
+  const DeclContext *getDeclContext() const { return this; }
 
   NodeKind getKind() const override { return NodeKind::LinkageSpecDeclKind; }
 

@@ -1186,16 +1186,66 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     TemplateDecl *Template = nullptr;
     
     if (auto *ClassDecl = llvm::dyn_cast<CXXRecordDecl>(SpecializedDecl)) {
-      // Class template specialization
-      // Note: We need to find the primary template and create a ClassTemplateSpecializationDecl
-      // For now, create a generic TemplateDecl - full implementation requires symbol table lookup
-      Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), SpecializedDecl);
+      // Class template explicit specialization
+      // Try to look up the primary template in the current scope
+      ClassTemplateDecl *PrimaryTemplate = nullptr;
+      if (CurrentScope) {
+        if (NamedDecl *D = CurrentScope->lookup(ClassDecl->getName())) {
+          PrimaryTemplate = llvm::dyn_cast<ClassTemplateDecl>(D);
+        }
+      }
+      
+      if (PrimaryTemplate) {
+        // Create a proper ClassTemplateSpecializationDecl
+        // Extract template args from the class name (e.g., "Vector<int>" -> [int])
+        auto *Spec = Context.create<ClassTemplateSpecializationDecl>(
+            ClassDecl->getLocation(), ClassDecl->getName(),
+            PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(), true);
+        // Add specialization to the primary template
+        PrimaryTemplate->addSpecialization(Spec);
+        Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), Spec);
+      } else {
+        Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), SpecializedDecl);
+      }
     } else if (auto *VD = llvm::dyn_cast<VarDecl>(SpecializedDecl)) {
       // Variable template specialization
-      Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), SpecializedDecl);
+      VarTemplateDecl *PrimaryTemplate = nullptr;
+      if (CurrentScope) {
+        if (NamedDecl *D = CurrentScope->lookup(VD->getName())) {
+          // Could be wrapped in a VarTemplateDecl
+          if (auto *VTD = llvm::dyn_cast<VarTemplateDecl>(D))
+            PrimaryTemplate = VTD;
+          else if (auto *TD = llvm::dyn_cast<TemplateDecl>(D)) {
+            // Check if it's a variable template by looking at templated decl
+          }
+        }
+      }
+      
+      if (PrimaryTemplate) {
+        auto *Spec = Context.create<VarTemplateSpecializationDecl>(
+            VD->getLocation(), VD->getName(), VD->getType(),
+            PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(),
+            VD->getInit(), true);
+        PrimaryTemplate->addSpecialization(Spec);
+        Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), Spec);
+      } else {
+        Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), SpecializedDecl);
+      }
     } else if (auto *FuncDecl = llvm::dyn_cast<FunctionDecl>(SpecializedDecl)) {
       // Function template specialization
-      Template = Context.create<TemplateDecl>(TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+      FunctionTemplateDecl *PrimaryTemplate = nullptr;
+      if (CurrentScope) {
+        if (NamedDecl *D = CurrentScope->lookup(FuncDecl->getName())) {
+          PrimaryTemplate = llvm::dyn_cast<FunctionTemplateDecl>(D);
+        }
+      }
+      
+      if (PrimaryTemplate) {
+        Template = Context.create<FunctionTemplateDecl>(
+            TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+      } else {
+        Template = Context.create<TemplateDecl>(TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+      }
     } else {
       // Fallback for other types
       Template = Context.create<TemplateDecl>(TemplateLoc, "", SpecializedDecl);
@@ -1246,9 +1296,70 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     // Function template
     Template = Context.create<FunctionTemplateDecl>(TemplateLoc, FuncDecl->getName(), TemplatedDecl);
   } else if (auto *ClassDecl = llvm::dyn_cast<CXXRecordDecl>(TemplatedDecl)) {
-    // Class template
+    // Check if this is a partial specialization:
+    // A partial specialization occurs when a class with the same name as an
+    // existing class template is being redeclared with template parameters.
+    // e.g., template<typename T> class Vector<T*> { ... };
+    bool IsPartialSpec = false;
+    ClassTemplateDecl *PrimaryTemplate = nullptr;
+    
+    if (CurrentScope) {
+      if (NamedDecl *D = CurrentScope->lookup(ClassDecl->getName())) {
+        if (auto *CTD = llvm::dyn_cast<ClassTemplateDecl>(D)) {
+          PrimaryTemplate = CTD;
+          IsPartialSpec = true;
+        }
+      }
+    }
+    
+    if (IsPartialSpec && PrimaryTemplate) {
+      // Class template partial specialization
+      auto *PartialSpec = Context.create<ClassTemplatePartialSpecializationDecl>(
+          ClassDecl->getLocation(), ClassDecl->getName(),
+          PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>());
+      PrimaryTemplate->addSpecialization(PartialSpec);
+      
+      // Create TemplateParameterList for the partial specialization
+      auto *PartialTPL = new TemplateParameterList(
+          TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
+      PartialSpec->setTemplateParameterList(PartialTPL);
+      
+      // Return a wrapper TemplateDecl for the partial specialization
+      Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), PartialSpec);
+      return Template;
+    }
+    
+    // Regular class template
     Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), TemplatedDecl);
   } else if (auto *VD = llvm::dyn_cast<VarDecl>(TemplatedDecl)) {
+    // Check for variable template partial specialization
+    bool IsPartialSpec = false;
+    VarTemplateDecl *PrimaryTemplate = nullptr;
+    
+    if (CurrentScope) {
+      if (NamedDecl *D = CurrentScope->lookup(VD->getName())) {
+        if (auto *VTD = llvm::dyn_cast<VarTemplateDecl>(D)) {
+          PrimaryTemplate = VTD;
+          IsPartialSpec = true;
+        }
+      }
+    }
+    
+    if (IsPartialSpec && PrimaryTemplate) {
+      auto *PartialSpec = Context.create<VarTemplatePartialSpecializationDecl>(
+          VD->getLocation(), VD->getName(), VD->getType(),
+          PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(),
+          VD->getInit());
+      PrimaryTemplate->addSpecialization(PartialSpec);
+      
+      auto *PartialTPL = new TemplateParameterList(
+          TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
+      PartialSpec->setTemplateParameterList(PartialTPL);
+      
+      Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), PartialSpec);
+      return Template;
+    }
+    
     // Variable template
     Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), TemplatedDecl);
   } else if (auto *TAD = llvm::dyn_cast<TypeAliasDecl>(TemplatedDecl)) {
@@ -1301,6 +1412,101 @@ NamedDecl *Parser::parseTemplateParameter() {
   // Check for template template parameter
   if (Tok.is(TokenKind::kw_template)) {
     return parseTemplateTemplateParameter();
+  }
+
+  // Check for constrained type parameter (C++20):
+  // identifier identifier  -> first is concept name, second is parameter name
+  // identifier<args> identifier -> concept<args> is constraint, then parameter name
+  // identifier '...' identifier -> concept pack parameter
+  if (Tok.is(TokenKind::identifier) && isNextToken(TokenKind::identifier)) {
+    // This is a constrained template parameter: ConceptName ParamName
+    SourceLocation ConstraintLoc = Tok.getLocation();
+    llvm::StringRef ConstraintName = Tok.getText();
+    consumeToken(); // consume constraint name (concept name)
+
+    // Parse the parameter name
+    llvm::StringRef Name;
+    SourceLocation NameLoc;
+    bool IsParameterPack = false;
+
+    if (Tok.is(TokenKind::ellipsis)) {
+      IsParameterPack = true;
+      consumeToken(); // consume '...'
+    }
+
+    if (Tok.is(TokenKind::identifier)) {
+      Name = Tok.getText();
+      NameLoc = Tok.getLocation();
+      consumeToken();
+    }
+
+    // Create a TemplateTypeParmDecl with the constraint info stored in the name
+    // (In a full implementation, we'd store the constraint expression)
+    TemplateTypeParmDecl *Param = Context.create<TemplateTypeParmDecl>(
+        NameLoc, Name, 0, 0, IsParameterPack, false);
+
+    // Parse default argument (optional)
+    if (Tok.is(TokenKind::equal)) {
+      consumeToken(); // consume '='
+      QualType DefaultType = parseType();
+      if (!DefaultType.isNull()) {
+        Param->setDefaultArgument(DefaultType);
+      }
+    }
+
+    return Param;
+  }
+
+  // Check for constrained template parameter with template args: ConceptName<Args...> ParamName
+  if (Tok.is(TokenKind::identifier)) {
+    // Tentatively parse to check if this is ConceptName<Args> ParamName
+    TentativeParsingAction TPA(*this);
+    SourceLocation ConstraintLoc = Tok.getLocation();
+    llvm::StringRef ConstraintName = Tok.getText();
+    consumeToken(); // consume potential concept name
+
+    if (Tok.is(TokenKind::less)) {
+      // Could be a constrained parameter: Concept<Args> ParamName
+      // Try to parse the template argument list
+      TPA.abort(); // restore state
+
+      // Parse the constraint as a type constraint expression
+      Expr *Constraint = parseTypeConstraint();
+      if (!Constraint) {
+        return nullptr;
+      }
+
+      // Now parse the actual parameter
+      bool IsParameterPack = false;
+      if (Tok.is(TokenKind::ellipsis)) {
+        IsParameterPack = true;
+        consumeToken();
+      }
+
+      llvm::StringRef Name;
+      SourceLocation NameLoc;
+      if (Tok.is(TokenKind::identifier)) {
+        Name = Tok.getText();
+        NameLoc = Tok.getLocation();
+        consumeToken();
+      }
+
+      TemplateTypeParmDecl *Param = Context.create<TemplateTypeParmDecl>(
+          NameLoc, Name, 0, 0, IsParameterPack, false);
+
+      // Parse default argument (optional)
+      if (Tok.is(TokenKind::equal)) {
+        consumeToken();
+        QualType DefaultType = parseType();
+        if (!DefaultType.isNull()) {
+          Param->setDefaultArgument(DefaultType);
+        }
+      }
+
+      return Param;
+    }
+
+    TPA.abort(); // restore state - not a constrained parameter
   }
 
   // Otherwise, it's a non-type template parameter
@@ -3281,6 +3487,43 @@ Expr *Parser::parseRequiresClause() {
 
   // Parse constraint expression
   return parseConstraintExpression();
+}
+
+/// parseTypeConstraint - Parse a type-constraint (C++20).
+///
+/// type-constraint ::= concept-name
+///                   | concept-name '<' template-argument-list? '>'
+///
+/// This is used in constrained template parameters like:
+///   template<std::integral T>        // std::integral is the type constraint
+///   template<Sortable<T> Container>  // Sortable<T> is the type constraint
+Expr *Parser::parseTypeConstraint() {
+  // The concept name should already be parsed as an identifier.
+  // We expect the current token to be an identifier (concept name).
+  if (!Tok.is(TokenKind::identifier)) {
+    emitError(DiagID::err_expected_identifier);
+    return nullptr;
+  }
+
+  SourceLocation Loc = Tok.getLocation();
+  llvm::StringRef ConceptName = Tok.getText();
+  consumeToken();
+
+  // Check for template argument list: ConceptName<Args...>
+  if (Tok.is(TokenKind::less)) {
+    // Parse as a template specialization expression
+    return parseTemplateSpecializationExpr(Loc, ConceptName);
+  }
+
+  // Simple concept name (no args) - create a DeclRefExpr
+  // In a full implementation, this would be resolved to the ConceptDecl
+  ValueDecl *ConceptValueDecl = nullptr;
+  if (CurrentScope) {
+    if (NamedDecl *D = CurrentScope->lookup(ConceptName)) {
+      ConceptValueDecl = dyn_cast<ValueDecl>(D);
+    }
+  }
+  return Context.create<DeclRefExpr>(Loc, ConceptValueDecl);
 }
 
 /// parseConstraintExpression - Parse a constraint-expression.

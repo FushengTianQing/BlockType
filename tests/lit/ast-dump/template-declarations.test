@@ -1,0 +1,32 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test template declarations
+template<typename T>
+class Container {
+  T element;
+};
+// CHECK: ClassTemplateDecl Container
+// CHECK: TemplateTypeParmDecl T
+
+// Test function template
+template<typename T>
+T identity(T x) {
+  return x;
+}
+// CHECK: FunctionTemplateDecl identity
+
+// Test non-type template parameter
+template<int N>
+struct Array {
+  int data[N];
+};
+// CHECK: ClassTemplateDecl Array
+// CHECK: NonTypeTemplateParmDecl N
+
+// Test template template parameter
+template<template<typename> class Wrapper>
+struct Adapter {
+  Wrapper<int> w;
+};
+// CHECK: ClassTemplateDecl Adapter
+// CHECK: TemplateTemplateParmDecl Wrapper

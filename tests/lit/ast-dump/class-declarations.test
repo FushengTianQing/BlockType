@@ -1,0 +1,33 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test class declaration AST
+class Person {
+  int age;
+  double height;
+public:
+  Person(int a) : age(a) {}
+  int getAge() const { return age; }
+  ~Person() {}
+};
+// CHECK: CXXRecordDecl Person
+// CHECK: FieldDecl age
+// CHECK: FieldDecl height
+// CHECK: CXXConstructorDecl Person
+// CHECK: CXXDestructorDecl
+
+// Test class with inheritance
+class Animal {};
+class Dog : public Animal {
+  void bark();
+};
+// CHECK: CXXRecordDecl Dog
+// CHECK: base class 'Animal'
+// CHECK: CXXMethodDecl bark
+
+// Test class with virtual function
+class Shape {
+public:
+  virtual double area() const;
+  virtual ~Shape() {}
+};
+// CHECK: CXXMethodDecl area

@@ -444,6 +444,11 @@ public:
   /// Parses a requires-clause (C++20).
   Expr *parseRequiresClause();
 
+  /// Parses a type-constraint (C++20).
+  /// type-constraint ::= concept-name '<' template-argument-list? '>'
+  /// Used in template parameter lists like template<Sortable T>
+  Expr *parseTypeConstraint();
+
   /// Parses a constraint-expression (C++20).
   Expr *parseConstraintExpression();
 

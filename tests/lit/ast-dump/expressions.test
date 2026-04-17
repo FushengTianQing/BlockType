@@ -1,0 +1,24 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test expression AST dump
+int a = 1 + 2;
+// CHECK: VarDecl a
+// CHECK: BinaryOperator: +
+
+// Test function call expression
+int add(int x, int y);
+int result = add(1, 2);
+// CHECK: VarDecl result
+// CHECK: CallExpr
+
+// Test member expression
+class Obj {
+  int field;
+};
+Obj o;
+int val = o.field;
+// CHECK: MemberExpr
+
+// Test conditional expression
+int c = true ? 1 : 0;
+// CHECK: ConditionalOperator
