@@ -1,0 +1,28 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test simple class definition
+class Point {
+  int x;
+  int y;
+public:
+  void set(int a, int b);
+};
+// CHECK: CXXRecordDecl{{.*}}Point
+// CHECK-NEXT: FieldDecl{{.*}}x{{.*}}'int'
+// CHECK-NEXT: FieldDecl{{.*}}y{{.*}}'int'
+// CHECK-NEXT: CXXMethodDecl{{.*}}set{{.*}}'void (int, int)'
+
+// Test struct definition
+struct Data {
+  int value;
+  double rate;
+};
+// CHECK: CXXRecordDecl{{.*}}Data
+
+// Test class with inheritance
+class Base {};
+class Derived : public Base {
+  int z;
+};
+// CHECK: CXXRecordDecl{{.*}}Derived
+// CHECK: base class 'Base'

@@ -1,0 +1,17 @@
+// RUN: blocktype -ast-dump %s 2>&1 | FileCheck %s
+
+// Test basic variable declaration
+int x = 10;
+// CHECK: VarDecl{{.*}}x{{.*}}'int'
+// CHECK-NEXT: IntegerLiteral{{.*}}'int' 10
+
+// Test function declaration
+void foo(int a, int b) {
+  return;
+}
+// CHECK: FunctionDecl{{.*}}foo{{.*}}'void (int, int)'
+
+// Test simple expression
+int y = x + 5;
+// CHECK: VarDecl{{.*}}y{{.*}}'int'
+// CHECK-NEXT: BinaryOperator{{.*}}'+'

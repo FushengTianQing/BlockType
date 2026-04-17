@@ -1177,9 +1177,25 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       return nullptr;
     }
 
-    // Create a TemplateDecl for the specialization
-    // Note: In a real compiler, this would be marked as an explicit specialization
-    TemplateDecl *Template = Context.create<TemplateDecl>(TemplateLoc, "", SpecializedDecl);
+    // Create appropriate specialization declaration based on the specialized type
+    TemplateDecl *Template = nullptr;
+    
+    if (auto *ClassDecl = llvm::dyn_cast<CXXRecordDecl>(SpecializedDecl)) {
+      // Class template specialization
+      // Note: We need to find the primary template and create a ClassTemplateSpecializationDecl
+      // For now, create a generic TemplateDecl - full implementation requires symbol table lookup
+      Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), SpecializedDecl);
+    } else if (auto *VD = llvm::dyn_cast<VarDecl>(SpecializedDecl)) {
+      // Variable template specialization
+      Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), SpecializedDecl);
+    } else if (auto *FuncDecl = llvm::dyn_cast<FunctionDecl>(SpecializedDecl)) {
+      // Function template specialization
+      Template = Context.create<TemplateDecl>(TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+    } else {
+      // Fallback for other types
+      Template = Context.create<TemplateDecl>(TemplateLoc, "", SpecializedDecl);
+    }
+    
     return Template;
   }
 
@@ -1217,8 +1233,25 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     return nullptr;
   }
 
-  // Create TemplateDecl
-  TemplateDecl *Template = Context.create<TemplateDecl>(TemplateLoc, "", TemplatedDecl);
+  // Create appropriate template type based on the templated declaration
+  TemplateDecl *Template = nullptr;
+  
+  if (auto *FuncDecl = llvm::dyn_cast<FunctionDecl>(TemplatedDecl)) {
+    // Function template
+    Template = Context.create<FunctionTemplateDecl>(TemplateLoc, FuncDecl->getName(), TemplatedDecl);
+  } else if (auto *ClassDecl = llvm::dyn_cast<CXXRecordDecl>(TemplatedDecl)) {
+    // Class template
+    Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), TemplatedDecl);
+  } else if (auto *VD = llvm::dyn_cast<VarDecl>(TemplatedDecl)) {
+    // Variable template
+    Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), TemplatedDecl);
+  } else if (auto *TAD = llvm::dyn_cast<TypeAliasDecl>(TemplatedDecl)) {
+    // Type alias template
+    Template = Context.create<TypeAliasTemplateDecl>(TemplateLoc, TAD->getName(), TemplatedDecl);
+  } else {
+    // Fallback for other types (e.g., ConceptDecl already wraps itself)
+    Template = Context.create<TemplateDecl>(TemplateLoc, "", TemplatedDecl);
+  }
 
   // Add template parameters
   for (auto *Param : Params) {

@@ -176,9 +176,19 @@ DECL(UsingEnumDecl, Decl)
 
 // Template declarations
 DECL(TemplateDecl, NamedDecl)
+DECL(FunctionTemplateDecl, TemplateDecl)
+DECL(ClassTemplateDecl, TemplateDecl)
+DECL(VarTemplateDecl, TemplateDecl)
+DECL(TypeAliasTemplateDecl, TemplateDecl)
 DECL(TemplateTemplateParmDecl, TemplateDecl)
 DECL(TemplateTypeParmDecl, TypeDecl)
 DECL(NonTypeTemplateParmDecl, ValueDecl)
+
+// Template specializations
+DECL(ClassTemplateSpecializationDecl, CXXRecordDecl)
+DECL(ClassTemplatePartialSpecializationDecl, ClassTemplateSpecializationDecl)
+DECL(VarTemplateSpecializationDecl, VarDecl)
+DECL(VarTemplatePartialSpecializationDecl, VarTemplateSpecializationDecl)
 
 // Module declarations (C++20)
 DECL(ModuleDecl, NamedDecl)

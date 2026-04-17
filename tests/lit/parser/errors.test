@@ -1,0 +1,25 @@
+// RUN: blocktype %s 2>&1 | FileCheck %s
+
+// Test missing semicolon
+int x = 10
+// CHECK: error:{{.*}}expected ';'
+
+// Test invalid type
+invalid_type y = 5;
+// CHECK: error:{{.*}}unknown type
+
+// Test function without body
+void foo();
+// This is actually valid (forward declaration), so skip
+
+// Test mismatched braces
+class Broken {
+  int x;
+// CHECK: error:{{.*}}expected '}'
+
+// Test invalid template syntax
+template<typename T>
+class Bad {
+  T< invalid > x;
+};
+// CHECK: error:

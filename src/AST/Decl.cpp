@@ -795,4 +795,172 @@ void AttributeListDecl::dump(raw_ostream &OS, unsigned Indent) const {
   OS << "]]\n";
 }
 
+//===----------------------------------------------------------------------===//
+// Template Specialization Declarations
+//===----------------------------------------------------------------------===//
+
+void FunctionTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "FunctionTemplateDecl " << getName() << "\n";
+  if (!getTemplateParameters().empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : getTemplateParameters()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  if (getTemplatedDecl()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplatedDecl:\n";
+    getTemplatedDecl()->dump(OS, Indent + 2);
+  }
+}
+
+void ClassTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ClassTemplateDecl " << getName() << "\n";
+  if (!getTemplateParameters().empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : getTemplateParameters()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  if (getTemplatedDecl()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplatedDecl:\n";
+    getTemplatedDecl()->dump(OS, Indent + 2);
+  }
+  if (!Specializations.empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "Specializations: " << Specializations.size() << "\n";
+  }
+}
+
+void VarTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "VarTemplateDecl " << getName() << "\n";
+  if (!getTemplateParameters().empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : getTemplateParameters()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  if (getTemplatedDecl()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplatedDecl:\n";
+    getTemplatedDecl()->dump(OS, Indent + 2);
+  }
+}
+
+void TypeAliasTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "TypeAliasTemplateDecl " << getName() << "\n";
+  if (!getTemplateParameters().empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateParameters:\n";
+    for (auto *Param : getTemplateParameters()) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  if (getTemplatedDecl()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplatedDecl:\n";
+    getTemplatedDecl()->dump(OS, Indent + 2);
+  }
+}
+
+void ClassTemplateSpecializationDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ClassTemplateSpecializationDecl " << getName();
+  if (IsExplicitSpecialization) {
+    OS << " (explicit)";
+  }
+  OS << "\n";
+  
+  if (!TemplateArgs.empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateArgs:\n";
+    for (const auto &Arg : TemplateArgs) {
+      printIndent(OS, Indent + 2);
+      switch (Arg.getKind()) {
+      case TemplateArgumentKind::Type:
+        OS << "Type: ";
+        Arg.getAsType().dump(OS);
+        OS << "\n";
+        break;
+      case TemplateArgumentKind::NonType:
+        OS << "NonType: <expr>\n";
+        break;
+      case TemplateArgumentKind::Template:
+        OS << "Template: <template>\n";
+        break;
+      }
+    }
+  }
+}
+
+void ClassTemplatePartialSpecializationDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "ClassTemplatePartialSpecializationDecl " << getName() << "\n";
+  
+  if (!TemplateParams.empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "PartialSpecParams:\n";
+    for (auto *Param : TemplateParams) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  
+  // Call base class dump for template args
+  ClassTemplateSpecializationDecl::dump(OS, Indent);
+}
+
+void VarTemplateSpecializationDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "VarTemplateSpecializationDecl " << getName();
+  if (IsExplicitSpecialization) {
+    OS << " (explicit)";
+  }
+  OS << "\n";
+  
+  if (!TemplateArgs.empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "TemplateArgs:\n";
+    for (const auto &Arg : TemplateArgs) {
+      printIndent(OS, Indent + 2);
+      switch (Arg.getKind()) {
+      case TemplateArgumentKind::Type:
+        OS << "Type: ";
+        Arg.getAsType().dump(OS);
+        OS << "\n";
+        break;
+      case TemplateArgumentKind::NonType:
+        OS << "NonType: <expr>\n";
+        break;
+      case TemplateArgumentKind::Template:
+        OS << "Template: <template>\n";
+        break;
+      }
+    }
+  }
+}
+
+void VarTemplatePartialSpecializationDecl::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "VarTemplatePartialSpecializationDecl " << getName() << "\n";
+  
+  if (!TemplateParams.empty()) {
+    printIndent(OS, Indent + 1);
+    OS << "PartialSpecParams:\n";
+    for (auto *Param : TemplateParams) {
+      Param->dump(OS, Indent + 2);
+    }
+  }
+  
+  // Call base class dump
+  VarTemplateSpecializationDecl::dump(OS, Indent);
+}
+
 } // namespace blocktype

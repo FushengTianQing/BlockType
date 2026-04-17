@@ -27,6 +27,8 @@ class ParmVarDecl; // Forward declaration
 class CXXMethodDecl; // Forward declaration
 class CXXRecordDecl; // Forward declaration
 class AccessSpecDecl; // Forward declaration
+class ClassTemplateSpecializationDecl; // Forward declaration
+class VarTemplateSpecializationDecl; // Forward declaration
 
 //===----------------------------------------------------------------------===//
 // AccessSpecifier - Access control enumeration
@@ -1410,6 +1412,225 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::AttributeListDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Template Specialization Declarations
+//===----------------------------------------------------------------------===//
+
+/// FunctionTemplateDecl - Represents a function template.
+/// Example: template<typename T> void f(T x);
+class FunctionTemplateDecl : public TemplateDecl {
+public:
+  FunctionTemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
+      : TemplateDecl(Loc, Name, TemplatedDecl) {}
+
+  NodeKind getKind() const override { return NodeKind::FunctionTemplateDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::FunctionTemplateDeclKind;
+  }
+};
+
+/// ClassTemplateDecl - Represents a class template.
+/// Example: template<typename T> class Vector { ... };
+class ClassTemplateDecl : public TemplateDecl {
+  llvm::SmallVector<ClassTemplateSpecializationDecl *, 4> Specializations;
+
+public:
+  ClassTemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
+      : TemplateDecl(Loc, Name, TemplatedDecl) {}
+
+  void addSpecialization(ClassTemplateSpecializationDecl *Spec) {
+    Specializations.push_back(Spec);
+  }
+
+  llvm::ArrayRef<ClassTemplateSpecializationDecl *> getSpecializations() const {
+    return Specializations;
+  }
+
+  NodeKind getKind() const override { return NodeKind::ClassTemplateDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ClassTemplateDeclKind;
+  }
+};
+
+/// VarTemplateDecl - Represents a variable template.
+/// Example: template<typename T> constexpr T pi = T(3.14159);
+class VarTemplateDecl : public TemplateDecl {
+  llvm::SmallVector<VarTemplateSpecializationDecl *, 4> Specializations;
+
+public:
+  VarTemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
+      : TemplateDecl(Loc, Name, TemplatedDecl) {}
+
+  void addSpecialization(VarTemplateSpecializationDecl *Spec) {
+    Specializations.push_back(Spec);
+  }
+
+  llvm::ArrayRef<VarTemplateSpecializationDecl *> getSpecializations() const {
+    return Specializations;
+  }
+
+  NodeKind getKind() const override { return NodeKind::VarTemplateDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::VarTemplateDeclKind;
+  }
+};
+
+/// TypeAliasTemplateDecl - Represents an alias template.
+/// Example: template<typename T> using Vec = Vector<T>;
+class TypeAliasTemplateDecl : public TemplateDecl {
+public:
+  TypeAliasTemplateDecl(SourceLocation Loc, llvm::StringRef Name, Decl *TemplatedDecl)
+      : TemplateDecl(Loc, Name, TemplatedDecl) {}
+
+  NodeKind getKind() const override { return NodeKind::TypeAliasTemplateDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::TypeAliasTemplateDeclKind;
+  }
+};
+
+/// ClassTemplateSpecializationDecl - Represents a class template specialization.
+/// Example: template<> class Vector<int> { ... };
+class ClassTemplateSpecializationDecl : public CXXRecordDecl {
+  ClassTemplateDecl *SpecializedTemplate;
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
+  bool IsExplicitSpecialization;
+
+public:
+  ClassTemplateSpecializationDecl(SourceLocation Loc, llvm::StringRef Name,
+                                   ClassTemplateDecl *Template,
+                                   llvm::ArrayRef<TemplateArgument> Args,
+                                   bool ExplicitSpec = false)
+      : CXXRecordDecl(Loc, Name), SpecializedTemplate(Template),
+        TemplateArgs(Args.begin(), Args.end()),
+        IsExplicitSpecialization(ExplicitSpec) {}
+
+  ClassTemplateDecl *getSpecializedTemplate() const { return SpecializedTemplate; }
+  
+  llvm::ArrayRef<TemplateArgument> getTemplateArgs() const { return TemplateArgs; }
+  
+  unsigned getNumTemplateArgs() const { return TemplateArgs.size(); }
+  
+  const TemplateArgument &getTemplateArg(unsigned Idx) const {
+    return TemplateArgs[Idx];
+  }
+
+  bool isExplicitSpecialization() const { return IsExplicitSpecialization; }
+
+  NodeKind getKind() const override {
+    return NodeKind::ClassTemplateSpecializationDeclKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ClassTemplateSpecializationDeclKind;
+  }
+};
+
+/// ClassTemplatePartialSpecializationDecl - Represents a class template partial specialization.
+/// Example: template<typename T> class Vector<T*> { ... };
+class ClassTemplatePartialSpecializationDecl : public ClassTemplateSpecializationDecl {
+  llvm::SmallVector<NamedDecl *, 8> TemplateParams;
+
+public:
+  ClassTemplatePartialSpecializationDecl(SourceLocation Loc, llvm::StringRef Name,
+                                          ClassTemplateDecl *Template,
+                                          llvm::ArrayRef<TemplateArgument> Args)
+      : ClassTemplateSpecializationDecl(Loc, Name, Template, Args, false) {}
+
+  void addTemplateParameter(NamedDecl *Param) { TemplateParams.push_back(Param); }
+  
+  llvm::ArrayRef<NamedDecl *> getTemplateParameters() const { return TemplateParams; }
+
+  NodeKind getKind() const override {
+    return NodeKind::ClassTemplatePartialSpecializationDeclKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::ClassTemplatePartialSpecializationDeclKind;
+  }
+};
+
+/// VarTemplateSpecializationDecl - Represents a variable template specialization.
+/// Example: template<> constexpr int pi<int> = 3;
+class VarTemplateSpecializationDecl : public VarDecl {
+  VarTemplateDecl *SpecializedTemplate;
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
+  bool IsExplicitSpecialization;
+
+public:
+  VarTemplateSpecializationDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
+                                 VarTemplateDecl *Template,
+                                 llvm::ArrayRef<TemplateArgument> Args,
+                                 Expr *Init = nullptr,
+                                 bool ExplicitSpec = false)
+      : VarDecl(Loc, Name, T, Init), SpecializedTemplate(Template),
+        TemplateArgs(Args.begin(), Args.end()),
+        IsExplicitSpecialization(ExplicitSpec) {}
+
+  VarTemplateDecl *getSpecializedTemplate() const { return SpecializedTemplate; }
+  
+  llvm::ArrayRef<TemplateArgument> getTemplateArgs() const { return TemplateArgs; }
+  
+  unsigned getNumTemplateArgs() const { return TemplateArgs.size(); }
+  
+  const TemplateArgument &getTemplateArg(unsigned Idx) const {
+    return TemplateArgs[Idx];
+  }
+
+  bool isExplicitSpecialization() const { return IsExplicitSpecialization; }
+
+  NodeKind getKind() const override {
+    return NodeKind::VarTemplateSpecializationDeclKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::VarTemplateSpecializationDeclKind;
+  }
+};
+
+/// VarTemplatePartialSpecializationDecl - Represents a variable template partial specialization.
+class VarTemplatePartialSpecializationDecl : public VarTemplateSpecializationDecl {
+  llvm::SmallVector<NamedDecl *, 8> TemplateParams;
+
+public:
+  VarTemplatePartialSpecializationDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
+                                        VarTemplateDecl *Template,
+                                        llvm::ArrayRef<TemplateArgument> Args,
+                                        Expr *Init = nullptr)
+      : VarTemplateSpecializationDecl(Loc, Name, T, Template, Args, Init, false) {}
+
+  void addTemplateParameter(NamedDecl *Param) { TemplateParams.push_back(Param); }
+  
+  llvm::ArrayRef<NamedDecl *> getTemplateParameters() const { return TemplateParams; }
+
+  NodeKind getKind() const override {
+    return NodeKind::VarTemplatePartialSpecializationDeclKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::VarTemplatePartialSpecializationDeclKind;
   }
 };
 
