@@ -85,7 +85,7 @@ Phase 8 包含 3 个 Stage，共 8 个 Task，预计 4 周完成。
 
 - **E8.1.1.2** 实现 Linux x86_64 和 macOS ARM64 平台配置
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现目标平台信息管理。
 >
 > **目标平台**：
@@ -119,7 +119,7 @@ Phase 8 包含 3 个 Stage，共 8 个 Task，预计 4 周完成。
 - **E8.1.2.1** 实现 Itanium C++ ABI（Linux）
 - **E8.1.2.2** 实现 ARM64 ABI（macOS）
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现平台 ABI 支持。
 >
 > **Itanium C++ ABI**：
@@ -219,7 +219,7 @@ Phase 8 包含 3 个 Stage，共 8 个 Task，预计 4 周完成。
 - **E8.3.1.1** 集成 LLVM 优化 Pass
 - **E8.3.1.2** 配置优化级别（-O0, -O1, -O2, -O3）
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现优化 Pass。
 >
 > **优化级别**：

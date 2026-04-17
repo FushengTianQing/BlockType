@@ -132,7 +132,7 @@ Token 流 (from Preprocessor)
   };
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现声明 AST 基础架构 `include/zetacc/AST/Decl.h` 和 `src/AST/Decl.cpp`。
 >
 > **Decl 基类**：
@@ -231,7 +231,7 @@ Token 流 (from Preprocessor)
   };
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现类型声明 AST 节点，追加到 `AST/Decl.h`。
 >
 > **TypedefDecl**：typedef 声明，包含底层类型
@@ -360,7 +360,7 @@ Token 流 (from Preprocessor)
   };
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现类声明 AST 节点，追加到 `AST/Decl.h` 和 `AST/DeclCXX.h`。
 >
 > **RecordDecl**：
@@ -514,7 +514,7 @@ Token 流 (from Preprocessor)
   };
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现模板声明 AST 节点 `include/zetacc/AST/DeclTemplate.h`。
 >
 > **TemplateParameterList**：
@@ -583,7 +583,7 @@ Token 流 (from Preprocessor)
   };
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++20 Concept 相关 AST 节点，追加到 `AST/DeclTemplate.h` 或新建 `AST/Concept.h`。
 >
 > **ConceptDecl**：
@@ -654,7 +654,7 @@ Token 流 (from Preprocessor)
   void parseFunctionSpecifier(DeclSpec &DS);  // inline, virtual, explicit, friend, constexpr, consteval, constinit
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现声明说明符解析 `src/Parse/ParseDeclSpec.cpp`。
 >
 > **DeclSpec 结构**：
@@ -748,7 +748,7 @@ Token 流 (from Preprocessor)
   ParamInfo parseParameter();
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现声明符解析 `src/Parse/ParseDeclarator.cpp`。
 >
 > **Declarator 结构**：
@@ -819,7 +819,7 @@ Token 流 (from Preprocessor)
   Expr* parseDefaultArgument();
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现变量和函数声明解析 `src/Parse/ParseDecl.cpp`。
 >
 > **变量声明**：
@@ -881,7 +881,7 @@ Token 流 (from Preprocessor)
   TypeAliasDecl* parseTypeAliasDeclaration();  // using Name = Type;
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现命名空间和 using 声明解析，追加到 `src/Parse/ParseDecl.cpp`。
 >
 > **命名空间**：
@@ -932,7 +932,7 @@ Token 流 (from Preprocessor)
   // enum struct Name { ... }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现枚举声明解析，追加到 `src/Parse/ParseDecl.cpp`。
 >
 > **枚举语法**：
@@ -991,7 +991,7 @@ Token 流 (from Preprocessor)
   Decl* parseMemberDeclaration(CXXRecordDecl *Class);
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现类定义解析框架 `src/Parse/ParseClass.cpp`。
 >
 > **类声明入口**：
@@ -1042,7 +1042,7 @@ Token 流 (from Preprocessor)
   void parsePackExpansion();  // Base<Ts>...
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现基类解析，追加到 `src/Parse/ParseClass.cpp`。
 >
 > **基类子句语法**：
@@ -1107,7 +1107,7 @@ Token 流 (from Preprocessor)
   CXXConversionDecl* parseCXXConversionDeclaration(DeclSpec &DS, CXXRecordDecl *Class);
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现成员函数解析，追加到 `src/Parse/ParseClass.cpp`。
 >
 > **成员函数**：
@@ -1185,7 +1185,7 @@ Token 流 (from Preprocessor)
   bool parseTemplateParameterPack();  // ...
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现模板声明解析 `src/Parse/ParseTemplate.cpp`。
 >
 > **模板声明语法**：
@@ -1257,7 +1257,7 @@ Token 流 (from Preprocessor)
   CXXDeductionGuideDecl* parseDeductionGuide();  // X(int) -> X<int>;
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现模板特化解析，追加到 `src/Parse/ParseTemplate.cpp`。
 >
 > **显式特化**：
@@ -1334,7 +1334,7 @@ Token 流 (from Preprocessor)
   Expr* parseRequiresClause();
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++20 Concept 解析，追加到 `src/Parse/ParseTemplate.cpp` 或新建 `ParseConcept.cpp`。
 >
 > **Concept 定义**：
@@ -1401,7 +1401,7 @@ Token 流 (from Preprocessor)
   void f(int x) [[pre: x > 0]] [[post: result > 0]];
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++26 声明新特性的解析。
 >
 > **Deducing this（显式对象参数）**：
@@ -1460,7 +1460,7 @@ Token 流 (from Preprocessor)
   void parseAttributes();  // [[attr]], __attribute__((attr)), __declspec(attr)
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现完整翻译单元解析，追加到 `src/Parse/Parser.cpp`。
 >
 > **翻译单元结构**：
@@ -1516,7 +1516,7 @@ Token 流 (from Preprocessor)
 
 - **E4.3.4** 生成有意义的错误消息
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请增强 Parser 错误恢复机制。
 >
 > **错误恢复策略**：

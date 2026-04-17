@@ -85,7 +85,7 @@ Phase 6 包含 5 个 Stage，共 14 个 Task，预计 6 周完成。
 
 - **E6.1.1.2** 实现 `src/CodeGen/CodeGenModule.cpp`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现 CodeGenModule。
 >
 > **核心职责**：

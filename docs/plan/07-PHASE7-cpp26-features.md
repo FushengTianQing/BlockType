@@ -33,7 +33,7 @@ Phase 7 包含 4 个 Stage，共 10 个 Task，预计 6 周完成。
 - **E7.1.1.2** 实现 reflexpr 表达式解析
 - **E7.1.1.3** 实现反射类型系统
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现静态反射。
 >
 > **reflexpr 关键字**：
@@ -76,7 +76,7 @@ Phase 7 包含 4 个 Stage，共 10 个 Task，预计 6 周完成。
 - **E7.2.1.2** 语义检查 Contract 条件
 - **E7.2.1.3** 生成 Contract 检查代码
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 BlockType 实现 Contracts。
 >
 > **Contract 属性**：

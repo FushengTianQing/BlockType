@@ -101,7 +101,7 @@ AST Root (TranslationUnitDecl)
 
 - **E1.1.5** 实现源位置追踪：每个 AST 节点记录开始和结束位置
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现 AST 基础架构。
 >
 > **ASTNode.h**：
@@ -210,7 +210,7 @@ AST Root (TranslationUnitDecl)
 - **E1.2.2** 每个表达式类实现 `classof()` 方法支持类型判断
 - **E1.2.3** 实现完整的 `dump()` 方法用于调试
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现 `include/zetacc/AST/Expr.h` 和 `src/AST/Expr.cpp`。
 >
 > 定义所有 C++26 表达式的 AST 节点，包括：
@@ -305,7 +305,7 @@ AST Root (TranslationUnitDecl)
 - **E1.3.2** 实现语句迭代器，方便遍历复合语句的子语句
 - **E1.3.3** 实现 `getSourceRange()` 方法返回语句的源位置范围
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现 `include/zetacc/AST/Stmt.h` 和 `src/AST/Stmt.cpp`。
 >
 > 定义所有 C++ 语句的 AST 节点，包括：
@@ -366,7 +366,7 @@ AST Root (TranslationUnitDecl)
 - **E1.4.3** 实现 `Type::isInteger()`, `Type::isFloating()`, `Type::isPointer()` 等辅助方法
 - **E1.4.4** 实现类型的规范化和比较
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现类型系统基础 `include/zetacc/AST/Type.h` 和 `Type.cpp`。
 >
 > 定义：
@@ -432,7 +432,7 @@ AST Root (TranslationUnitDecl)
   std::vector<ParsingContext> ContextStack;
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现 Parser 基础架构 `src/Parse/Parser.h` 和 `Parser.cpp`。
 >
 > **Parser 类核心成员**：
@@ -490,7 +490,7 @@ AST Root (TranslationUnitDecl)
 - **E2.2.3** 实现 `isRightAssociative(TokenKind K)` 判断右结合性
 - **E2.2.4** 实现 `getUnaryOpPrecedence(TokenKind K)` 获取一元运算符优先级
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++ 运算符优先级表 `src/Parse/OperatorPrecedence.h`。
 >
 > 遵循 C++ 标准定义的优先级（从低到高）：
@@ -576,7 +576,7 @@ AST Root (TranslationUnitDecl)
   Expr* parseUserDefinedLiteral();  // 用户定义字面量 123_i
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 zetacc 实现完整的表达式解析 `src/Parse/ParseExpr.cpp`。
 >
 > **算法选择**：优先级爬升算法，比递归下降更灵活。
@@ -673,7 +673,7 @@ AST Root (TranslationUnitDecl)
   Expr* parseRequiresExpression();  // requires { requirements }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++ 特有表达式的解析 `src/Parse/ParseExprCXX.cpp`。
 >
 > **Lambda 表达式解析**：
@@ -739,7 +739,7 @@ AST Root (TranslationUnitDecl)
   Stmt* parseGotoStatement();
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现基础语句解析 `src/Parse/ParseStmt.cpp`。
 >
 > **核心逻辑**：
@@ -808,7 +808,7 @@ AST Root (TranslationUnitDecl)
   VarDecl* parseConditionDeclaration();
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现控制流语句解析，追加到 `src/Parse/ParseStmt.cpp`。
 >
 > **if 语句**：
@@ -862,7 +862,7 @@ AST Root (TranslationUnitDecl)
 
 - **E3.3.3** 处理 catch-all：`catch (...)`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现异常处理语句解析，追加到 `src/Parse/ParseStmtCXX.cpp`。
 >
 > **try 语句**：
@@ -907,7 +907,7 @@ AST Root (TranslationUnitDecl)
   Expr* parseCoawaitExpression();  // co_await expr
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现协程语句解析，追加到 `src/Parse/ParseStmtCXX.cpp`。
 >
 > **co_return**：
@@ -952,7 +952,7 @@ AST Root (TranslationUnitDecl)
 
 - **E4.1.3** 在 `-std=c++26` 模式下启用新语法
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 C++26 表达式新特性的解析。
 >
 > **参数包索引（Pack Indexing）**：
@@ -1002,7 +1002,7 @@ AST Root (TranslationUnitDecl)
           `-IntegerLiteral '42'
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请实现 AST 打印功能 `src/AST/ASTDumper.cpp`。
 >
 > 格式要求：

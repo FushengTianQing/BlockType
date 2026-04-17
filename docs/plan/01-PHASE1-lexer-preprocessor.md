@@ -295,7 +295,7 @@ Token 流 (to Parser)
   KEYWORD(delete, KEYCXX)       // delete("reason") 增强
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 定义完整的 Token 系统。
 >
 > **TokenKinds.def 格式**：
@@ -404,7 +404,7 @@ Token 流 (to Parser)
   } // namespace nova
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现 Token 辅助函数。
 >
 > **getTokenName**：
@@ -486,7 +486,7 @@ Token 流 (to Parser)
 
 - **E1.3.2** 实现 `src/Basic/SourceManager.cpp`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现 SourceManager。
 >
 > **核心功能**：
@@ -646,7 +646,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现 Lexer 基础架构。
 >
 > **Lexer 类设计**：
@@ -737,7 +737,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现标识符和关键字识别。
 >
 > **标识符规则**：
@@ -838,7 +838,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现数字字面量解析。
 >
 > **整数格式**：
@@ -961,7 +961,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现字符和字符串字面量解析。
 >
 > **字符字面量**：
@@ -1064,7 +1064,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现运算符和标点符号解析。
 >
 > **最长匹配原则**：
@@ -1159,7 +1159,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现注释处理。
 >
 > **注释类型**：
@@ -1252,7 +1252,7 @@ Token 流 (to Parser)
 
 - **E1.3.2** 实现 `src/Lex/Preprocessor.cpp` 基础框架
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现预处理器基础架构。
 >
 > **核心功能**：
@@ -1325,7 +1325,7 @@ Token 流 (to Parser)
 
 - **E1.3.4** 实现 #define 和 #undef
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现预处理指令处理。
 >
 > **预处理指令列表**：
@@ -1402,7 +1402,7 @@ Token 流 (to Parser)
   // __VA_OPT__ 可变参数优化（C++20）
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现宏展开。
 >
 > **对象宏**：
@@ -1485,7 +1485,7 @@ Token 流 (to Parser)
 
 - **E1.3.10** 实现 `src/Lex/HeaderSearch.cpp`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现头文件搜索。
 >
 > **Include 语法**：
@@ -1541,7 +1541,7 @@ Token 流 (to Parser)
   // __cpp_contracts = 202502L (合约)
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现 C++26 预处理新特性。
 >
 > **#embed 指令（P1967）**：
@@ -1582,7 +1582,7 @@ Token 流 (to Parser)
 - **E1.4.2** 添加占位符 Token（如 ..）
 - **E1.4.3** 支持合约属性（[[pre:]], [[post:]], [[assert:]]）
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 添加 C++26 新 Token 支持。
 >
 > **reflexpr 关键字**：
@@ -1654,7 +1654,7 @@ Token 流 (to Parser)
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 建立 Lexer 和 Preprocessor 测试。
 >
 > **测试覆盖**：
@@ -1710,7 +1710,7 @@ Token 流 (to Parser)
   // CHECK: double x = 3.14;
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 建立 Lexer Lit 测试。
 >
 > **测试类别**：
@@ -1751,7 +1751,7 @@ Token 流 (to Parser)
 
 - **E1.4.3** 实现宏展开缓存
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 优化 Lexer 性能。
 >
 > **优化点**：

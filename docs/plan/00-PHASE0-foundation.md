@@ -98,7 +98,7 @@ nova-cc/
 
 - **E0.1.3** 创建 `cmake/LLVM.cmake` 配置 LLVM 依赖
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建 CMake 基础配置。
 >
 > **根目录 CMakeLists.txt**：
@@ -172,7 +172,7 @@ nova-cc/
 
 - **E0.2.3** 配置交叉编译支持（Linux x86_64 + macOS arm64）
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 集成 LLVM。
 >
 > **LLVM 版本**：最低 18.x
@@ -241,7 +241,7 @@ nova-cc/
 
 - **E0.3.3** 创建 `scripts/clean.sh`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建编译脚本。
 >
 > **scripts/build.sh**：
@@ -316,7 +316,7 @@ nova-cc/
   nova_cc_add_compile_options(nova-cc-basic)
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建项目目录结构。
 >
 > **目录说明**：
@@ -433,7 +433,7 @@ nova-cc/
   } // namespace nova
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建基础类型定义。
 >
 > **include/nova-cc/Basic/LLVM.h**：
@@ -511,7 +511,7 @@ nova-cc/
 
 - **E0.3.3** 实现 `src/Basic/FileManager.cpp`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现文件管理器。
 >
 > **FileEntry 类**：
@@ -597,7 +597,7 @@ nova-cc/
   }
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 集成 Google Test。
 >
 > **GTest 配置**：
@@ -657,7 +657,7 @@ nova-cc/
   // CHECK: nova-cc version {{[0-9]+\.[0-9]+\.[0-9]+}}
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 配置 LLVM Lit 测试框架。
 >
 > **lit.cfg 配置**：
@@ -711,7 +711,7 @@ nova-cc/
 
 - **E0.3.2** 实现 `tests/TestHelpers.cpp`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建测试辅助工具。
 >
 > **TestHelpers.h**：
@@ -787,7 +787,7 @@ nova-cc/
       key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'cmake/*.cmake') }}
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 配置 GitHub Actions CI/CD。
 >
 > **CI 流水线**：
@@ -845,7 +845,7 @@ nova-cc/
 - **E0.4.3** 创建 `docs/ARCHITECTURE.md`
 - **E0.4.4** 创建 `CONTRIBUTING.md`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 创建项目文档。
 >
 > **README.md**：
@@ -919,7 +919,7 @@ nova-cc/
   indent_size = 2
   ```
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 配置编码规范工具。
 >
 > **.clang-format**：
@@ -973,7 +973,7 @@ nova-cc/
 
 - **E0.4.3** 创建 `scripts/release.sh`
 
-**AI 指导提示词：**
+**开发关键点提示：**
 > 请为 nova-cc 实现版本号管理。
 >
 > **版本号格式**：MAJOR.MINOR.PATCH
