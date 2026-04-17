@@ -16,6 +16,7 @@
 #include "blocktype/AST/DeclContext.h"
 #include "blocktype/AST/TemplateParameterList.h"
 #include "blocktype/AST/Type.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -111,16 +112,20 @@ class VarDecl : public ValueDecl {
 protected:
   Expr *Init;
   bool IsStatic;
+  bool IsConstexpr;
 
 public:
   VarDecl(SourceLocation Loc, llvm::StringRef Name, QualType T, 
-          Expr *Init = nullptr, bool IsStatic = false)
-      : ValueDecl(Loc, Name, T), Init(Init), IsStatic(IsStatic) {}
+          Expr *Init = nullptr, bool IsStatic = false, bool IsConstexpr = false)
+      : ValueDecl(Loc, Name, T), Init(Init), IsStatic(IsStatic),
+        IsConstexpr(IsConstexpr) {}
 
   Expr *getInit() const { return Init; }
   void setInit(Expr *I) { Init = I; }
   bool isStatic() const { return IsStatic; }
   void setStatic(bool S) { IsStatic = S; }
+  bool isConstexpr() const { return IsConstexpr; }
+  void setConstexpr(bool C = true) { IsConstexpr = C; }
 
   NodeKind getKind() const override { return NodeKind::VarDeclKind; }
 
@@ -249,14 +254,30 @@ public:
 
 /// EnumConstantDecl - Enum constant declaration.
 class EnumConstantDecl : public ValueDecl {
-  Expr *InitVal;
+  Expr *InitExpr;
+  llvm::APSInt Val;
+  bool HasVal = false;
 
 public:
   EnumConstantDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
-                   Expr *InitVal = nullptr)
-      : ValueDecl(Loc, Name, T), InitVal(InitVal) {}
+                   Expr *InitExpr = nullptr)
+      : ValueDecl(Loc, Name, T), InitExpr(InitExpr),
+        Val(llvm::APInt(32, 0)) {}
 
-  Expr *getInitVal() const { return InitVal; }
+  /// Returns the initializer expression (may be null).
+  Expr *getInitExpr() const { return InitExpr; }
+
+  /// Returns the cached enum value (valid only if hasVal() is true).
+  llvm::APSInt getVal() const { return Val; }
+
+  /// Sets the cached enum value (called during Sema analysis).
+  void setVal(llvm::APSInt V) { Val = V; HasVal = true; }
+
+  /// Returns true if the value has been evaluated and cached.
+  bool hasVal() const { return HasVal; }
+
+  // Legacy alias for getInitExpr()
+  Expr *getInitVal() const { return InitExpr; }
 
   NodeKind getKind() const override { return NodeKind::EnumConstantDeclKind; }
 

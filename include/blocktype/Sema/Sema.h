@@ -190,6 +190,10 @@ public:
   void ActOnStartOfFunctionDef(FunctionDecl *FD);
   void ActOnFinishOfFunctionDef(FunctionDecl *FD);
 
+  /// Process an enum constant declaration: evaluate and cache its value.
+  /// Per C++ [dcl.enum], enum constant values are evaluated at declaration time.
+  DeclResult ActOnEnumConstant(EnumConstantDecl *ECD);
+
   //===------------------------------------------------------------------===//
   // Expression handling
   //===------------------------------------------------------------------===//

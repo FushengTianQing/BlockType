@@ -96,12 +96,15 @@ bool ConstantExprEvaluator::isConstantExpr(Expr *E) {
   // Declaration references: constexpr/const integral variables
   if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(E)) {
     if (auto *VD = llvm::dyn_cast<VarDecl>(DRE->getDecl())) {
+      // constexpr variables are always constant expressions
+      if (VD->isConstexpr()) {
+        Expr *Init = VD->getInit();
+        return Init != nullptr && isConstantExpr(Init);
+      }
       // const integral types initialized with constant expression
       if (VD->getType().isConstQualified() && VD->getType()->isIntegerType()) {
         return VD->getInit() != nullptr && isConstantExpr(VD->getInit());
       }
-      // constexpr variables
-      // TODO: check for constexpr specifier
     }
     // Enum constants are always constant
     if (llvm::isa<EnumConstantDecl>(DRE->getDecl()))
@@ -465,20 +468,31 @@ ConstantExprEvaluator::EvaluateDeclRefExpr(DeclRefExpr *E) {
     return EvalResult::getFailure(EvalResult::NotConstantExpression,
                                   "null declaration");
 
-  // Enum constants
+  // Enum constants — use cached value if available, otherwise evaluate init expr
   if (auto *ECD = llvm::dyn_cast<EnumConstantDecl>(D)) {
-    // TODO: evaluate enum constant's init value
+    if (ECD->hasVal())
+      return EvalResult::getSuccess(ECD->getVal());
+    // Fallback: try to evaluate the init expression
+    if (Expr *Init = ECD->getInitExpr())
+      return EvaluateExpr(Init);
     return EvalResult::getSuccess(llvm::APSInt(llvm::APInt(32, 0)));
   }
 
   // Const integral variables
   if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
+    // constexpr variables
+    if (VD->isConstexpr()) {
+      Expr *Init = VD->getInit();
+      if (Init)
+        return EvaluateExpr(Init);
+      return EvalResult::getFailure(EvalResult::NotConstantExpression,
+                                    "constexpr variable has no initializer");
+    }
     if (VD->getType().isConstQualified() && VD->getType()->isIntegerType()) {
       Expr *Init = VD->getInit();
       if (Init)
         return EvaluateExpr(Init);
     }
-    // TODO: constexpr variables
   }
 
   return EvalResult::getFailure(EvalResult::NotConstantExpression,

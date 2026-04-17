@@ -162,9 +162,11 @@ void FieldDecl::dump(raw_ostream &OS, unsigned Indent) const {
 void EnumConstantDecl::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
   OS << "EnumConstantDecl " << getName();
-  if (InitVal) {
+  if (hasVal())
+    OS << " = " << getVal();
+  else if (InitExpr) {
     OS << " = ";
-    InitVal->dump(OS, 0);
+    InitExpr->dump(OS, 0);
   } else {
     OS << "\n";
   }

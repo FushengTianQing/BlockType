@@ -139,6 +139,38 @@ void Sema::ActOnFinishOfFunctionDef(FunctionDecl *FD) {
   PopScope();
 }
 
+DeclResult Sema::ActOnEnumConstant(EnumConstantDecl *ECD) {
+  if (!ECD)
+    return DeclResult::getInvalid();
+
+  // Evaluate the enum constant's initializer expression and cache the result.
+  // Per Clang's pattern: Sema::ActOnEnumConstant evaluates and stores the
+  // APSInt directly on the EnumConstantDecl.
+  Expr *Init = ECD->getInitExpr();
+  if (Init) {
+    auto Result = ConstEval.Evaluate(Init);
+    if (Result.isSuccess() && Result.isIntegral()) {
+      ECD->setVal(Result.getInt());
+    } else {
+      // If evaluation fails, default to 0 and report a diagnostic
+      ECD->setVal(llvm::APSInt(llvm::APInt(32, 0)));
+      Diags.report(Init->getLocation(),
+                   DiagID::err_non_constexpr_in_constant_context);
+    }
+  } else {
+    // No initializer — value will be auto-incremented by the parser/driver.
+    // Default to 0 here; the caller should set the correct value.
+    ECD->setVal(llvm::APSInt(llvm::APInt(32, 0)));
+  }
+
+  if (CurrentScope)
+    Symbols.addDecl(ECD);
+  if (CurContext)
+    CurContext->addDecl(ECD);
+
+  return DeclResult(ECD);
+}
+
 //===----------------------------------------------------------------------===//
 // Expression handling
 //===----------------------------------------------------------------------===//

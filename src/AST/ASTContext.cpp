@@ -316,11 +316,21 @@ ASTContext::~ASTContext() {
 void ASTContext::clear() {
   destroyAll();
   Nodes.clear();
+  Cleanups.clear();
   Allocator.Reset();
 }
 
 void ASTContext::destroyAll() {
-  // Destroy in reverse order of creation
+  // Run registered cleanup callbacks in reverse order (LIFO).
+  // This ensures resources owned by bump-allocated objects are properly
+  // released before the allocator memory is reclaimed.
+  for (auto It = Cleanups.rbegin(); It != Cleanups.rend(); ++It) {
+    (*It)();
+  }
+
+  // Destroy AST nodes in reverse order of creation via virtual destructor.
+  // Since ~ASTNode() is virtual, this correctly calls the most-derived
+  // destructor, handling SmallVector and other non-trivial members.
   for (auto It = Nodes.rbegin(); It != Nodes.rend(); ++It) {
     ASTNode *Node = *It;
     Node->~ASTNode();

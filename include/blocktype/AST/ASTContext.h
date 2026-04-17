@@ -17,6 +17,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/Allocator.h"
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -52,6 +53,13 @@ class ASTContext {
   /// List of all allocated nodes for cleanup.
   /// We store raw pointers here because the allocator owns the memory.
   std::vector<ASTNode *> Nodes;
+
+  /// Cleanup callbacks for resources that need explicit destruction.
+  /// Following Clang's pattern: bump-allocated AST nodes that own resources
+  /// (e.g., llvm::SmallVector members) register a cleanup callback here.
+  /// These callbacks are invoked in reverse registration order before
+  /// the allocator is reset, ensuring proper cleanup of non-trivial resources.
+  std::vector<std::function<void()>> Cleanups;
   
   /// Cached builtin types.
   BuiltinType *BuiltinTypes[static_cast<unsigned>(BuiltinKind::NumBuiltinTypes)] = {};
@@ -110,6 +118,14 @@ public:
   
   /// Returns the allocator for AST nodes.
   llvm::BumpPtrAllocator &getAllocator() { return Allocator; }
+
+  /// Register a cleanup callback to be invoked when ASTContext is destroyed.
+  /// Use this for bump-allocated objects that own resources requiring
+  /// explicit destruction (e.g., containers with heap-allocated storage).
+  /// Callbacks are invoked in reverse registration order (LIFO).
+  void addCleanup(std::function<void()> Callback) {
+    Cleanups.push_back(std::move(Callback));
+  }
   
   /// Saves a string in the ASTContext's memory pool.
   /// Returns a StringRef that points to the saved copy.
