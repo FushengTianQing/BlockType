@@ -160,13 +160,22 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   SourceLocation RAngleLoc = Tok.getLocation();
   consumeToken(); // consume '>'
 
+  // Enter template scope: template parameters are visible within the
+  // template body. This allows LookupUnqualifiedName to detect that
+  // we are inside a template definition via ScopeFlags::TemplateScope.
+  pushScope(ScopeFlags::TemplateScope);
+  for (auto *P : Params)
+    CurrentScope->addDeclAllowRedeclaration(P);
+
   // Check for concept definition (C++20)
   if (Tok.is(TokenKind::kw_concept)) {
     ConceptDecl *Concept = parseConceptDefinition(TemplateLoc, Params);
     if (!Concept) {
+      popScope();
       return nullptr;
     }
     // Return the concept's template
+    popScope();
     return Concept->getTemplate();
   }
 
@@ -179,6 +188,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   // Parse the templated declaration
   Decl *TemplatedDecl = parseDeclaration();
   if (!TemplatedDecl) {
+    popScope();
     return nullptr;
   }
 
@@ -219,6 +229,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       
       // Return a wrapper TemplateDecl for the partial specialization
       Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), PartialSpec);
+      popScope();
       return Template;
     }
     
@@ -250,6 +261,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       PartialSpec->setTemplateParameterList(PartialTPL);
       
       Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), PartialSpec);
+      popScope();
       return Template;
     }
     
@@ -268,6 +280,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
   Template->setTemplateParameterList(TPL);
 
+  popScope();
   return Template;
 }
 
