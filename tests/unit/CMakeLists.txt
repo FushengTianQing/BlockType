@@ -12,7 +12,9 @@ target_link_libraries(blocktype-tests
   GTest::gtest_main
 )
 
-gtest_discover_tests(blocktype-tests)
+gtest_discover_tests(blocktype-tests
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+)
 
 # Lex 单元测试
 add_subdirectory(Lex)

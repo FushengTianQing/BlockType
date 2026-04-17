@@ -950,7 +950,11 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::TemplateDeclKind ||
-           N->getKind() == NodeKind::TemplateTemplateParmDeclKind;
+           N->getKind() == NodeKind::TemplateTemplateParmDeclKind ||
+           N->getKind() == NodeKind::FunctionTemplateDeclKind ||
+           N->getKind() == NodeKind::ClassTemplateDeclKind ||
+           N->getKind() == NodeKind::VarTemplateDeclKind ||
+           N->getKind() == NodeKind::TypeAliasTemplateDeclKind;
   }
 };
 

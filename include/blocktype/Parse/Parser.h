@@ -377,7 +377,11 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Parses a declaration.
-  Decl *parseDeclaration();
+  /// \param ParsedTemplateArgs If non-null, receives the parsed template
+  ///        specialization arguments when the declaration is a class/struct
+  ///        template specialization (e.g., `class Vector<int>`).
+  Decl *parseDeclaration(
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs = nullptr);
 
   /// Parses a variable declaration.
   VarDecl *parseVariableDeclaration(QualType Type, llvm::StringRef Name,
@@ -394,10 +398,16 @@ public:
   ParmVarDecl *parseParameterDeclaration(unsigned Index = 0);
 
   /// Parses a class declaration.
-  CXXRecordDecl *parseClassDeclaration(SourceLocation ClassLoc);
+  /// \param ParsedTemplateArgs If non-null, receives the parsed template
+  ///        specialization arguments (e.g., the `<int>` in `class Vector<int>`).
+  CXXRecordDecl *parseClassDeclaration(SourceLocation ClassLoc,
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs = nullptr);
 
   /// Parses a struct declaration.
-  CXXRecordDecl *parseStructDeclaration(SourceLocation StructLoc);
+  /// \param ParsedTemplateArgs If non-null, receives the parsed template
+  ///        specialization arguments (e.g., the `<int>` in `struct Vector<int>`).
+  CXXRecordDecl *parseStructDeclaration(SourceLocation StructLoc,
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs = nullptr);
 
   /// Parses a class/struct body.
   void parseClassBody(CXXRecordDecl *Class);

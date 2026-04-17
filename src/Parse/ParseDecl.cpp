@@ -59,7 +59,8 @@ Stmt *Parser::parseDeclarationStatement() {
 ///
 /// simple-declaration ::= decl-specifier-seq init-declarator-list? ';'
 ///
-Decl *Parser::parseDeclaration() {
+Decl *Parser::parseDeclaration(
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs) {
   // Check for module declaration (C++20)
   if (Tok.is(TokenKind::kw_module)) {
     return parseModuleDeclaration();
@@ -178,7 +179,7 @@ Decl *Parser::parseDeclaration() {
   if (Tok.is(TokenKind::kw_class)) {
     SourceLocation ClassLoc = Tok.getLocation();
     consumeToken();
-    Decl *Result = parseClassDeclaration(ClassLoc);
+    Decl *Result = parseClassDeclaration(ClassLoc, ParsedTemplateArgs);
     // Consume optional semicolon after class definition
     if (Tok.is(TokenKind::semicolon)) {
       consumeToken();
@@ -190,7 +191,7 @@ Decl *Parser::parseDeclaration() {
   if (Tok.is(TokenKind::kw_struct)) {
     SourceLocation StructLoc = Tok.getLocation();
     consumeToken();
-    Decl *Result = parseStructDeclaration(StructLoc);
+    Decl *Result = parseStructDeclaration(StructLoc, ParsedTemplateArgs);
     // Consume optional semicolon after struct definition
     if (Tok.is(TokenKind::semicolon)) {
       consumeToken();
@@ -494,7 +495,8 @@ ParmVarDecl *Parser::parseParameterDeclaration(unsigned Index) {
 ///
 /// class-specifier ::= 'class' identifier? '{' member-specification? '}'
 ///                    | 'class' identifier base-clause? '{' member-specification? '}'
-CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
+CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc,
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs) {
   // Parse class name (optional)
   llvm::StringRef Name;
   SourceLocation NameLoc;
@@ -513,12 +515,13 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
     TemplateArgs = parseTemplateArgumentList();
   }
 
+  // Pass template arguments to caller if requested
+  if (ParsedTemplateArgs) {
+    *ParsedTemplateArgs = std::move(TemplateArgs);
+  }
+
   // Create CXXRecordDecl
   CXXRecordDecl *Class = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_class);
-  
-  // Note: TemplateArgs are stored but not yet used in CXXRecordDecl
-  // This can be added later if needed for template specialization
-  (void)TemplateArgs; // Suppress unused warning
   
   // Add class to current scope before parsing body
   if (CurrentScope) {
@@ -559,7 +562,8 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc) {
 ///
 /// struct-specifier ::= 'struct' identifier? '{' member-specification? '}'
 ///                    | 'struct' identifier base-clause? '{' member-specification? '}'
-CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc) {
+CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc,
+    llvm::SmallVector<TemplateArgument, 4> *ParsedTemplateArgs) {
   // Parse struct name (optional)
   llvm::StringRef Name;
   SourceLocation NameLoc;
@@ -568,6 +572,17 @@ CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc) {
     Name = Tok.getText();
     NameLoc = Tok.getLocation();
     consumeToken();
+  }
+
+  // Check for template specialization arguments (e.g., Pair<int, double>)
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs;
+  if (Tok.is(TokenKind::less)) {
+    TemplateArgs = parseTemplateArgumentList();
+  }
+
+  // Pass template arguments to caller if requested
+  if (ParsedTemplateArgs) {
+    *ParsedTemplateArgs = std::move(TemplateArgs);
   }
 
   // Create CXXRecordDecl (struct has public default access)
@@ -1176,8 +1191,9 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     SourceLocation RAngleLoc = Tok.getLocation();
     consumeToken(); // consume '>'
 
-    // Parse the specialized declaration
-    Decl *SpecializedDecl = parseDeclaration();
+    // Parse the specialized declaration, collecting template arguments
+    llvm::SmallVector<TemplateArgument, 4> SpecTemplateArgs;
+    Decl *SpecializedDecl = parseDeclaration(&SpecTemplateArgs);
     if (!SpecializedDecl) {
       return nullptr;
     }
@@ -1197,10 +1213,10 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       
       if (PrimaryTemplate) {
         // Create a proper ClassTemplateSpecializationDecl
-        // Extract template args from the class name (e.g., "Vector<int>" -> [int])
+        // using the template arguments parsed from the class name
         auto *Spec = Context.create<ClassTemplateSpecializationDecl>(
             ClassDecl->getLocation(), ClassDecl->getName(),
-            PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(), true);
+            PrimaryTemplate, SpecTemplateArgs, true);
         // Add specialization to the primary template
         PrimaryTemplate->addSpecialization(Spec);
         Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), Spec);
