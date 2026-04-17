@@ -14,6 +14,7 @@
 
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/DeclContext.h"
+#include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Basic/SourceLocation.h"
 
 namespace blocktype {
@@ -41,17 +42,27 @@ public:
                             CXXRecordDecl *ClassContext);
 
   /// Check access for a member access expression (obj.member or ptr->member).
+  /// Reports a diagnostic if access is denied.
   static bool CheckMemberAccess(NamedDecl *Member,
                                  AccessSpecifier Access,
                                  CXXRecordDecl *MemberClass,
                                  DeclContext *AccessingContext,
-                                 SourceLocation AccessLoc);
+                                 SourceLocation AccessLoc,
+                                 DiagnosticsEngine &Diags);
 
   /// Check access for a base class specifier.
+  /// \param Base The base class being accessed.
+  /// \param Access The access level of the inheritance (public/protected/private).
+  /// \param Derived The derived class.
+  /// \param AccessingContext The context from which the access occurs.
+  /// \param AccessLoc Source location for diagnostics.
+  /// \param Diags Diagnostics engine for error reporting.
   static bool CheckBaseClassAccess(CXXRecordDecl *Base,
                                     AccessSpecifier Access,
                                     CXXRecordDecl *Derived,
-                                    SourceLocation AccessLoc);
+                                    DeclContext *AccessingContext,
+                                    SourceLocation AccessLoc,
+                                    DiagnosticsEngine &Diags);
 
   /// Check access for a friend declaration.
   static bool CheckFriendAccess(NamedDecl *Friend,
