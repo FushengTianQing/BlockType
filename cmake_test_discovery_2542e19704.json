@@ -1,0 +1,272 @@
+{
+  "tests": 46,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "SourceLocationTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "DefaultInvalid",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/SourceLocationTest.cpp",
+          "line": 6
+        },
+        {
+          "name": "ValidLocation",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/SourceLocationTest.cpp",
+          "line": 12
+        },
+        {
+          "name": "Comparison",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/SourceLocationTest.cpp",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "name": "DiagnosticsTest",
+      "tests": 11,
+      "testsuite": [
+        {
+          "name": "EnglishMessages",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 21
+        },
+        {
+          "name": "ChineseMessages",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 35
+        },
+        {
+          "name": "DiagnosticLevels",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 53
+        },
+        {
+          "name": "ErrorCounting",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 64
+        },
+        {
+          "name": "SeverityNamesEnglish",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 78
+        },
+        {
+          "name": "SeverityNamesChinese",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 88
+        },
+        {
+          "name": "ReportWithDiagID",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 98
+        },
+        {
+          "name": "ReportWithDiagIDChinese",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 110
+        },
+        {
+          "name": "ReportWithExtraText",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 122
+        },
+        {
+          "name": "SourceManagerIntegration",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 134
+        },
+        {
+          "name": "Reset",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 153
+        }
+      ]
+    },
+    {
+      "name": "TranslationManagerTest",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "LoadEnglishYAML",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 173
+        },
+        {
+          "name": "LoadChineseYAML",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 190
+        },
+        {
+          "name": "MissingTranslation",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 207
+        },
+        {
+          "name": "InvalidYAMLFile",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
+          "line": 216
+        }
+      ]
+    },
+    {
+      "name": "ResponseCacheTest",
+      "tests": 15,
+      "testsuite": [
+        {
+          "name": "BasicCacheOperations",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 31
+        },
+        {
+          "name": "CacheKeyGeneration",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 54
+        },
+        {
+          "name": "CacheExpiration",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 83
+        },
+        {
+          "name": "CacheSizeLimit",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 103
+        },
+        {
+          "name": "CacheClear",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 117
+        },
+        {
+          "name": "HitRateCalculation",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 133
+        },
+        {
+          "name": "CacheEntryJsonSerialization",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 156
+        },
+        {
+          "name": "CacheEntryJsonInvalidInput",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 183
+        },
+        {
+          "name": "SaveAndLoadCache",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 197
+        },
+        {
+          "name": "LoadWithClearExisting",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 237
+        },
+        {
+          "name": "LoadWithoutClearExisting",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 269
+        },
+        {
+          "name": "AutoSaveOnDestruction",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 301
+        },
+        {
+          "name": "NoAutoSaveWithoutCacheFile",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 332
+        },
+        {
+          "name": "SaveToNonexistentDirectory",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 353
+        },
+        {
+          "name": "LoadFromNonexistentFile",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/ResponseCacheTest.cpp",
+          "line": 371
+        }
+      ]
+    },
+    {
+      "name": "CostTrackerTest",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "BasicCostTracking",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 23
+        },
+        {
+          "name": "MultipleRecords",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 32
+        },
+        {
+          "name": "DailyLimitCheck",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 41
+        },
+        {
+          "name": "CostReport",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 53
+        },
+        {
+          "name": "SetDailyLimit",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 72
+        },
+        {
+          "name": "ClearRecords",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/CostTrackerTest.cpp",
+          "line": 82
+        }
+      ]
+    },
+    {
+      "name": "AIOrchestratorTest",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "RegisterProvider",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 28
+        },
+        {
+          "name": "ProviderSelection",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 35
+        },
+        {
+          "name": "ProviderAvailability",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 47
+        },
+        {
+          "name": "FallbackProvider",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 58
+        },
+        {
+          "name": "NoProviderAvailable",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 70
+        },
+        {
+          "name": "MultipleProviders",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 77
+        },
+        {
+          "name": "GetProviderInfo",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/AI\/AIOrchestratorTest.cpp",
+          "line": 88
+        }
+      ]
+    }
+  ]
+}
