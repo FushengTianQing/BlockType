@@ -19,7 +19,8 @@ namespace blocktype {
 Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
   : Context(C), Diags(D), Symbols(C),
     TC(C, D), ConstEval(C),
-    Instantiator(std::make_unique<TemplateInstantiator>(*this)) {
+    Instantiator(std::make_unique<TemplateInstantiator>(*this)),
+    Deduction(std::make_unique<TemplateDeduction>(*this)) {
   PushScope(ScopeFlags::TranslationUnitScope);
 }
 

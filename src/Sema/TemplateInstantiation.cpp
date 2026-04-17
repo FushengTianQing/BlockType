@@ -270,6 +270,10 @@ QualType TemplateInstantiator::SubstituteType(
   return T;
 }
 
+bool TemplateInstantiator::isSFINAEContext() const {
+  return SFINAE.isSFINAE();
+}
+
 Expr *TemplateInstantiator::SubstituteExpr(Expr *E,
                                            const TemplateArgumentList &Args) {
   if (!E)

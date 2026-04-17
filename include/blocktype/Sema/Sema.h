@@ -28,6 +28,7 @@
 #include "blocktype/Sema/AccessControl.h"
 #include "blocktype/Sema/ConstantExpr.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
+#include "blocktype/Sema/TemplateDeduction.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <memory>
@@ -141,6 +142,9 @@ class Sema {
   /// Template instantiation engine [Stage 5.1]
   std::unique_ptr<TemplateInstantiator> Instantiator;
 
+  /// Template argument deduction engine [Stage 5.2]
+  std::unique_ptr<TemplateDeduction> Deduction;
+
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;
 
@@ -177,6 +181,9 @@ public:
 
   /// Access the template instantiation engine.
   TemplateInstantiator &getTemplateInstantiator() { return *Instantiator; }
+
+  /// Access the template deduction engine.
+  TemplateDeduction &getTemplateDeduction() { return *Deduction; }
 
   /// Access the symbol table.
   SymbolTable &getSymbolTable() { return Symbols; }

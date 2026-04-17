@@ -16,6 +16,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Sema/SFINAE.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace blocktype {
@@ -65,8 +66,16 @@ class TemplateInstantiator {
   /// Current instantiation depth (prevents infinite recursion).
   unsigned CurrentDepth = 0;
 
+  /// SFINAE context — controls whether substitution failures are hard errors
+  /// or silently remove the candidate from the overload set.
+  SFINAEContext SFINAE;
+
 public:
   explicit TemplateInstantiator(Sema &S);
+
+  /// Access the SFINAE context.
+  SFINAEContext &getSFINAEContext() { return SFINAE; }
+  const SFINAEContext &getSFINAEContext() const { return SFINAE; }
 
   // === Class Template Instantiation ===
 
@@ -118,6 +127,9 @@ public:
                              llvm::ArrayRef<TemplateArgument> Args);
 
 private:
+  /// Check if currently in a SFINAE context.
+  bool isSFINAEContext() const;
+
   /// Substitute TemplateTypeParmType with the corresponding argument type.
   QualType SubstituteTemplateTypeParmType(const TemplateTypeParmType *T,
                                           const TemplateArgumentList &Args);
