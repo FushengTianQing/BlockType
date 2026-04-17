@@ -436,9 +436,10 @@ bool Type::isDependentType() const {
       if (!Underlying.isNull() && Underlying->isDependentType()) {
         return true;
       }
-      // TODO: Implement proper expression type-dependence checking
-      // Requires Expr::isTypeDependent() to be implemented
-      // This is a known limitation that affects template code
+      // Check if the expression itself is type-dependent
+      if (E->isTypeDependent()) {
+        return true;
+      }
     }
     return false;
   }

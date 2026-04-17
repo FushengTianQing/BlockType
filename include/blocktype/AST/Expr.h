@@ -86,6 +86,10 @@ protected:
   Expr(SourceLocation Loc) : ASTNode(Loc) {}
 
 public:
+  /// isTypeDependent - Determine whether this expression is type-dependent.
+  /// An expression is type-dependent if its type depends on a template parameter.
+  virtual bool isTypeDependent() const = 0;
+
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::ExprKind &&
            N->getKind() < NodeKind::NullStmtKind;
@@ -113,6 +117,8 @@ public:
     OS << "IntegerLiteral: " << Value << "\n";
   }
 
+  bool isTypeDependent() const override { return false; }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::IntegerLiteralKind;
   }
@@ -137,6 +143,8 @@ public:
     OS << "FloatingLiteral: " << Str << "\n";
   }
 
+  bool isTypeDependent() const override { return false; }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::FloatingLiteralKind;
   }
@@ -158,6 +166,8 @@ public:
     printIndent(OS, Indent);
     OS << "StringLiteral: \"" << Value << "\"\n";
   }
+
+  bool isTypeDependent() const override { return false; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::StringLiteralKind;
@@ -181,6 +191,8 @@ public:
     OS << "CharacterLiteral: '" << static_cast<char>(Value) << "'\n";
   }
 
+  bool isTypeDependent() const override { return false; }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CharacterLiteralKind;
   }
@@ -203,6 +215,8 @@ public:
     OS << "CXXBoolLiteral: " << (Value ? "true" : "false") << "\n";
   }
 
+  bool isTypeDependent() const override { return false; }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXBoolLiteralKind;
   }
@@ -219,6 +233,8 @@ public:
     printIndent(OS, Indent);
     OS << "CXXNullPtrLiteral: nullptr\n";
   }
+
+  bool isTypeDependent() const override { return false; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXNullPtrLiteralKind;
@@ -242,6 +258,11 @@ public:
   NodeKind getKind() const override { return NodeKind::DeclRefExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// A declaration reference is type-dependent if the referenced declaration has a dependent type
+  bool isTypeDependent() const override {
+    return D && D->getType()->isDependentType();
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::DeclRefExprKind;
@@ -282,6 +303,23 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A template specialization is type-dependent if any of its template arguments is dependent
+  bool isTypeDependent() const override {
+    for (const auto &Arg : TemplateArgs) {
+      if (Arg.isType()) {
+        if (Arg.getAsType()->isDependentType()) {
+          return true;
+        }
+      } else if (Arg.isExpression()) {
+        if (Arg.getAsExpr()->isTypeDependent()) {
+          return true;
+        }
+      }
+      // Template template parameters are also potentially dependent
+    }
+    return false;
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::TemplateSpecializationExprKind;
   }
@@ -305,6 +343,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A member access expression is type-dependent if the base or the member type is dependent
+  bool isTypeDependent() const override {
+    return Base->isTypeDependent() || (Member && Member->getType()->isDependentType());
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::MemberExprKind;
   }
@@ -325,6 +368,11 @@ public:
   NodeKind getKind() const override { return NodeKind::ArraySubscriptExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// An array subscript is type-dependent if the base or index is type-dependent
+  bool isTypeDependent() const override {
+    return Base->isTypeDependent() || Index->isTypeDependent();
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::ArraySubscriptExprKind;
@@ -353,6 +401,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A binary operator is type-dependent if either operand is type-dependent
+  bool isTypeDependent() const override {
+    return LHS->isTypeDependent() || RHS->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::BinaryOperatorKind;
   }
@@ -379,6 +432,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A unary operator is type-dependent if its subexpression is type-dependent
+  bool isTypeDependent() const override {
+    return SubExpr->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::UnaryOperatorKind;
   }
@@ -400,6 +458,12 @@ public:
   NodeKind getKind() const override { return NodeKind::ConditionalOperatorKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// A conditional operator is type-dependent if any of its operands is type-dependent
+  bool isTypeDependent() const override {
+    return Cond->isTypeDependent() || TrueExpr->isTypeDependent() ||
+           FalseExpr->isTypeDependent();
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::ConditionalOperatorKind;
@@ -427,6 +491,17 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A call expression is type-dependent if the callee or any argument is type-dependent
+  bool isTypeDependent() const override {
+    if (Callee->isTypeDependent())
+      return true;
+    for (const auto *Arg : Args) {
+      if (Arg->isTypeDependent())
+        return true;
+    }
+    return false;
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::CallExprKind &&
            N->getKind() <= NodeKind::CXXTemporaryObjectExprKind;
@@ -443,6 +518,8 @@ public:
   NodeKind getKind() const override { return NodeKind::CXXMemberCallExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  // Inherits isTypeDependent() from CallExpr
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXMemberCallExprKind;
@@ -463,6 +540,15 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A constructor call is type-dependent if any argument is type-dependent
+  bool isTypeDependent() const override {
+    for (const auto *Arg : Args) {
+      if (Arg->isTypeDependent())
+        return true;
+    }
+    return false;
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::CXXConstructExprKind &&
            N->getKind() <= NodeKind::CXXTemporaryObjectExprKind;
@@ -480,6 +566,8 @@ public:
   }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  // Inherits isTypeDependent() from CXXConstructExpr
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXTemporaryObjectExprKind;
@@ -511,6 +599,15 @@ public:
   NodeKind getKind() const override { return NodeKind::InitListExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// An init list is type-dependent if any of its initializers is type-dependent
+  bool isTypeDependent() const override {
+    for (const auto *Init : Inits) {
+      if (Init->isTypeDependent())
+        return true;
+    }
+    return false;
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::InitListExprKind;
@@ -569,6 +666,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A designated init is type-dependent if the init expression is type-dependent
+  bool isTypeDependent() const override {
+    return Init->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::DesignatedInitExprKind;
   }
@@ -589,6 +691,9 @@ public:
     printIndent(OS, Indent);
     OS << "CXXThisExpr: this\n";
   }
+
+  /// 'this' is never type-dependent
+  bool isTypeDependent() const override { return false; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXThisExprKind;
@@ -611,6 +716,12 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A new expression is type-dependent if array size or initializer is type-dependent
+  bool isTypeDependent() const override {
+    return (ArraySize && ArraySize->isTypeDependent()) ||
+           (Initializer && Initializer->isTypeDependent());
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXNewExprKind;
   }
@@ -632,6 +743,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A delete expression is type-dependent if its argument is type-dependent
+  bool isTypeDependent() const override {
+    return Argument->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXDeleteExprKind;
   }
@@ -650,6 +766,11 @@ public:
   NodeKind getKind() const override { return NodeKind::CXXThrowExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// A throw expression is type-dependent if its subexpression is type-dependent
+  bool isTypeDependent() const override {
+    return SubExpr->isTypeDependent();
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXThrowExprKind;
@@ -673,6 +794,11 @@ public:
   Expr *getSubExpr() const { return SubExpr; }
   CastKind getCastKind() const { return Kind; }
 
+  /// A cast expression is type-dependent if its subexpression is type-dependent
+  bool isTypeDependent() const override {
+    return SubExpr->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::CastExprKind &&
            N->getKind() <= NodeKind::CStyleCastExprKind;
@@ -689,6 +815,8 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  // Inherits isTypeDependent() from CastExpr
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXStaticCastExprKind;
   }
@@ -704,6 +832,8 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  // Inherits isTypeDependent() from CastExpr
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXDynamicCastExprKind;
   }
@@ -718,6 +848,8 @@ public:
   NodeKind getKind() const override { return NodeKind::CXXConstCastExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  // Inherits isTypeDependent() from CastExpr
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXConstCastExprKind;
@@ -736,6 +868,8 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  // Inherits isTypeDependent() from CastExpr
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXReinterpretCastExprKind;
   }
@@ -750,6 +884,8 @@ public:
   NodeKind getKind() const override { return NodeKind::CStyleCastExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  // Inherits isTypeDependent() from CastExpr
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CStyleCastExprKind;
@@ -808,6 +944,9 @@ public:
   NodeKind getKind() const override { return NodeKind::LambdaExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// A lambda expression is never type-dependent (it has a unique closure type)
+  bool isTypeDependent() const override { return false; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::LambdaExprKind;
@@ -922,6 +1061,23 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A requires expression is type-dependent if any of its requirements contains type-dependent expressions
+  bool isTypeDependent() const override {
+    for (const auto *Req : Requirements) {
+      if (auto *ExprReq = dyn_cast<ExprRequirement>(Req)) {
+        if (ExprReq->getExpression()->isTypeDependent())
+          return true;
+      } else if (auto *CompoundReq = dyn_cast<CompoundRequirement>(Req)) {
+        if (CompoundReq->getExpression()->isTypeDependent())
+          return true;
+      } else if (auto *NestedReq = dyn_cast<NestedRequirement>(Req)) {
+        if (NestedReq->getConstraint()->isTypeDependent())
+          return true;
+      }
+    }
+    return false;
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::RequiresExprKind;
   }
@@ -952,6 +1108,13 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A fold expression is type-dependent if any of its operands is type-dependent
+  bool isTypeDependent() const override {
+    return (LHS && LHS->isTypeDependent()) ||
+           (RHS && RHS->isTypeDependent()) ||
+           Pattern->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CXXFoldExprKind;
   }
@@ -973,6 +1136,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A pack indexing expression is type-dependent if the pack or index is type-dependent
+  bool isTypeDependent() const override {
+    return Pack->isTypeDependent() || Index->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::PackIndexingExprKind;
   }
@@ -993,6 +1161,11 @@ public:
   NodeKind getKind() const override { return NodeKind::ReflexprExprKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// A reflexpr expression is type-dependent if its argument is type-dependent
+  bool isTypeDependent() const override {
+    return Argument->isTypeDependent();
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::ReflexprExprKind;
@@ -1017,6 +1190,11 @@ public:
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
+  /// A co_await expression is type-dependent if its operand is type-dependent
+  bool isTypeDependent() const override {
+    return Operand->isTypeDependent();
+  }
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::CoawaitExprKind;
   }
@@ -1037,6 +1215,9 @@ public:
     printIndent(OS, Indent);
     OS << "RecoveryExpr\n";
   }
+
+  /// A recovery expression is never type-dependent (it's a placeholder)
+  bool isTypeDependent() const override { return false; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::RecoveryExprKind;
