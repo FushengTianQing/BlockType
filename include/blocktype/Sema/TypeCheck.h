@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Type.h"
 #include "blocktype/Basic/Diagnostics.h"
@@ -24,10 +25,12 @@ namespace blocktype {
 /// This class provides methods for checking type compatibility,
 /// initialization, assignment, and other type-related operations.
 class TypeCheck {
+  ASTContext &Context;
   DiagnosticsEngine &Diags;
 
 public:
-  explicit TypeCheck(DiagnosticsEngine &D) : Diags(D) {}
+  explicit TypeCheck(ASTContext &C, DiagnosticsEngine &D)
+      : Context(C), Diags(D) {}
 
   //===------------------------------------------------------------------===//
   // Assignment and initialization
@@ -85,16 +88,45 @@ public:
   QualType getCommonType(QualType T1, QualType T2) const;
 
   /// Get the result type of a binary operator.
-  QualType getBinaryOperatorResultType(QualType LHS, QualType RHS) const;
+  /// Takes the operator kind into account: comparison/logical → bool,
+  /// assignment → LHS, comma → RHS, arithmetic/bitwise/shift → common type.
+  QualType getBinaryOperatorResultType(BinaryOpKind Op, QualType LHS,
+                                        QualType RHS) const;
 
   /// Get the result type of a unary operator.
-  QualType getUnaryOperatorResultType(QualType Operand) const;
+  /// Takes the operator kind into account: ! → bool, ~ → promoted operand,
+  /// +/- → promoted operand, * → dereferenced, & → pointer.
+  QualType getUnaryOperatorResultType(UnaryOpKind Op, QualType Operand) const;
 
   /// Check if a type can be compared (operator<, >, ==, etc.).
   bool isComparable(QualType T) const;
 
   /// Check if a type can be called (function type, class with operator()).
   bool isCallable(QualType T) const;
+
+private:
+  //===------------------------------------------------------------------===//
+  // Private helpers for arithmetic conversions
+  //===------------------------------------------------------------------===//
+
+  /// Perform integral promotion on a type (C++ [conv.prom]).
+  /// Returns int for types smaller than int; enum → int.
+  QualType performIntegralPromotion(QualType T) const;
+
+  /// Get integer rank for a builtin type (-1 if not integer).
+  int getIntegerRankForType(const BuiltinType *BT) const;
+
+  /// Check if a type is long double or float128.
+  bool isLongDoubleType(const Type *T) const;
+
+  /// Check if a type is double.
+  bool isDoubleType(const Type *T) const;
+
+  /// Check if a type is float.
+  bool isFloatType(const Type *T) const;
+
+  /// Get the common integer type via usual arithmetic conversions.
+  QualType getIntegerCommonType(QualType T1, QualType T2) const;
 };
 
 } // namespace blocktype
