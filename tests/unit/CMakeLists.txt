@@ -25,6 +25,9 @@ add_subdirectory(AST)
 # Parse 单元测试
 add_subdirectory(Parse)
 
+# Sema 单元测试
+add_subdirectory(Sema)
+
 # D19: Performance tests
 add_executable(PerformanceTest
   PerformanceTest.cpp
