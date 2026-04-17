@@ -222,8 +222,8 @@ struct DeclaratorChunk {
 - 代码可维护性较差
 - 复杂声明符 (如函数指针、成员指针) 可能处理不完整
 
-**设计决策 (Phase 4 开发者必读):**
-- **何时引入**: Phase 4 启动时同步引入，因为 Sema 需要结构化的声明信息。
+**设计决策 (开发者必读):**
+- **何时引入**: Phase3必须完成，因Phase4的 Sema 需要结构化的声明信息。
   不要在 Sema 中用 `std::tuple<QualType, llvm::StringRef, ...>` 等临时结构替代 `Declarator`。
 - **如何引入**: 参考 Clang 的 `DeclSpec.h` / `Declarator.h`。最小化实现：
   `DeclSpec` 存储类型+说明符，`Declarator` 管理声明符链，`DeclaratorChunk` 表示
