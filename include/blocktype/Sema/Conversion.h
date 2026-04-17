@@ -15,6 +15,7 @@
 #pragma once
 
 #include "blocktype/AST/Type.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/Basic/SourceLocation.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -184,6 +185,15 @@ public:
 
   /// Check if a derived-to-base pointer conversion exists.
   static bool isDerivedToBaseConversion(QualType From, QualType To);
+
+private:
+  /// Try to find a converting constructor in ToClass that accepts From.
+  static ImplicitConversionSequence TryConvertingConstructor(
+      QualType From, CXXRecordDecl *ToClass);
+
+  /// Try to find a conversion operator in FromClass that converts to To.
+  static ImplicitConversionSequence TryConversionOperator(
+      CXXRecordDecl *FromClass, QualType To);
 };
 
 } // namespace blocktype

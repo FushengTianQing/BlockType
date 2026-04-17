@@ -631,10 +631,171 @@ ImplicitConversionSequence ConversionChecker::GetConversion(QualType From,
     return ImplicitConversionSequence::getStandard(SCS);
   }
 
-  // TODO: User-defined conversions (constructor, conversion operator)
-  // For now, no user-defined conversions are supported.
+  //--- User-defined conversions (C++ [over.match.user]) ---
+  // Per C++ [class.conv]: A user-defined conversion consists of:
+  //   - An initial standard conversion sequence
+  //   - Followed by a user-defined conversion (constructor or conversion op)
+  //   - Followed by a second standard conversion sequence
+  //
+  // Only attempt if:
+  //   - Both types are non-null
+  //   - The target is a class type (for converting constructors), or
+  //     the source is a class type (for conversion operators)
+
+  if (From.isNull() || To.isNull())
+    return ImplicitConversionSequence::getBad();
+
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
+
+  //--- Strategy 1: Converting constructor ---
+  // If To is a class type, look for a non-explicit constructor that can
+  // accept From (or something From converts to) as a single argument.
+  if (ToTy) {
+    if (auto *ToRT = llvm::dyn_cast<RecordType>(ToTy)) {
+      if (auto *ToRD = llvm::dyn_cast<CXXRecordDecl>(ToRT->getDecl())) {
+        auto ICS = TryConvertingConstructor(From, ToRD);
+        if (!ICS.isBad())
+          return ICS;
+      }
+    }
+  }
+
+  //--- Strategy 2: Conversion operator ---
+  // If From is a class type, look for a conversion operator in that class
+  // whose return type can convert to To via a standard conversion.
+  if (FromTy) {
+    if (auto *FromRT = llvm::dyn_cast<RecordType>(FromTy)) {
+      if (auto *FromRD = llvm::dyn_cast<CXXRecordDecl>(FromRT->getDecl())) {
+        auto ICS = TryConversionOperator(FromRD, To);
+        if (!ICS.isBad())
+          return ICS;
+      }
+    }
+  }
 
   // No valid conversion
+  return ImplicitConversionSequence::getBad();
+}
+
+//===----------------------------------------------------------------------===//
+// User-defined conversion helpers
+//===----------------------------------------------------------------------===//
+
+ImplicitConversionSequence
+ConversionChecker::TryConvertingConstructor(QualType From,
+                                             CXXRecordDecl *ToClass) {
+  if (!ToClass)
+    return ImplicitConversionSequence::getBad();
+
+  // Walk all members to find constructors
+  for (auto *D : ToClass->members()) {
+    auto *Ctor = llvm::dyn_cast<CXXConstructorDecl>(D);
+    if (!Ctor)
+      continue;
+
+    // Skip explicit constructors — they don't participate in implicit conversion
+    if (Ctor->isExplicit())
+      continue;
+
+    // Skip deleted constructors
+    if (Ctor->isDeleted())
+      continue;
+
+    unsigned NumParams = Ctor->getNumParams();
+
+    // We need a constructor that can be called with a single argument.
+    // This means: exactly 1 required parameter, or 0 required + 1 with default.
+    // Also: copy/move constructors (param type = same class) are not considered
+    //        user-defined conversions per C++ [class.conv].
+    if (NumParams == 0)
+      continue;
+
+    // Count required (non-default) parameters
+    unsigned RequiredParams = 0;
+    for (unsigned I = 0; I < NumParams; ++I) {
+      if (!Ctor->getParamDecl(I)->getDefaultArg())
+        RequiredParams = I + 1;
+    }
+
+    // We need exactly 1 required parameter for a single-argument call
+    if (RequiredParams != 1)
+      continue;
+
+    // Check if the first parameter type can accept From via standard conversion
+    QualType ParamType = Ctor->getParamDecl(0)->getType();
+
+    // Skip copy/move constructors: if ParamType is the same class type
+    // (reference to the same record), this is not a user-defined conversion.
+    const Type *ParamTy = getUnqualified(ParamType);
+    if (auto *ParamRef = llvm::dyn_cast<ReferenceType>(ParamTy)) {
+      QualType ReferencedType = ParamRef->getReferencedType();
+      if (auto *ParamRT = llvm::dyn_cast<RecordType>(
+              getUnqualified(ReferencedType))) {
+        if (ParamRT->getDecl() == ToClass)
+          continue; // Copy/move constructor — skip
+      }
+    }
+
+    // Try standard conversion from From to ParamType
+    StandardConversionSequence InitialSCS =
+        GetStandardConversion(From, ParamType);
+    if (InitialSCS.isBad())
+      continue;
+
+    // Build the user-defined conversion ICS
+    // The second standard conversion (after the user-defined conversion)
+    // is identity since the constructor produces the target type directly.
+    StandardConversionSequence SecondSCS;
+    SecondSCS.setRank(ConversionRank::ExactMatch);
+
+    return ImplicitConversionSequence::getUserDefined(Ctor, SecondSCS);
+  }
+
+  return ImplicitConversionSequence::getBad();
+}
+
+ImplicitConversionSequence
+ConversionChecker::TryConversionOperator(CXXRecordDecl *FromClass,
+                                          QualType To) {
+  if (!FromClass || To.isNull())
+    return ImplicitConversionSequence::getBad();
+
+  // Walk all members to find conversion operators
+  for (auto *D : FromClass->members()) {
+    auto *ConvOp = llvm::dyn_cast<CXXConversionDecl>(D);
+    if (!ConvOp)
+      continue;
+
+    // Skip explicit conversion operators (C++11)
+    // Note: CXXConversionDecl doesn't have isExplicit() directly,
+    // but CXXMethodDecl doesn't either. Check via CXXConstructorDecl's pattern.
+    // For now, we accept all conversion operators (explicit check can be added
+    // when isExplicit() is available on CXXConversionDecl).
+
+    // Skip deleted operators
+    if (ConvOp->isDeleted())
+      continue;
+
+    // Get the type that this operator converts to
+    QualType ConvType = ConvOp->getConversionType();
+    if (ConvType.isNull())
+      continue;
+
+    // Try standard conversion from the operator's return type to To
+    StandardConversionSequence SecondSCS =
+        GetStandardConversion(ConvType, To);
+    if (SecondSCS.isBad())
+      continue;
+
+    // Build the user-defined conversion ICS
+    // The initial standard conversion is identity (the object itself).
+    StandardConversionSequence InitialSCS;
+    InitialSCS.setRank(ConversionRank::ExactMatch);
+
+    return ImplicitConversionSequence::getUserDefined(ConvOp, SecondSCS);
+  }
+
   return ImplicitConversionSequence::getBad();
 }
 
