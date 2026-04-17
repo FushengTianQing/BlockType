@@ -15,6 +15,7 @@
 #include "blocktype/Sema/Lookup.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/ASTNode.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/AST/DeclContext.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
@@ -259,10 +260,24 @@ LookupResult Sema::LookupUnqualifiedName(llvm::StringRef Name, Scope *S,
       } else if (auto *TD = Symbols.lookupTag(Name)) {
         Result.addDecl(TD);
         Result.setTypeName(true);
+      } else if (auto *CTD = Symbols.lookupTemplate(Name)) {
+        // Class template names are valid type names (e.g., vector in vector<int>)
+        if (llvm::isa<ClassTemplateDecl>(CTD)) {
+          Result.addDecl(CTD);
+          Result.setTypeName(true);
+        }
       }
     } else {
       for (NamedDecl *D : Symbols.lookupOrdinary(Name)) {
         Result.addDecl(D);
+      }
+      // Also check template and concept symbols (e.g., for template name
+      // usage like f<int> where f is a function template).
+      if (Result.empty()) {
+        if (auto *TD = Symbols.lookupTemplate(Name))
+          Result.addDecl(TD);
+        if (auto *CD = Symbols.lookupConcept(Name))
+          Result.addDecl(CD);
       }
     }
   }

@@ -7,6 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "blocktype/Sema/Sema.h"
+#include "blocktype/Sema/TemplateInstantiation.h"
+#include "blocktype/Sema/TemplateDeduction.h"
+#include "blocktype/Sema/SFINAE.h"
+#include "blocktype/AST/Decl.h"
+#include "blocktype/AST/Type.h"
 
 #include "llvm/Support/Casting.h"
 
@@ -224,6 +229,21 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
   if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
     if (auto *FunD = llvm::dyn_cast<FunctionDecl>(DRE->getDecl())) {
       FD = FunD;
+    }
+    // Handle function template: deduce arguments and instantiate
+    if (!FD) {
+      if (auto *FTD = llvm::dyn_cast<FunctionTemplateDecl>(DRE->getDecl())) {
+        FD = DeduceAndInstantiateFunctionTemplate(FTD, Args, LParenLoc);
+      }
+    }
+    // Also check if the DeclRefExpr refers to a TemplateDecl by name
+    if (!FD) {
+      llvm::StringRef Name = DRE->getDecl()->getName();
+      if (auto *FTD = Symbols.lookupTemplate(Name)) {
+        if (auto *FuncFTD = llvm::dyn_cast<FunctionTemplateDecl>(FTD)) {
+          FD = DeduceAndInstantiateFunctionTemplate(FuncFTD, Args, LParenLoc);
+        }
+      }
     }
   }
 
@@ -594,6 +614,16 @@ bool Sema::isCompleteType(QualType T) const {
   }
 
   if (Ty->getTypeClass() == TypeClass::TemplateSpecialization) {
+    // Check if the template specialization has been instantiated as a
+    // complete type. Look for an existing specialization via the instantiator.
+    auto *TST = static_cast<const TemplateSpecializationType *>(Ty);
+    if (auto *CTD = llvm::dyn_cast_or_null<ClassTemplateDecl>(
+            TST->getTemplateDecl())) {
+      auto *Spec = Instantiator->FindExistingSpecialization(
+          CTD, TST->getTemplateArgs());
+      if (Spec && Spec->isCompleteDefinition())
+        return true;
+    }
     return false;
   }
 

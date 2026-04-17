@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "blocktype/Sema/Sema.h"
+#include "blocktype/Sema/TemplateDeduction.h"
+#include "blocktype/Sema/SFINAE.h"
 #include "blocktype/Basic/Diagnostics.h"
 #include "llvm/Support/Casting.h"
 
@@ -34,7 +36,11 @@ DeclResult Sema::ActOnClassTemplateDecl(ClassTemplateDecl *CTD) {
   // 3. Also register as ordinary decl for general lookup
   Symbols.addDecl(CTD);
 
-  // 4. Handle requires-clause if present (validation only for now)
+  // 4. Register to current DeclContext
+  if (CurContext)
+    CurContext->addDecl(CTD);
+
+  // 5. Handle requires-clause if present (validation only for now)
   if (CTD->hasRequiresClause()) {
     // Constraint checking will be implemented in Stage 5.4
   }
@@ -62,7 +68,11 @@ DeclResult Sema::ActOnFunctionTemplateDecl(FunctionTemplateDecl *FTD) {
   Symbols.addTemplateDecl(FTD);
   Symbols.addDecl(FTD);
 
-  // 3. Handle requires-clause
+  // 3. Register to current DeclContext
+  if (CurContext)
+    CurContext->addDecl(FTD);
+
+  // 4. Handle requires-clause
   if (FTD->hasRequiresClause()) {
     // Constraint checking will be implemented in Stage 5.4
   }
@@ -88,6 +98,9 @@ DeclResult Sema::ActOnVarTemplateDecl(VarTemplateDecl *VTD) {
   Symbols.addTemplateDecl(VTD);
   Symbols.addDecl(VTD);
 
+  if (CurContext)
+    CurContext->addDecl(VTD);
+
   return DeclResult(VTD);
 }
 
@@ -109,6 +122,9 @@ DeclResult Sema::ActOnTypeAliasTemplateDecl(TypeAliasTemplateDecl *TATD) {
   Symbols.addTemplateDecl(TATD);
   Symbols.addDecl(TATD);
 
+  if (CurContext)
+    CurContext->addDecl(TATD);
+
   return DeclResult(TATD);
 }
 
@@ -123,6 +139,9 @@ DeclResult Sema::ActOnConceptDecl(ConceptDecl *CD) {
   // Register as concept
   Symbols.addConceptDecl(CD);
   Symbols.addDecl(CD);
+
+  if (CurContext)
+    CurContext->addDecl(CD);
 
   return DeclResult(CD);
 }
@@ -232,4 +251,59 @@ DeclResult Sema::ActOnExplicitInstantiation(SourceLocation TemplateLoc,
   // Trigger instantiation of the given declaration.
   // Full implementation in Stage 5.5.
   return DeclResult(D);
+}
+
+//===----------------------------------------------------------------------===//
+// Function Template Deduction + Instantiation
+//===----------------------------------------------------------------------===//
+
+FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
+    FunctionTemplateDecl *FTD, llvm::ArrayRef<Expr *> Args,
+    SourceLocation CallLoc) {
+  if (!FTD)
+    return nullptr;
+
+  // 1. Deduce template arguments from call arguments
+  TemplateDeductionInfo Info;
+  TemplateDeductionResult Result =
+      Deduction->DeduceFunctionTemplateArguments(FTD, Args, Info);
+
+  if (Result != TemplateDeductionResult::Success) {
+    // Report diagnostic for the failure
+    switch (Result) {
+    case TemplateDeductionResult::TooFewArguments:
+      Diags.report(CallLoc, DiagID::err_template_arg_num_different,
+                   "too few", FTD->getName());
+      break;
+    case TemplateDeductionResult::TooManyArguments:
+      Diags.report(CallLoc, DiagID::err_template_arg_num_different,
+                   "too many", FTD->getName());
+      break;
+    case TemplateDeductionResult::Inconsistent:
+      Diags.report(CallLoc, DiagID::err_template_arg_different_kind,
+                   FTD->getName(), "inconsistent");
+      break;
+    default:
+      Diags.report(CallLoc, DiagID::err_ovl_no_viable_function,
+                   FTD->getName());
+      break;
+    }
+    return nullptr;
+  }
+
+  // 2. Collect deduced arguments
+  auto *Params = FTD->getTemplateParameterList();
+  unsigned NumParams = Params ? Params->size() : 0;
+  llvm::SmallVector<TemplateArgument, 4> DeducedArgs =
+      Info.getDeducedArgs(NumParams);
+
+  // 3. Instantiate the function template with deduced arguments
+  FunctionDecl *InstFD =
+      Instantiator->InstantiateFunctionTemplate(FTD, DeducedArgs);
+  if (!InstFD) {
+    Diags.report(CallLoc, DiagID::err_template_recursion);
+    return nullptr;
+  }
+
+  return InstFD;
 }

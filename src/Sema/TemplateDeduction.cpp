@@ -9,6 +9,8 @@
 #include "blocktype/Sema/TemplateDeduction.h"
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
+#include "blocktype/AST/ASTContext.h"
+#include "blocktype/AST/Type.h"
 #include "llvm/Support/Casting.h"
 
 using namespace blocktype;
@@ -60,6 +62,22 @@ TemplateDeduction::DeduceFunctionTemplateArguments(
     ParmVarDecl *PVD = Pattern->getParamDecl(I);
     QualType ParamType = PVD->getType();
     QualType ArgType = CallArgs[I]->getType();
+
+    // Per C++ [temp.deduct.call]: strip top-level cv-qualifiers from the
+    // argument type unless the parameter is a reference type.
+    // Also strip top-level reference from the argument (references are
+    // non-deduced contexts from the caller side).
+    if (!ParamType.isNull()) {
+      const Type *PT = ParamType.getTypePtr();
+      bool ParamIsRef = llvm::isa<ReferenceType>(PT);
+      if (!ParamIsRef) {
+        // Strip reference from ArgType if present
+        if (auto *ArgRT = llvm::dyn_cast<ReferenceType>(ArgType.getTypePtr()))
+          ArgType = QualType(ArgRT->getReferencedType(), Qualifier::None);
+        // Strip top-level const/volatile from ArgType
+        ArgType = QualType(ArgType.getTypePtr(), Qualifier::None);
+      }
+    }
 
     TemplateDeductionResult Result =
         DeduceTemplateArguments(ParamType, ArgType, Info);
@@ -160,6 +178,28 @@ TemplateDeduction::DeduceTemplateArguments(QualType ParamType,
       }
     }
 
+    // T& can deduce from non-reference lvalue argument:
+    // Per C++ [temp.deduct.call], if P is a reference type, A can be
+    // a non-reference type (the referenced type is deduced directly).
+    if (ParamRT->isLValueReference()) {
+      // For T&, deduce T from the non-reference argument type
+      const Type *ReferencedType = ParamRT->getReferencedType();
+      if (auto *TTP = llvm::dyn_cast<TemplateTypeParmType>(ReferencedType)) {
+        unsigned Index = TTP->getIndex();
+        if (Info.hasDeducedArg(Index)) {
+          TemplateArgument Prev = Info.getDeducedArg(Index);
+          if (Prev.isType() && Prev.getAsType() == ArgType)
+            return TemplateDeductionResult::Success;
+          return TemplateDeductionResult::Inconsistent;
+        }
+        Info.addDeducedArg(Index, TemplateArgument(ArgType));
+        return TemplateDeductionResult::Success;
+      }
+      // Non-simple T& (e.g., const T&) — recurse on referenced type
+      return DeduceTemplateArguments(
+          QualType(ReferencedType, Qualifier::None), ArgType, Info);
+    }
+
     return TemplateDeductionResult::NonDeducedMismatch;
   }
 
@@ -216,6 +256,10 @@ TemplateDeduction::DeduceFromReferenceType(
       QualType(Arg->getReferencedType(), Qualifier::None),
       Info);
 }
+
+// Also handle: T& parameter can match a non-reference lvalue argument.
+// This is called from the main DeduceTemplateArguments when Param is a
+// ReferenceType but Arg is not a ReferenceType.
 
 TemplateDeductionResult
 TemplateDeduction::DeduceFromTemplateSpecializationType(
@@ -323,11 +367,13 @@ QualType TemplateDeduction::collapseReferences(QualType Inner,
   }
 
   // Inner is RValueReference
+  ASTContext &Ctx = SemaRef.getASTContext();
   if (OuterIsLValue) {
     // T&& & → T&
-    // Would need ASTContext to create LValueReferenceType, but for deduction
-    // purposes we just return the referenced type as an lvalue ref
-    return Inner; // Simplified: actual implementation needs Context
+    // Create LValueReferenceType to the referenced type
+    const Type *Referenced = InnerRef->getReferencedType();
+    return QualType(Ctx.getLValueReferenceType(
+        const_cast<Type *>(Referenced)), Qualifier::None);
   }
 
   // T&& && → T&&

@@ -116,7 +116,11 @@ public:
   Expr *SubstituteExpr(Expr *E, const TemplateArgumentList &Args);
 
   /// Substitute template parameters in a declaration (for member instantiation).
-  Decl *SubstituteDecl(Decl *D, const TemplateArgumentList &Args);
+  /// @param D        The declaration to substitute
+  /// @param Args     Template arguments
+  /// @param Parent   The instantiated parent record (may be nullptr)
+  Decl *SubstituteDecl(Decl *D, const TemplateArgumentList &Args,
+                       CXXRecordDecl *Parent = nullptr);
 
   // === Specialization Lookup ===
 
@@ -155,8 +159,12 @@ private:
                                  const TemplateArgumentList &Args);
 
   /// Substitute in a CXXMethodDecl.
+  /// @param MD       The method to substitute
+  /// @param Args     Template arguments
+  /// @param Parent   The instantiated parent record (may be nullptr)
   CXXMethodDecl *SubstituteCXXMethodDecl(CXXMethodDecl *MD,
-                                         const TemplateArgumentList &Args);
+                                         const TemplateArgumentList &Args,
+                                         CXXRecordDecl *Parent = nullptr);
 };
 
 } // namespace blocktype

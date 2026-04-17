@@ -8,6 +8,7 @@
 
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/Sema.h"
+#include "blocktype/Basic/Diagnostics.h"
 #include "llvm/Support/Casting.h"
 
 using namespace blocktype;
@@ -48,6 +49,9 @@ TemplateInstantiator::InstantiateClassTemplate(
 
   // 2. Check recursion depth
   if (CurrentDepth >= MaxInstantiationDepth) {
+    if (!isSFINAEContext())
+      SemaRef.getDiagnostics().report(Template->getLocation(),
+                                      DiagID::err_template_recursion);
     return nullptr;
   }
 
@@ -70,7 +74,7 @@ TemplateInstantiator::InstantiateClassTemplate(
 
   // 6. Iterate pattern members, substitute template parameters
   for (Decl *M : Pattern->members()) {
-    Decl *InstM = SubstituteDecl(M, ArgList);
+    Decl *InstM = SubstituteDecl(M, ArgList, Spec);
     if (InstM)
       Spec->addMember(InstM);
   }
@@ -84,7 +88,7 @@ TemplateInstantiator::InstantiateClassTemplate(
 
   // 8. Iterate methods
   for (CXXMethodDecl *MD : Pattern->methods()) {
-    CXXMethodDecl *InstMD = SubstituteCXXMethodDecl(MD, ArgList);
+    CXXMethodDecl *InstMD = SubstituteCXXMethodDecl(MD, ArgList, Spec);
     if (InstMD)
       Spec->addMethod(InstMD);
   }
@@ -112,8 +116,12 @@ TemplateInstantiator::InstantiateFunctionTemplate(
   if (!Pattern)
     return nullptr;
 
-  if (CurrentDepth >= MaxInstantiationDepth)
+  if (CurrentDepth >= MaxInstantiationDepth) {
+    if (!isSFINAEContext())
+      SemaRef.getDiagnostics().report(Template->getLocation(),
+                                      DiagID::err_template_recursion);
     return nullptr;
+  }
 
   TemplateArgumentList ArgList(Args);
   ++CurrentDepth;
@@ -286,7 +294,8 @@ Expr *TemplateInstantiator::SubstituteExpr(Expr *E,
 }
 
 Decl *TemplateInstantiator::SubstituteDecl(Decl *D,
-                                           const TemplateArgumentList &Args) {
+                                           const TemplateArgumentList &Args,
+                                           CXXRecordDecl *Parent) {
   if (!D)
     return nullptr;
 
@@ -296,7 +305,7 @@ Decl *TemplateInstantiator::SubstituteDecl(Decl *D,
   if (auto *FD = llvm::dyn_cast<FieldDecl>(D))
     return SubstituteFieldDecl(FD, Args);
   if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(D))
-    return SubstituteCXXMethodDecl(MD, Args);
+    return SubstituteCXXMethodDecl(MD, Args, Parent);
 
   // Other decl kinds: return as-is for now
   return D;
@@ -465,7 +474,8 @@ FieldDecl *TemplateInstantiator::SubstituteFieldDecl(
 }
 
 CXXMethodDecl *TemplateInstantiator::SubstituteCXXMethodDecl(
-    CXXMethodDecl *MD, const TemplateArgumentList &Args) {
+    CXXMethodDecl *MD, const TemplateArgumentList &Args,
+    CXXRecordDecl *Parent) {
   if (!MD)
     return nullptr;
 
@@ -487,11 +497,12 @@ CXXMethodDecl *TemplateInstantiator::SubstituteCXXMethodDecl(
     InstParams.push_back(InstPVD);
   }
 
-  // For the parent, we need the instantiated class context
-  CXXRecordDecl *Parent = MD->getParent();
+  // Use the instantiated parent (the ClassTemplateSpecializationDecl) if
+  // provided; otherwise fall back to the original parent.
+  CXXRecordDecl *MethodParent = Parent ? Parent : MD->getParent();
 
   return Context.create<CXXMethodDecl>(
-      MD->getLocation(), MD->getName(), SubType, InstParams, Parent,
+      MD->getLocation(), MD->getName(), SubType, InstParams, MethodParent,
       MD->getBody(), MD->isStatic(), MD->isConst(), MD->isVolatile(),
       MD->isVirtual(), MD->isPureVirtual(), MD->isOverride(), MD->isFinal(),
       MD->isDefaulted(), MD->isDeleted(), MD->getRefQualifier(),

@@ -160,7 +160,7 @@ private:
 
   /// Perform reference collapsing.
   /// T& & → T&, T&& & → T&, T& && → T&, T&& && → T&&
-  static QualType collapseReferences(QualType Inner, bool OuterIsLValue);
+  QualType collapseReferences(QualType Inner, bool OuterIsLValue);
 
   /// Generate a unique synthetic type for partial ordering.
   static QualType generateDeducedType(NamedDecl *Param);

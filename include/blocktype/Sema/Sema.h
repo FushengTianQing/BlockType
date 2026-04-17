@@ -372,6 +372,16 @@ public:
   /// Process an explicit instantiation (template class X<int>;).
   DeclResult ActOnExplicitInstantiation(SourceLocation TemplateLoc, Decl *D);
 
+  /// Deduce template arguments and instantiate a function template.
+  /// Used by ActOnCallExpr when the callee is a function template.
+  /// @param FTD       The function template declaration
+  /// @param Args      Call arguments
+  /// @param CallLoc   Location of the call (for diagnostics)
+  /// @return          Instantiated FunctionDecl, or nullptr on failure
+  FunctionDecl *DeduceAndInstantiateFunctionTemplate(
+      FunctionTemplateDecl *FTD, llvm::ArrayRef<Expr *> Args,
+      SourceLocation CallLoc);
+
   //===------------------------------------------------------------------===//
   // Diagnostics helpers [Stage 4.5]
   //===------------------------------------------------------------------===//
