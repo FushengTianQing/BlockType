@@ -8,6 +8,8 @@
 
 #include "blocktype/Sema/Sema.h"
 
+#include "llvm/Support/Casting.h"
+
 namespace blocktype {
 
 //===----------------------------------------------------------------------===//
@@ -15,13 +17,12 @@ namespace blocktype {
 //===----------------------------------------------------------------------===//
 
 Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
-  : Context(C), Diags(D), Symbols(C) {
-  // Initialize translation unit scope
+  : Context(C), Diags(D), Symbols(C),
+    TC(C, D), ConstEval(C) {
   PushScope(ScopeFlags::TranslationUnitScope);
 }
 
 Sema::~Sema() {
-  // Clean up scope stack
   while (CurrentScope && CurrentScope->getParent()) {
     PopScope();
   }
@@ -66,153 +67,371 @@ void Sema::ActOnTranslationUnit(TranslationUnitDecl *TU) {
 }
 
 //===----------------------------------------------------------------------===//
-// Declaration handling [Stage 4.1 stub, Stage 4.5 implements]
+// Declaration handling
 //===----------------------------------------------------------------------===//
 
-// TODO: Stage 4.5 - Implement declaration handling
 DeclResult Sema::ActOnDeclarator(Decl *D) {
+  if (!D)
+    return DeclResult::getInvalid();
+
+  if (CurrentScope && llvm::isa<NamedDecl>(D)) {
+    Symbols.addDecl(llvm::cast<NamedDecl>(D));
+  }
   return DeclResult(D);
 }
 
 void Sema::ActOnFinishDecl(Decl *D) {
-  // TODO: Stage 4.5 - Finalize declaration
+  if (CurContext && D) {
+    CurContext->addDecl(D);
+  }
 }
 
 DeclResult Sema::ActOnVarDecl(SourceLocation Loc, llvm::StringRef Name,
                                QualType T, Expr *Init) {
-  // TODO: Stage 4.5 - Implement variable declaration
-  return DeclResult::getInvalid();
+  if (!RequireCompleteType(T, Loc))
+    return DeclResult::getInvalid();
+
+  auto *VD = Context.create<VarDecl>(Loc, Name, T, Init);
+
+  // Check initializer if present
+  if (Init) {
+    if (!TC.CheckInitialization(T, Init, Loc))
+      return DeclResult::getInvalid();
+  }
+
+  if (CurrentScope)
+    Symbols.addDecl(VD);
+  if (CurContext)
+    CurContext->addDecl(VD);
+
+  return DeclResult(VD);
 }
 
 DeclResult Sema::ActOnFunctionDecl(SourceLocation Loc, llvm::StringRef Name,
                                     QualType T,
                                     llvm::ArrayRef<ParmVarDecl *> Params,
                                     Stmt *Body) {
-  // TODO: Stage 4.5 - Implement function declaration
-  return DeclResult::getInvalid();
+  auto *FD = Context.create<FunctionDecl>(Loc, Name, T, Params, Body);
+
+  if (CurrentScope)
+    Symbols.addDecl(FD);
+  if (CurContext)
+    CurContext->addDecl(FD);
+
+  return DeclResult(FD);
 }
 
 void Sema::ActOnStartOfFunctionDef(FunctionDecl *FD) {
   CurFunction = FD;
+  PushScope(ScopeFlags::FunctionBodyScope);
+
+  // Add parameters to function scope
+  if (FD) {
+    for (unsigned I = 0; I < FD->getNumParams(); ++I) {
+      if (auto *PVD = FD->getParamDecl(I))
+        Symbols.addDecl(PVD);
+    }
+  }
 }
 
 void Sema::ActOnFinishOfFunctionDef(FunctionDecl *FD) {
   CurFunction = nullptr;
+  PopScope();
 }
 
 //===----------------------------------------------------------------------===//
-// Expression handling [Stage 4.1 stub, Stage 4.5 implements]
+// Expression handling
 //===----------------------------------------------------------------------===//
 
-// TODO: Stage 4.5 - Implement expression handling
 ExprResult Sema::ActOnExpr(Expr *E) {
+  if (!E)
+    return ExprResult::getInvalid();
   return ExprResult(E);
 }
 
 ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
                                 SourceLocation LParenLoc,
                                 SourceLocation RParenLoc) {
-  return ExprResult::getInvalid();
+  if (!Fn)
+    return ExprResult::getInvalid();
+
+  // Resolve the callee
+  FunctionDecl *FD = nullptr;
+
+  if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
+    if (auto *FunD = llvm::dyn_cast<FunctionDecl>(DRE->getDecl())) {
+      FD = FunD;
+    }
+  }
+
+  // If not a direct function reference, try overload resolution
+  if (!FD) {
+    if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
+      llvm::StringRef Name = DRE->getDecl()->getName();
+      auto Decls = Symbols.lookup(Name);
+      LookupResult LR;
+      for (auto *D : Decls)
+        LR.addDecl(D);
+      FD = ResolveOverload(Name, Args, LR);
+    }
+  }
+
+  if (!FD) {
+    Diags.report(LParenLoc, DiagID::err_ovl_no_viable_function,
+                 Fn->getType().isNull() ? "<unknown>" : "expression");
+    return ExprResult::getInvalid();
+  }
+
+  // Type-check the call arguments
+  if (!TC.CheckCall(FD, Args, LParenLoc))
+    return ExprResult::getInvalid();
+
+  // Create the CallExpr
+  auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
+  return ExprResult(CE);
 }
 
 ExprResult Sema::ActOnMemberExpr(Expr *Base, llvm::StringRef Member,
                                   SourceLocation MemberLoc, bool IsArrow) {
-  return ExprResult::getInvalid();
+  if (!Base)
+    return ExprResult::getInvalid();
+
+  QualType BaseType = Base->getType();
+
+  // For arrow (->), the base must be a pointer type
+  if (IsArrow) {
+    if (auto *PT = llvm::dyn_cast<PointerType>(BaseType.getTypePtr())) {
+      BaseType = PT->getPointeeType();
+    } else {
+      Diags.report(MemberLoc, DiagID::err_type_mismatch);
+      return ExprResult::getInvalid();
+    }
+  }
+
+  // Look up the member in the record type
+  auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr());
+  if (!RT) {
+    Diags.report(MemberLoc, DiagID::err_type_mismatch);
+    return ExprResult::getInvalid();
+  }
+
+  auto *RD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+  if (!RD)
+    return ExprResult::getInvalid();
+
+  // Find the named member
+  ValueDecl *MemberDecl = nullptr;
+  for (auto *D : RD->members()) {
+    if (auto *ND = llvm::dyn_cast<NamedDecl>(D)) {
+      if (ND->getName() == Member) {
+        MemberDecl = llvm::dyn_cast<ValueDecl>(D);
+        break;
+      }
+    }
+  }
+
+  if (!MemberDecl) {
+    Diags.report(MemberLoc, DiagID::err_undeclared_identifier, Member);
+    return ExprResult::getInvalid();
+  }
+
+  // Check access control
+  if (auto *ND = llvm::dyn_cast<NamedDecl>(MemberDecl)) {
+    AccessSpecifier Access = AccessControl::getEffectiveAccess(ND);
+    if (!AccessControl::CheckMemberAccess(ND, Access, RD, CurContext,
+                                          MemberLoc, Diags))
+      return ExprResult::getInvalid();
+  }
+
+  auto *ME = Context.create<MemberExpr>(MemberLoc, Base, MemberDecl, IsArrow);
+  return ExprResult(ME);
 }
 
 ExprResult Sema::ActOnBinaryOperator(Expr *LHS, Expr *RHS,
                                       SourceLocation OpLoc) {
+  // NOTE: The BinaryOperator node is typically created by the parser with
+  // the opcode already set. Sema's role is to type-check it via ActOnExpr.
+  // This method exists for completeness but returns invalid since we don't
+  // have the opcode. The parser should call ActOnExpr on the pre-built node.
   return ExprResult::getInvalid();
 }
 
 ExprResult Sema::ActOnUnaryOperator(Expr *Operand, SourceLocation OpLoc) {
+  // NOTE: Similar to ActOnBinaryOperator — the opcode is set by the parser.
   return ExprResult::getInvalid();
 }
 
 ExprResult Sema::ActOnCastExpr(QualType TargetType, Expr *E,
                                 SourceLocation LParenLoc,
                                 SourceLocation RParenLoc) {
-  return ExprResult::getInvalid();
+  if (!E || TargetType.isNull())
+    return ExprResult::getInvalid();
+
+  if (!TC.isTypeCompatible(E->getType(), TargetType)) {
+    Diags.report(LParenLoc, DiagID::err_type_mismatch);
+    return ExprResult::getInvalid();
+  }
+
+  auto *CE = Context.create<CStyleCastExpr>(LParenLoc, E);
+  return ExprResult(CE);
 }
 
 ExprResult Sema::ActOnArraySubscriptExpr(Expr *Base,
                                           llvm::ArrayRef<Expr *> Indices,
                                           SourceLocation LLoc,
                                           SourceLocation RLoc) {
-  return ExprResult::getInvalid();
+  if (!Base)
+    return ExprResult::getInvalid();
+
+  QualType BaseType = Base->getType();
+  const Type *BaseTy = BaseType.getTypePtr();
+
+  if (!BaseTy->isPointerType() && !BaseTy->isArrayType()) {
+    Diags.report(LLoc, DiagID::err_type_mismatch);
+    return ExprResult::getInvalid();
+  }
+
+  for (auto *Idx : Indices) {
+    if (!Idx || !Idx->getType()->isIntegerType()) {
+      Diags.report(LLoc, DiagID::err_type_mismatch);
+      return ExprResult::getInvalid();
+    }
+  }
+
+  auto *ASE = Context.create<ArraySubscriptExpr>(LLoc, Base, Indices);
+  return ExprResult(ASE);
 }
 
 ExprResult Sema::ActOnConditionalExpr(Expr *Cond, Expr *Then, Expr *Else,
                                        SourceLocation QuestionLoc,
                                        SourceLocation ColonLoc) {
-  return ExprResult::getInvalid();
+  if (!Cond || !Then || !Else)
+    return ExprResult::getInvalid();
+
+  if (!TC.CheckCondition(Cond, QuestionLoc))
+    return ExprResult::getInvalid();
+
+  QualType ResultType = TC.getCommonType(Then->getType(), Else->getType());
+  if (ResultType.isNull()) {
+    Diags.report(ColonLoc, DiagID::err_type_mismatch);
+    return ExprResult::getInvalid();
+  }
+
+  auto *CO = Context.create<ConditionalOperator>(QuestionLoc, Cond, Then, Else);
+  return ExprResult(CO);
 }
 
 //===----------------------------------------------------------------------===//
-// Statement handling [Stage 4.1 stub, Stage 4.5 implements]
+// Statement handling
 //===----------------------------------------------------------------------===//
 
-// TODO: Stage 4.5 - Implement statement handling
 StmtResult Sema::ActOnReturnStmt(Expr *RetVal, SourceLocation ReturnLoc) {
-  return StmtResult::getInvalid();
+  // Check return value type against current function return type
+  if (CurFunction) {
+    QualType FnType = CurFunction->getType();
+    if (auto *FT = llvm::dyn_cast<FunctionType>(FnType.getTypePtr())) {
+      QualType RetType = QualType(FT->getReturnType(), Qualifier::None);
+      if (!TC.CheckReturn(RetVal, RetType, ReturnLoc))
+        return StmtResult::getInvalid();
+    }
+  }
+
+  auto *RS = Context.create<ReturnStmt>(ReturnLoc, RetVal);
+  return StmtResult(RS);
 }
 
 StmtResult Sema::ActOnIfStmt(Expr *Cond, Stmt *Then, Stmt *Else,
                               SourceLocation IfLoc) {
-  return StmtResult::getInvalid();
+  if (!TC.CheckCondition(Cond, IfLoc))
+    return StmtResult::getInvalid();
+
+  auto *IS = Context.create<IfStmt>(IfLoc, Cond, Then, Else);
+  return StmtResult(IS);
 }
 
 StmtResult Sema::ActOnWhileStmt(Expr *Cond, Stmt *Body,
                                  SourceLocation WhileLoc) {
-  return StmtResult::getInvalid();
+  if (!TC.CheckCondition(Cond, WhileLoc))
+    return StmtResult::getInvalid();
+
+  auto *WS = Context.create<WhileStmt>(WhileLoc, Cond, Body);
+  return StmtResult(WS);
 }
 
 StmtResult Sema::ActOnForStmt(Stmt *Init, Expr *Cond, Expr *Inc, Stmt *Body,
                                SourceLocation ForLoc) {
-  return StmtResult::getInvalid();
+  if (Cond && !TC.CheckCondition(Cond, ForLoc))
+    return StmtResult::getInvalid();
+
+  auto *FS = Context.create<ForStmt>(ForLoc, Init, Cond, Inc, Body);
+  return StmtResult(FS);
 }
 
 StmtResult Sema::ActOnDoStmt(Expr *Cond, Stmt *Body, SourceLocation DoLoc) {
-  return StmtResult::getInvalid();
+  if (!TC.CheckCondition(Cond, DoLoc))
+    return StmtResult::getInvalid();
+
+  auto *DS = Context.create<DoStmt>(DoLoc, Body, Cond);
+  return StmtResult(DS);
 }
 
 StmtResult Sema::ActOnSwitchStmt(Expr *Cond, Stmt *Body,
                                   SourceLocation SwitchLoc) {
-  return StmtResult::getInvalid();
+  if (Cond && !Cond->getType()->isIntegerType()) {
+    Diags.report(SwitchLoc, DiagID::err_type_mismatch);
+    return StmtResult::getInvalid();
+  }
+
+  auto *SS = Context.create<SwitchStmt>(SwitchLoc, Cond, Body);
+  return StmtResult(SS);
 }
 
 StmtResult Sema::ActOnCaseStmt(Expr *Val, Stmt *Body, SourceLocation CaseLoc) {
-  return StmtResult::getInvalid();
+  if (!TC.CheckCaseExpression(Val, CaseLoc))
+    return StmtResult::getInvalid();
+
+  auto *CS = Context.create<CaseStmt>(CaseLoc, Val, nullptr, Body);
+  return StmtResult(CS);
 }
 
 StmtResult Sema::ActOnDefaultStmt(Stmt *Body, SourceLocation DefaultLoc) {
-  return StmtResult::getInvalid();
+  auto *DS = Context.create<DefaultStmt>(DefaultLoc, Body);
+  return StmtResult(DS);
 }
 
 StmtResult Sema::ActOnBreakStmt(SourceLocation BreakLoc) {
-  return StmtResult::getInvalid();
+  auto *BS = Context.create<BreakStmt>(BreakLoc);
+  return StmtResult(BS);
 }
 
 StmtResult Sema::ActOnContinueStmt(SourceLocation ContinueLoc) {
-  return StmtResult::getInvalid();
+  auto *CS = Context.create<ContinueStmt>(ContinueLoc);
+  return StmtResult(CS);
 }
 
 StmtResult Sema::ActOnGotoStmt(llvm::StringRef Label, SourceLocation GotoLoc) {
-  return StmtResult::getInvalid();
+  // TODO: resolve label to an actual LabelDecl
+  auto *LD = Context.create<LabelDecl>(GotoLoc, Label);
+  auto *GS = Context.create<GotoStmt>(GotoLoc, LD);
+  return StmtResult(GS);
 }
 
 StmtResult Sema::ActOnCompoundStmt(llvm::ArrayRef<Stmt *> Stmts,
                                     SourceLocation LBraceLoc,
                                     SourceLocation RBraceLoc) {
-  return StmtResult::getInvalid();
+  auto *CS = Context.create<CompoundStmt>(LBraceLoc, Stmts);
+  return StmtResult(CS);
 }
 
 StmtResult Sema::ActOnDeclStmt(Decl *D) {
-  return StmtResult::getInvalid();
+  Decl *Decls[] = {D};
+  auto *DS = Context.create<DeclStmt>(D->getLocation(), Decls);
+  return StmtResult(DS);
 }
 
 StmtResult Sema::ActOnNullStmt(SourceLocation Loc) {
-  return StmtResult::getInvalid();
+  auto *NS = Context.create<NullStmt>(Loc);
+  return StmtResult(NS);
 }
 
 //===----------------------------------------------------------------------===//
@@ -224,23 +443,16 @@ bool Sema::isCompleteType(QualType T) const {
 
   const Type *Ty = T.getTypePtr();
 
-  // Builtin types are always complete
   if (Ty->isBuiltinType()) return true;
-
-  // Pointer/reference types: pointee need not be complete
   if (Ty->isPointerType() || Ty->isReferenceType()) return true;
-
-  // Member pointer types are always complete
   if (Ty->getTypeClass() == TypeClass::MemberPointer) return true;
 
-  // Array types: element must be complete (except incomplete arrays)
   if (Ty->isArrayType()) {
     if (Ty->getTypeClass() == TypeClass::IncompleteArray) return false;
     if (Ty->getTypeClass() == TypeClass::ConstantArray) {
       auto *AT = static_cast<const ConstantArrayType *>(Ty);
       return isCompleteType(QualType(AT->getElementType(), Qualifier::None));
     }
-    // VariableArray: check element completeness
     if (Ty->getTypeClass() == TypeClass::VariableArray) {
       auto *AT = static_cast<const VariableArrayType *>(Ty);
       return isCompleteType(QualType(AT->getElementType(), Qualifier::None));
@@ -248,34 +460,28 @@ bool Sema::isCompleteType(QualType T) const {
     return true;
   }
 
-  // Function types are always complete
   if (Ty->isFunctionType()) return true;
 
-  // Record types: must have a complete definition
   if (Ty->isRecordType()) {
     auto *RT = static_cast<const RecordType *>(Ty);
     return RT->getDecl()->isCompleteDefinition();
   }
 
-  // Enum types: must have a complete definition
   if (Ty->isEnumType()) {
     auto *ET = static_cast<const EnumType *>(Ty);
     return ET->getDecl()->isCompleteDefinition();
   }
 
-  // Typedef: check the underlying type
   if (Ty->getTypeClass() == TypeClass::Typedef) {
     auto *TT = static_cast<const TypedefType *>(Ty);
     return isCompleteType(TT->getDecl()->getUnderlyingType());
   }
 
-  // Elaborated type: check the named type
   if (Ty->getTypeClass() == TypeClass::Elaborated) {
     auto *ET = static_cast<const ElaboratedType *>(Ty);
     return isCompleteType(QualType(ET->getNamedType(), Qualifier::None));
   }
 
-  // Decltype: check the underlying type if available
   if (Ty->getTypeClass() == TypeClass::Decltype) {
     auto *DT = static_cast<const DecltypeType *>(Ty);
     QualType Underlying = DT->getUnderlyingType();
@@ -283,26 +489,21 @@ bool Sema::isCompleteType(QualType T) const {
     return false;
   }
 
-  // Auto: complete only if deduced
   if (Ty->getTypeClass() == TypeClass::Auto) {
     auto *AT = static_cast<const AutoType *>(Ty);
     if (AT->isDeduced()) return isCompleteType(AT->getDeducedType());
     return false;
   }
 
-  // Void is never complete
   if (Ty->isVoidType()) return false;
 
-  // Template-dependent types are never complete
   if (Ty->getTypeClass() == TypeClass::TemplateTypeParm ||
       Ty->getTypeClass() == TypeClass::Dependent ||
       Ty->getTypeClass() == TypeClass::Unresolved) {
     return false;
   }
 
-  // TemplateSpecialization: try to check if instantiated
   if (Ty->getTypeClass() == TypeClass::TemplateSpecialization) {
-    // Not yet fully instantiated
     return false;
   }
 
@@ -333,34 +534,28 @@ QualType Sema::getCanonicalType(QualType T) const {
 FunctionDecl *Sema::ResolveOverload(llvm::StringRef Name,
                                      llvm::ArrayRef<Expr *> Args,
                                      const LookupResult &Candidates) {
-  // 1. Build the overload candidate set
   SourceLocation CallLoc;
   OverloadCandidateSet OCS(CallLoc);
 
-  // 2. Add all candidates from the lookup result
   OCS.addCandidates(Candidates);
 
-  // 3. If no candidates, report error
   if (OCS.empty()) {
     Diags.report(SourceLocation(), DiagID::err_ovl_no_viable_function, Name);
     return nullptr;
   }
 
-  // 4. Resolve the overload
   auto [Result, Best] = OCS.resolve(Args);
 
   if (Result == OverloadResult::Success)
     return Best;
 
   if (Result == OverloadResult::Deleted) {
-    // Best candidate is a deleted function
     Diags.report(SourceLocation(), DiagID::err_ovl_deleted_function,
                  Best->getName());
     return nullptr;
   }
 
   if (Result == OverloadResult::NoViable) {
-    // No viable candidates: report error with candidate notes
     Diags.report(SourceLocation(), DiagID::err_ovl_no_viable_function, Name);
     for (auto &C : OCS.getCandidates()) {
       Diags.report(SourceLocation(), DiagID::note_ovl_candidate_not_viable,
@@ -369,22 +564,19 @@ FunctionDecl *Sema::ResolveOverload(llvm::StringRef Name,
     return nullptr;
   }
 
-  // Ambiguous: report error
+  // Ambiguous
   auto Viable = OCS.getViableCandidates();
   Diags.report(SourceLocation(), DiagID::err_ovl_ambiguous_call, Name);
   for (auto *C : Viable) {
     Diags.report(SourceLocation(), DiagID::note_ovl_candidate);
   }
   return nullptr;
-
-  return Best;
 }
 
 void Sema::AddOverloadCandidate(FunctionDecl *F,
                                  llvm::ArrayRef<Expr *> Args,
                                  OverloadCandidateSet &Set) {
-  OverloadCandidate &C = Set.addCandidate(F);
-  // Note: viability is checked during resolve()
+  Set.addCandidate(F);
 }
 
 //===----------------------------------------------------------------------===//
@@ -396,7 +588,7 @@ void Sema::Diag(SourceLocation Loc, DiagID ID) {
 }
 
 void Sema::Diag(SourceLocation Loc, DiagID ID, llvm::StringRef Extra) {
-  Diags.report(Loc, ID);
+  Diags.report(Loc, ID, Extra);
 }
 
 } // namespace blocktype

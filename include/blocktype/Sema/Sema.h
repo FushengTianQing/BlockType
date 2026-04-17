@@ -24,6 +24,9 @@
 #include "blocktype/Sema/Scope.h"
 #include "blocktype/Sema/Lookup.h"
 #include "blocktype/Sema/Overload.h"
+#include "blocktype/Sema/TypeCheck.h"
+#include "blocktype/Sema/AccessControl.h"
+#include "blocktype/Sema/ConstantExpr.h"
 #include "llvm/ADT/DenseMap.h"
 
 namespace blocktype {
@@ -106,6 +109,11 @@ class Sema {
   DiagnosticsEngine &Diags;
   SymbolTable Symbols;
 
+  /// Checkers — owned by Sema, follow the Clang pattern where Sema
+  /// is the central dispatcher that delegates to specialized checkers.
+  TypeCheck TC;
+  ConstantExprEvaluator ConstEval;
+
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;
 
@@ -133,6 +141,12 @@ public:
   ASTContext &getASTContext() const { return Context; }
   DiagnosticsEngine &getDiagnostics() const { return Diags; }
   bool hasErrorOccurred() const { return Diags.hasErrorOccurred(); }
+
+  /// Access the type checker.
+  TypeCheck &getTypeCheck() { return TC; }
+
+  /// Access the constant expression evaluator.
+  ConstantExprEvaluator &getConstEval() { return ConstEval; }
 
   //===------------------------------------------------------------------===//
   // Scope management
