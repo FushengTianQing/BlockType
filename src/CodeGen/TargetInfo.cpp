@@ -80,8 +80,17 @@ uint64_t TargetInfo::getBuiltinSize(BuiltinKind K) const {
   case BuiltinKind::UnsignedLong:
   case BuiltinKind::Double:    return 8;
   case BuiltinKind::LongLong:
-  case BuiltinKind::UnsignedLongLong:
+  case BuiltinKind::UnsignedLongLong: return 8;
   case BuiltinKind::LongDouble:
+    // macOS / Darwin: long double = double (8 bytes)
+    // Linux x86_64: long double = x87 extended (16 bytes, 80-bit padded)
+    // 其他平台默认 16 字节
+    {
+      llvm::Triple T(TripleStr);
+      if (T.isOSDarwin())
+        return 8;  // macOS: long double == double
+      return 16;   // Linux 等: long double == 80-bit extended padded to 16
+    }
   case BuiltinKind::Float128:  return 16;
   case BuiltinKind::Int128:
   case BuiltinKind::UnsignedInt128: return 16;

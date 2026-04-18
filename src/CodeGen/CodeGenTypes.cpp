@@ -143,7 +143,14 @@ llvm::Type *CodeGenTypes::ConvertBuiltinType(const BuiltinType *BT) {
     return llvm::Type::getFloatTy(Ctx);
   case BuiltinKind::Double:
     return llvm::Type::getDoubleTy(Ctx);
-  case BuiltinKind::LongDouble:
+  case BuiltinKind::LongDouble: {
+    // macOS: long double == double → use getDoubleTy
+    // Linux: long double == 80-bit extended → use getFP128Ty (LLVM 用 128-bit 表示)
+    uint64_t LDSize = CGM.getTarget().getBuiltinSize(BuiltinKind::LongDouble);
+    if (LDSize <= 8)
+      return llvm::Type::getDoubleTy(Ctx);
+    return llvm::Type::getFP128Ty(Ctx);
+  }
   case BuiltinKind::Float128:
     return llvm::Type::getFP128Ty(Ctx);
   case BuiltinKind::NullPtr:
