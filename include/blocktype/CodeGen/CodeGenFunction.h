@@ -67,6 +67,9 @@ class CodeGenFunction {
   /// 返回值 alloca
   llvm::AllocaInst *ReturnValue = nullptr;
 
+  /// Label → BasicBlock 映射（用于 goto/label 前向引用）
+  llvm::DenseMap<const LabelDecl *, llvm::BasicBlock *> LabelMap;
+
 public:
   explicit CodeGenFunction(CodeGenModule &M);
 
@@ -194,6 +197,22 @@ private:
   void EmitGotoStmt(GotoStmt *GS);
   void EmitLabelStmt(LabelStmt *LS);
   void EmitCXXTryStmt(CXXTryStmt *TS);
+  void EmitCXXForRangeStmt(CXXForRangeStmt *FRS);
+  void EmitCoreturnStmt(CoreturnStmt *CRS);
+  void EmitCoyieldStmt(CoyieldStmt *CYS);
+
+  //===------------------------------------------------------------------===//
+  // 控制流辅助
+  //===------------------------------------------------------------------===//
+
+  /// 将值转换为 i1 布尔值（用于 if/while/for 条件判断）
+  llvm::Value *EmitConversionToBool(llvm::Value *SrcValue, QualType SrcType);
+
+  /// 生成条件变量声明（if/switch/while/for 的 CondVar）
+  void EmitCondVarDecl(VarDecl *CondVariable);
+
+  /// 获取或创建 label 对应的 BasicBlock
+  llvm::BasicBlock *getOrCreateLabelBB(LabelDecl *Label);
 };
 
 } // namespace blocktype

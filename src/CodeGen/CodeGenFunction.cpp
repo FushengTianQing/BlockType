@@ -239,6 +239,15 @@ void CodeGenFunction::EmitStmt(Stmt *Statement) {
   case ASTNode::NodeKind::CXXTryStmtKind:
     EmitCXXTryStmt(llvm::cast<CXXTryStmt>(Statement));
     break;
+  case ASTNode::NodeKind::CXXForRangeStmtKind:
+    EmitCXXForRangeStmt(llvm::cast<CXXForRangeStmt>(Statement));
+    break;
+  case ASTNode::NodeKind::CoreturnStmtKind:
+    EmitCoreturnStmt(llvm::cast<CoreturnStmt>(Statement));
+    break;
+  case ASTNode::NodeKind::CoyieldStmtKind:
+    EmitCoyieldStmt(llvm::cast<CoyieldStmt>(Statement));
+    break;
   case ASTNode::NodeKind::CaseStmtKind:
   case ASTNode::NodeKind::DefaultStmtKind:
     // CaseStmt/DefaultStmt 由 EmitSwitchStmt 内部处理
