@@ -84,8 +84,11 @@ TEST_F(CodeGenDebugInfoTest, FunctionDI) {
   auto &DI = CGM->getDebugInfo();
   DI.Initialize("test.cpp", "/tmp");
 
+  // 创建 int() 函数类型
+  auto *FnTy = Ctx.getFunctionType(Ctx.getIntType().getTypePtr(), {});
+  QualType FT(FnTy, Qualifier::None);
   auto *FD = Ctx.create<FunctionDecl>(SourceLocation(10), "test_func",
-      QualType(), llvm::SmallVector<ParmVarDecl *, 0>());
+      FT, llvm::SmallVector<ParmVarDecl *, 0>());
 
   auto *SP = DI.GetFunctionDI(FD);
   ASSERT_NE(SP, nullptr);

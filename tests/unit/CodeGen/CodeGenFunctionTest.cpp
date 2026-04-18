@@ -28,8 +28,11 @@ protected:
 
 TEST_F(CodeGenFunctionTest, VoidFunction) {
   auto *Body = Ctx.create<CompoundStmt>(SourceLocation(1), llvm::SmallVector<Stmt*, 0>());
+  // 创建 void() 函数类型
+  auto *FnTy = Ctx.getFunctionType(Ctx.getVoidType().getTypePtr(), {});
+  QualType FT(FnTy, Qualifier::None);
   auto *FD = Ctx.create<FunctionDecl>(SourceLocation(0), "void_func",
-      QualType(), llvm::SmallVector<ParmVarDecl *, 0>(), Body);
+      FT, llvm::SmallVector<ParmVarDecl *, 0>(), Body);
 
   llvm::Function *Fn = CGM->EmitFunction(FD);
   ASSERT_NE(Fn, nullptr);
@@ -43,8 +46,11 @@ TEST_F(CodeGenFunctionTest, FunctionWithReturn) {
   llvm::SmallVector<Stmt *, 1> Stmts = {RetStmt};
   auto *Body = Ctx.create<CompoundStmt>(SourceLocation(4), Stmts);
 
+  // 创建 int() 函数类型
+  auto *FnTy = Ctx.getFunctionType(Ctx.getIntType().getTypePtr(), {});
+  QualType FT(FnTy, Qualifier::None);
   auto *FD = Ctx.create<FunctionDecl>(SourceLocation(0), "ret_func",
-      QualType(), llvm::SmallVector<ParmVarDecl *, 0>(), Body);
+      FT, llvm::SmallVector<ParmVarDecl *, 0>(), Body);
 
   llvm::Function *Fn = CGM->EmitFunction(FD);
   ASSERT_NE(Fn, nullptr);
@@ -57,8 +63,12 @@ TEST_F(CodeGenFunctionTest, FunctionWithParams) {
   llvm::SmallVector<ParmVarDecl *, 2> Params = {P1, P2};
 
   auto *Body = Ctx.create<CompoundStmt>(SourceLocation(3), llvm::SmallVector<Stmt*, 0>());
+  // 创建 int(int, int) 函数类型
+  auto *FnTy = Ctx.getFunctionType(Ctx.getIntType().getTypePtr(),
+      {Ctx.getIntType().getTypePtr(), Ctx.getIntType().getTypePtr()});
+  QualType FT(FnTy, Qualifier::None);
   auto *FD = Ctx.create<FunctionDecl>(SourceLocation(0), "add",
-      QualType(), Params, Body);
+      FT, Params, Body);
 
   llvm::Function *Fn = CGM->EmitFunction(FD);
   ASSERT_NE(Fn, nullptr);

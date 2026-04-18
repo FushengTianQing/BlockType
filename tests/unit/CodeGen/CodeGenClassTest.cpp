@@ -5,6 +5,7 @@
 #include "blocktype/CodeGen/CGCXX.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
+#include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Type.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -94,9 +95,20 @@ TEST_F(CodeGenClassTest, ConstructorGeneration) {
   auto *RD = Ctx.create<CXXRecordDecl>(SourceLocation(1), "MyClass");
   auto *F1 = Ctx.create<FieldDecl>(SourceLocation(2), "x", Ctx.getIntType());
   RD->addField(F1);
+  CGM->getCXX().ComputeClassLayout(RD);
+
+  // 提供空的函数体
+  auto *Body = Ctx.create<CompoundStmt>(SourceLocation(4), llvm::SmallVector<Stmt*, 0>());
+
+  // 创建 void(MyClass*) 函数类型 (this 指针作为第一个参数)
+  auto *ThisPtrTy = Ctx.getPointerType(Ctx.getRecordType(RD).getTypePtr());
+  auto *FnTy = Ctx.getFunctionType(Ctx.getVoidType().getTypePtr(), {ThisPtrTy});
+  QualType FT(FnTy, Qualifier::None);
 
   auto *Ctor = Ctx.create<CXXConstructorDecl>(SourceLocation(3), RD,
-      llvm::SmallVector<ParmVarDecl *, 0>(), nullptr);
+      llvm::SmallVector<ParmVarDecl *, 0>(), Body);
+  // 手动设置函数类型（CXXConstructorDecl 构造函数不自动设置）
+  Ctor->setType(FT);
   RD->addMethod(Ctor);
 
   llvm::Function *Fn = CGM->EmitFunction(Ctor);
@@ -105,10 +117,19 @@ TEST_F(CodeGenClassTest, ConstructorGeneration) {
 }
 
 TEST_F(CodeGenClassTest, DestructorGeneration) {
-  // 创建一个带有析构函数声明的类
   auto *RD = Ctx.create<CXXRecordDecl>(SourceLocation(1), "MyClass");
+  CGM->getCXX().ComputeClassLayout(RD);
 
-  auto *Dtor = Ctx.create<CXXDestructorDecl>(SourceLocation(2), RD, nullptr);
+  // 提供空的函数体
+  auto *Body = Ctx.create<CompoundStmt>(SourceLocation(3), llvm::SmallVector<Stmt*, 0>());
+  auto *Dtor = Ctx.create<CXXDestructorDecl>(SourceLocation(2), RD, Body);
+
+  // 创建 void(MyClass*) 函数类型 (this 指针作为第一个参数)
+  auto *ThisPtrTy = Ctx.getPointerType(Ctx.getRecordType(RD).getTypePtr());
+  auto *FnTy = Ctx.getFunctionType(Ctx.getVoidType().getTypePtr(), {ThisPtrTy});
+  QualType FT(FnTy, Qualifier::None);
+  Dtor->setType(FT);
+
   RD->addMethod(Dtor);
 
   llvm::Function *Fn = CGM->EmitFunction(Dtor);
