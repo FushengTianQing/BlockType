@@ -96,7 +96,10 @@ if (Selected.isType()) {
 - ✅ `UnaryOperator(!)` 逻辑取反
 - ✅ `RequiresExpr` 递归评估
 - ✅ `CXXBoolLiteral` / `IntegerLiteral` 直接值
-- ⚠️ `CallExpr`/`DeclRefExpr` 简化处理（视为有效）
+- ✅ `CallExpr` 概念调用（通过名称查找解析 ConceptDecl，递归调用 CheckConceptSatisfaction）
+- ✅ `DeclRefExpr` 常量求值（正确移除不可能成功的 ConceptDecl dyn_cast）
+- ✅ `TemplateSpecializationExpr` 概念-id（如 `Integral<T>`，通过 SymbolTable 按名称查找概念）
+- ✅ `SubstituteExpr` 支持 `TemplateSpecializationExpr` 替换（概念参数中的模板类型参数正确替换）
 
 ### ✅ SFINAE 完整集成
 
@@ -252,6 +255,7 @@ tests/lit/Sema/
 | 原子约束分解 | 归一化为原子约束+追踪 | collectAtomicConstraints + 蕴含检查 | ✅ |
 | 约束部分排序 | `compareConstraints` | CompareConstraints + Overload resolve 集成 | ✅ |
 | requires 表达式 | 4 种 requirement 完整求值 | 基本完整 | ✅ |
+| 概念表达式求值 | concept-id 求值 + SubstituteExpr | TemplateSpecializationExpr/CallExpr 名称查找 + 替换 | ✅ |
 | noexcept 分析 | 递归遍历所有子表达式 | 递归分析 7 种表达式 | ✅ |
 | 返回类型约束 | concept 推导 + cv/引用处理 | cv/引用/指针/转换检查 + ConversionChecker | ✅ |
 | 偏特化部分排序 | `getMoreSpecialized*` | isMoreSpecializedPartialSpec + FindBestMatching | ✅ |
@@ -290,3 +294,28 @@ tests/lit/Sema/
 | ✅ 完整 | — | ExpandPack, CXXFoldExpr, ConstraintSatisfaction 框架, SFINAE 集成, requires 评估, 显式特化/实例化基础, 偏特化声明验证, 约束部分排序, 偏特化部分排序, 多包展开, PackIndexing, noexcept 分析, 返回类型约束 |
 
 > **修复率：8/9（89%）**，仅剩 1 项性能优化（实例化缓存）和 1 项测试补充（lit 测试）。
+
+---
+
+## 八、后续修复记录
+
+### 修复 R1：概念表达式求值 `EvaluateConstraintExpr` 三项缺陷（2026-04-18 commit `c8a6c66`）
+
+**背景**：核查中发现 `EvaluateConstraintExpr` 对概念表达式（concept-id）的求值存在三类缺陷，导致如 `Integral<T>` 形式的约束表达式无法正确求值。
+
+**缺陷 1 — `TemplateSpecializationExpr` 类型错误（编译错误）**：
+- `getTemplateName()` 返回 `llvm::StringRef`（模板名称字符串），旧代码将其赋值给 `TemplateDecl*`，无法编译
+- **修复**：通过 `TSE->getTemplateName()` 获取名称，再用 `SymbolTable.lookupConcept(Name)` 查找 `ConceptDecl*`
+
+**缺陷 2 — `DeclRefExpr`/`CallExpr` 类型层次不兼容（永远失败）**：
+- `ConceptDecl` 继承自 `TypeDecl`（非 `ValueDecl`），而 `DeclRefExpr::getDecl()` 返回 `ValueDecl*`
+- `dyn_cast<ConceptDecl>(DRE->getDecl())` 因继承链不兼容而**永远返回 nullptr**
+- **修复**：通过被调用者名称使用 `SymbolTable.lookupConcept()` 进行名称查找
+
+**缺陷 3 — `SubstituteExpr` 缺少 `TemplateSpecializationExpr` 处理**：
+- `SubstituteExpr` 不处理 `TemplateSpecializationExpr`，导致 `Integral<T>` 中的 `T` 在替换后不会被替换为实际类型
+- **修复**：在 `SubstituteExpr` 中新增 `TemplateSpecializationExpr` 分支，遍历模板参数进行类型替换
+
+**修改文件**：
+- `src/Sema/ConstraintSatisfaction.cpp` — 修复概念查找逻辑，添加 `SymbolTable.h` 头文件
+- `src/Sema/TemplateInstantiation.cpp` — 新增 `TemplateSpecializationExpr` 替换处理
