@@ -484,14 +484,40 @@ llvm::Function *CodeGenModule::GetOrCreateFunctionDecl(FunctionDecl *FD) {
   llvm::Function *Fn = llvm::Function::Create(
       FTy, Linkage, Mangle->getMangledName(FD), TheModule.get());
 
-  // 设置参数名
-  unsigned Idx = 0;
+  // 设置参数名和 ABI 属性（sret/inreg）
+  const FunctionABITy *ABI = getTypes().GetFunctionABI(FD);
+  unsigned ArgIdx = 0;
   for (auto &Arg : Fn->args()) {
-    if (Idx < FD->getNumParams()) {
-      ParmVarDecl *PVD = FD->getParamDecl(Idx);
-      Arg.setName(PVD->getName());
+    // 设置 ABI 属性
+    if (ABI && ArgIdx < ABI->ParamInfos.size()) {
+      const auto &Info = ABI->ParamInfos[ArgIdx];
+      if (Info.isSRet()) {
+        Arg.addAttr(llvm::Attribute::getWithStructRetType(
+            LLVMCtx, Info.SRetType));
+        Arg.addAttr(llvm::Attribute::NoAlias);
+      }
+      if (Info.isInReg()) {
+        Arg.addAttr(llvm::Attribute::InReg);
+      }
     }
-    ++Idx;
+
+    // 设置参数名（跳过隐式参数）
+    // 隐式参数计数：sret(1) + this(1)
+    unsigned ImplicitArgs = 0;
+    if (ABI && !ABI->ParamInfos.empty() && ABI->ParamInfos[0].isSRet())
+      ++ImplicitArgs;
+    if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
+      if (!MD->isStatic()) ++ImplicitArgs;
+    }
+
+    if (ArgIdx >= ImplicitArgs) {
+      unsigned ParamIdx = ArgIdx - ImplicitArgs;
+      if (ParamIdx < FD->getNumParams()) {
+        ParmVarDecl *PVD = FD->getParamDecl(ParamIdx);
+        Arg.setName(PVD->getName());
+      }
+    }
+    ++ArgIdx;
   }
 
   // 设置函数属性

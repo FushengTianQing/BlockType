@@ -324,6 +324,11 @@ Expr *Parser::parseUnaryExpression() {
     return parseCXXDeleteExpression();
   }
 
+  // Check for sizeof/alignof
+  if (Tok.is(TokenKind::kw_sizeof) || Tok.is(TokenKind::kw_alignof)) {
+    return parseUnaryExprOrTypeTraitExpr();
+  }
+
   // Check for prefix unary operators
   PrecedenceLevel UnaryPrec = getUnaryOpPrecedence(Tok.getKind());
 
@@ -349,6 +354,72 @@ Expr *Parser::parseUnaryExpression() {
     return nullptr;
 
   return parsePostfixExpression(Base);
+}
+
+//===----------------------------------------------------------------------===//
+// sizeof/alignof expression parsing
+//===----------------------------------------------------------------------===//
+
+Expr *Parser::parseUnaryExprOrTypeTraitExpr() {
+  SourceLocation OpLoc = Tok.getLocation();
+  bool IsSizeOf = Tok.is(TokenKind::kw_sizeof);
+  consumeToken(); // consume 'sizeof' or 'alignof'
+
+  UnaryExprOrTypeTrait Kind =
+      IsSizeOf ? UnaryExprOrTypeTrait::SizeOf
+               : UnaryExprOrTypeTrait::AlignOf;
+
+  // Two forms:
+  //   sizeof(type)  — parenthesized type-id
+  //   sizeof expr   — unary expression (no parens)
+
+  if (Tok.is(TokenKind::l_paren)) {
+    // Ambiguous: could be sizeof(type) or sizeof(expr).
+    // Heuristic: if the token after '(' looks like a type keyword or
+    // is an identifier that resolves to a type, parse as sizeof(type).
+    // Otherwise, parse as sizeof(expr).
+    //
+    // Simplified strategy: try to parse as a type first.
+    // Use tentative parsing to avoid committing on failure.
+
+    // Check if next token looks like a type
+    TokenKind Next = NextTok.getKind();
+    bool LooksLikeType = isTypeKeyword(Next) ||
+                         Next == TokenKind::kw_class ||
+                         Next == TokenKind::kw_struct ||
+                         Next == TokenKind::kw_enum ||
+                         Next == TokenKind::kw_union ||
+                         Next == TokenKind::kw_const ||
+                         Next == TokenKind::kw_volatile ||
+                         Next == TokenKind::kw_unsigned ||
+                         Next == TokenKind::kw_signed;
+
+    if (LooksLikeType) {
+      // sizeof(type) form
+      consumeToken(); // consume '('
+      QualType T = parseType();
+      if (!tryConsumeToken(TokenKind::r_paren)) {
+        emitError(DiagID::err_expected_rparen);
+      }
+      return Context.create<UnaryExprOrTypeTraitExpr>(OpLoc, Kind, T);
+    }
+
+    // Check if it looks like a qualified type (identifier followed by ::)
+    // For now, treat identifier + '(' as an expression form
+    // e.g., sizeof(foo) where foo is a variable
+    // We'll try parsing as expression if it doesn't look like a type
+
+    // Parse as sizeof(expr) with parenthesized expression
+    // Fall through to expression form below
+  }
+
+  // sizeof expr form (no parens, or parens around expression)
+  Expr *Arg = parseUnaryExpression();
+  if (!Arg) {
+    return createRecoveryExpr(OpLoc);
+  }
+
+  return Context.create<UnaryExprOrTypeTraitExpr>(OpLoc, Kind, Arg);
 }
 
 //===----------------------------------------------------------------------===//

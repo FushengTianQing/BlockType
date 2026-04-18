@@ -155,6 +155,20 @@ void UnaryOperator::dump(raw_ostream &OS, unsigned Indent) const {
     SubExpr->dump(OS, Indent + 1);
 }
 
+void UnaryExprOrTypeTraitExpr::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << (Kind == UnaryExprOrTypeTrait::SizeOf ? "sizeof" : "alignof");
+  if (IsArgumentType) {
+    OS << "(type)\n";
+    if (!ArgType.isNull())
+      ArgType.dump(OS);
+  } else {
+    OS << "(expr)\n";
+    if (ArgExpr)
+      ArgExpr->dump(OS, Indent + 1);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // ConditionalOperator
 //===----------------------------------------------------------------------===//

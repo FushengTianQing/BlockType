@@ -47,6 +47,7 @@ EXPR(ArraySubscriptExpr, Expr)
 // Operators
 EXPR(BinaryOperator, Expr)
 EXPR(UnaryOperator, Expr)
+EXPR(UnaryExprOrTypeTraitExpr, Expr)
 EXPR(ConditionalOperator, Expr)
 
 // Calls

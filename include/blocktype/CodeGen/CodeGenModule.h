@@ -99,6 +99,10 @@ class CodeGenModule {
   /// 需要生成 vtable 的 CXXRecordDecl 集合
   llvm::SmallVector<CXXRecordDecl *, 8> VTableClasses;
 
+  /// 字符串字面量池（StringRef → GlobalVariable*），用于合并相同的字符串字面量。
+  /// Clang 也有类似的 StringLiteralPool 机制。
+  llvm::DenseMap<llvm::StringRef, llvm::GlobalVariable *> StringLiteralPool;
+
 public:
   CodeGenModule(ASTContext &Ctx, llvm::LLVMContext &LLVMCtx,
                 llvm::StringRef ModuleName, llvm::StringRef TargetTriple);
@@ -204,6 +208,11 @@ public:
 
   /// 获取模块的数据布局。
   const llvm::DataLayout &getDataLayout() const;
+
+  /// 获取字符串字面量池（用于 CodeGenConstant 合并相同字符串）。
+  llvm::DenseMap<llvm::StringRef, llvm::GlobalVariable *> &getStringLiteralPool() {
+    return StringLiteralPool;
+  }
 
   //===------------------------------------------------------------------===//
   // 全局构造/析构

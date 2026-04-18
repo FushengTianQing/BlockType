@@ -19,6 +19,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 namespace blocktype {
@@ -89,6 +90,10 @@ public:
   /// \return Pointer to the newly created node.
   template <typename T, typename... Args>
   T *create(Args &&...args) {
+    static_assert(std::is_base_of_v<ASTNode, T>,
+                  "create<T>() can only be used with ASTNode subclasses "
+                  "(Decl/Stmt/Expr). Use ASTContext type factory methods "
+                  "(getPointerType, getFunctionType, etc.) for Type creation.");
     // Allocate memory
     void *Mem = Allocator.Allocate(sizeof(T), alignof(T));
     

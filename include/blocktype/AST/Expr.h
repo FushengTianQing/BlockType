@@ -541,6 +541,92 @@ public:
   }
 };
 
+//===----------------------------------------------------------------------===//
+// UnaryExprOrTypeTraitExpr (sizeof/alignof)
+//===----------------------------------------------------------------------===//
+
+/// UnaryExprOrTypeTraitKind — The kind of unary expression or type trait.
+enum class UnaryExprOrTypeTrait {
+  SizeOf,    ///< sizeof
+  AlignOf,   ///< alignof
+};
+
+/// UnaryExprOrTypeTraitExpr — Represents sizeof/alignof expressions.
+///
+/// Two forms:
+///   1. sizeof(type)  — applies to a type
+///   2. sizeof expr   — applies to an expression (without parentheses)
+///
+/// This matches Clang's UnaryExprOrTypeTraitExpr design.
+class UnaryExprOrTypeTraitExpr : public Expr {
+  UnaryExprOrTypeTrait Kind;
+
+  /// Type argument (active when IsArgumentType is true).
+  QualType ArgType;
+
+  /// Expression argument (active when IsArgumentType is false).
+  Expr *ArgExpr = nullptr;
+
+  bool IsArgumentType;
+
+public:
+  /// Construct for sizeof(type) / alignof(type).
+  UnaryExprOrTypeTraitExpr(SourceLocation Loc, UnaryExprOrTypeTrait K,
+                            QualType T)
+      : Expr(Loc), Kind(K), ArgType(T), ArgExpr(nullptr),
+        IsArgumentType(true) {}
+
+  /// Construct for sizeof expr / alignof expr (applied to expression).
+  UnaryExprOrTypeTraitExpr(SourceLocation Loc, UnaryExprOrTypeTrait K,
+                            Expr *E)
+      : Expr(Loc), Kind(K), ArgExpr(E), IsArgumentType(false) {}
+
+  /// Get the kind of trait (sizeof or alignof).
+  UnaryExprOrTypeTrait getTraitKind() const { return Kind; }
+
+  /// True if the argument is a type (sizeof(type)).
+  bool isArgumentType() const { return IsArgumentType; }
+
+  /// Get the type argument (only valid when isArgumentType() is true).
+  QualType getArgumentType() const {
+    assert(IsArgumentType && "Argument is not a type");
+    return ArgType;
+  }
+
+  /// Get the expression argument (only valid when isArgumentType() is false).
+  Expr *getArgumentExpr() const {
+    assert(!IsArgumentType && "Argument is not an expression");
+    return ArgExpr;
+  }
+
+  /// Get the type of the argument (works for both forms).
+  /// For type form, returns the type directly.
+  /// For expr form, returns the expression's type.
+  QualType getTypeOfArgument() const {
+    if (IsArgumentType)
+      return ArgType;
+    return ArgExpr ? ArgExpr->getType() : QualType();
+  }
+
+  NodeKind getKind() const override {
+    return NodeKind::UnaryExprOrTypeTraitExprKind;
+  }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  /// sizeof/alignof is type-dependent if the argument type is dependent
+  bool isTypeDependent() const override {
+    if (IsArgumentType)
+      return ArgType.isNull() ? false :
+             ArgType->isDependentType();
+    return ArgExpr ? ArgExpr->isTypeDependent() : false;
+  }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::UnaryExprOrTypeTraitExprKind;
+  }
+};
+
 /// ConditionalOperator - Ternary conditional operator (?:).
 class ConditionalOperator : public Expr {
   Expr *Cond, *TrueExpr, *FalseExpr;

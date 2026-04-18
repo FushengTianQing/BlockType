@@ -9,6 +9,7 @@
 #include "blocktype/CodeGen/CodeGenConstant.h"
 #include "blocktype/CodeGen/CodeGenModule.h"
 #include "blocktype/CodeGen/CodeGenTypes.h"
+#include "blocktype/CodeGen/TargetInfo.h"
 #include "blocktype/AST/ASTNode.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Type.h"
@@ -94,6 +95,19 @@ llvm::Constant *CodeGenConstant::EmitConstant(Expr *E) {
       return SubConst;
     }
   }
+  case ASTNode::NodeKind::UnaryExprOrTypeTraitExprKind: {
+    auto *SE = llvm::cast<UnaryExprOrTypeTraitExpr>(E);
+    QualType ArgTy = SE->getTypeOfArgument();
+    if (ArgTy.isNull()) return nullptr;
+
+    uint64_t Val = 0;
+    if (SE->getTraitKind() == UnaryExprOrTypeTrait::SizeOf) {
+      Val = CGM.getTarget().getTypeSize(ArgTy);
+    } else {
+      Val = CGM.getTarget().getTypeAlign(ArgTy);
+    }
+    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(getLLVMContext()), Val);
+  }
   default:
     break;
   }
@@ -149,12 +163,30 @@ llvm::Constant *CodeGenConstant::EmitStringLiteral(StringLiteral *SL) {
   if (!SL) return nullptr;
 
   llvm::StringRef Str = SL->getValue();
+
+  // 查找字符串池，如果已有相同内容的全局变量则复用
+  auto &Pool = CGM.getStringLiteralPool();
+  auto It = Pool.find(Str);
+  if (It != Pool.end()) {
+    // 已存在：复用已有的全局变量
+    llvm::GlobalVariable *ExistingGV = It->second;
+    llvm::Constant *StrConstant = ExistingGV->getInitializer();
+    llvm::SmallVector<llvm::Constant *, 2> Indices;
+    Indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(getLLVMContext()), 0));
+    Indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(getLLVMContext()), 0));
+    return llvm::ConstantExpr::getGetElementPtr(StrConstant->getType(), ExistingGV, Indices);
+  }
+
+  // 创建新的字符串全局变量
   llvm::Constant *StrConstant = llvm::ConstantDataArray::getString(
       getLLVMContext(), Str);
 
   auto *GV = new llvm::GlobalVariable(
       *CGM.getModule(), StrConstant->getType(), true,
       llvm::GlobalValue::PrivateLinkage, StrConstant, ".str");
+
+  // 加入字符串池
+  Pool[Str] = GV;
 
   // GEP: get pointer to first character
   llvm::SmallVector<llvm::Constant *, 2> Indices;

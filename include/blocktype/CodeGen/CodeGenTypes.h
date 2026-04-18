@@ -14,6 +14,7 @@
 #pragma once
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/IR/Attributes.h"
 #include "llvm/IR/Type.h"
 #include "blocktype/AST/Type.h"
 
@@ -31,12 +32,57 @@ class RecordDecl;
 class FieldDecl;
 class CXXRecordDecl;
 
+//===----------------------------------------------------------------------===//
+// ABIArgInfo — 描述参数/返回值的 ABI 传递方式
+//===----------------------------------------------------------------------===//
+
+/// ABIArgKind — 参数或返回值在 ABI 层面的传递方式。
+///
+/// 参照 Clang ABIArgInfo，简化为 BlockType 当前需要的子集。
+enum class ABIArgKind {
+  Direct,   ///< 直接传递（值或指针，无特殊属性）
+  SRet,     ///< 通过隐藏指针参数传递（结构体返回值 > ABI 限制）
+  InReg,    ///< 通过寄存器传递（添加 inreg 属性）
+};
+
+/// ABIArgInfo — 描述一个参数或返回值的 ABI 传递细节。
+struct ABIArgInfo {
+  ABIArgKind Kind = ABIArgKind::Direct;
+
+  /// 对于 SRet：指向的类型（即原始返回类型对应的 LLVM 类型）
+  /// 仅当 Kind == SRet 时有意义
+  llvm::Type *SRetType = nullptr;
+
+  static ABIArgInfo getDirect() { return {ABIArgKind::Direct, nullptr}; }
+  static ABIArgInfo getSRet(llvm::Type *T) { return {ABIArgKind::SRet, T}; }
+  static ABIArgInfo getInReg() { return {ABIArgKind::InReg, nullptr}; }
+
+  bool isSRet() const { return Kind == ABIArgKind::SRet; }
+  bool isInReg() const { return Kind == ABIArgKind::InReg; }
+  bool isDirect() const { return Kind == ABIArgKind::Direct; }
+};
+
+/// FunctionABITy — 函数的完整 ABI 信息。
+///
+/// 包含 LLVM 函数类型以及每个参数和返回值的 ABI 传递方式。
+/// 在 GetFunctionTypeForDecl 中计算，供 GetOrCreateFunctionDecl
+/// 在创建 llvm::Function 时设置参数属性。
+struct FunctionABITy {
+  llvm::FunctionType *FnTy = nullptr;
+
+  /// 返回值的 ABI 信息
+  ABIArgInfo RetInfo;
+
+  /// 每个参数的 ABI 信息（与 FnTy 的参数一一对应，含隐式参数）
+  llvm::SmallVector<ABIArgInfo, 8> ParamInfos;
+};
+
 /// CodeGenTypes — C++ 类型到 LLVM 类型的映射引擎。
 ///
 /// 职责（参照 Clang CodeGenTypes）：
 /// 1. 将 BlockType 的 QualType 映射为 llvm::Type*
 /// 2. 缓存已转换的类型（避免重复创建）
-/// 3. 生成函数类型（处理 this 指针、变参等）
+/// 3. 生成函数类型（处理 this 指针、sret、inreg、变参等）
 /// 4. 生成结构体类型（处理继承、虚基类、字段布局）
 /// 5. 处理枚举类型（映射到底层整数类型）
 class CodeGenTypes {
@@ -47,6 +93,9 @@ class CodeGenTypes {
 
   /// FunctionDecl → llvm::FunctionType* 缓存
   llvm::DenseMap<const FunctionDecl *, llvm::FunctionType *> FunctionTypeCache;
+
+  /// FunctionDecl → FunctionABITy 缓存（sret/inreg 信息）
+  llvm::DenseMap<const FunctionDecl *, FunctionABITy> FunctionABICache;
 
   /// RecordDecl → llvm::StructType* 缓存
   llvm::DenseMap<const RecordDecl *, llvm::StructType *> RecordTypeCache;
@@ -83,6 +132,10 @@ public:
   /// 根据 FunctionDecl 生成 LLVM FunctionType。
   /// 处理 this 指针（成员函数）、变参等特殊情况。
   llvm::FunctionType *GetFunctionTypeForDecl(FunctionDecl *FD);
+
+  /// 根据 FunctionDecl 获取完整的 ABI 信息（含 sret/inreg）。
+  /// 返回值指针由 CodeGenTypes 内部缓存拥有，不需要调用者释放。
+  const FunctionABITy *GetFunctionABI(FunctionDecl *FD);
 
   //===------------------------------------------------------------------===//
   // 记录类型（struct/class）
@@ -138,6 +191,12 @@ private:
 
   /// 递归检查类或其基类是否有虚函数
   static bool hasVirtualInHierarchy(CXXRecordDecl *RD);
+
+  /// 判断返回类型是否需要通过 sret 传递
+  bool needsSRet(QualType RetTy) const;
+
+  /// 判断参数是否应该标记 inreg
+  bool shouldUseInReg(QualType ParamTy) const;
 };
 
 } // namespace blocktype

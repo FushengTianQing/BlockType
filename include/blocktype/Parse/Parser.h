@@ -273,6 +273,9 @@ public:
   /// Parses a unary expression (prefix operators).
   Expr *parseUnaryExpression();
 
+  /// Parses sizeof/alignof expression.
+  Expr *parseUnaryExprOrTypeTraitExpr();
+
   /// Parses a postfix expression.
   Expr *parsePostfixExpression(Expr *Base);
 

@@ -57,6 +57,9 @@ Audit Findings
 5.✅ GetFunctionTypeForDecl(FunctionDecl *) — 已实现
 --✅ [已修复] 成员函数 this 指针已在函数类型中添加
 --✅ [已修复] 新增 FunctionTypeCache 缓存避免重复计算
+--✅ [已修复] sret 参数（大结构体返回值通过内存传递）已处理
+--✅ [已修复] inreg 属性（this 指针寄存器传递）已处理
+--新增 ABIArgInfo / FunctionABITy 结构和 GetFunctionABI() 方法
 --非静态成员函数：this 指针作为第一个参数（指向类结构体的指针）
 
 6.✅ GetRecordType(RecordDecl *) — 已实现
@@ -197,47 +200,73 @@ TargetInfo 对比文档非常完整，没有遗漏。
 
 1. 函数类型生成 — Clang 的 GetFunctionType 处理了：
 --✅ [已修复] this 指针（成员函数首个参数）已处理
---⚠️ sret 参数（结构体返回值通过内存传递）未处理 — P2
---⚠️ inreg 属性未处理 — P2
+--✅ [已修复] sret 参数（结构体返回值通过内存传递）已处理
+----新增 ABIArgInfo / FunctionABITy 结构描述参数传递方式
+----GetFunctionABI() 计算完整 ABI 信息并缓存
+----GetOrCreateFunctionDecl 中设置 sret 属性 + NoAlias
+----TargetInfo::isStructReturnInRegister() 控制阈值（当前 > 16 字节触发 sret）
+--✅ [已修复] inreg 属性已处理
+----新增 shouldUseInReg() 方法（当前返回 false，为后续 ABI 扩展预留）
+----this 指针根据 TargetInfo::isThisPassedInRegister() 标记 inreg
+----GetOrCreateFunctionDecl 中根据 ABI 信息设置 Attribute::InReg
 --✅ 变参处理已实现
 
 2. 结构体布局 — Clang 使用 ASTContext::getASTRecordLayout 获取精确布局（含基类子对象、虚基类、填充）。BlockType 简化为按声明顺序排列。
---✅ 基础设施阶段可接受
+--✅ [已修复] 基类子对象已通过 collectBaseClassFields() 展平到派生类
+--⚠️ 缺少精确填充计算（padding）和对齐处理 — P2
 
 3. 枚举类型 — Clang 正确获取枚举的底层类型（通过 EnumDecl::getIntegerType()）。
 --✅ [已修复] 现在查询 EnumDecl::getUnderlyingType()
 
-4. Record 类型缺少基类子对象 — BlockType 的 GetRecordType 不处理基类字段。
---P2 问题：多重/单一继承布局未处理
+4. Record 类型基类子对象
+--✅ [已修复] GetRecordType 通过 collectBaseClassFields() 递归展平基类字段
+--⚠️ 虚继承布局未处理 — P2
 
 ## -----------------------------------------------------------
 
 ## CodeGenConstant 对比 Clang ConstantEmitter
 
-1. 常量折叠 — Clang 在 EmitConstant 中处理了更多常量表达式类型（sizeof、alignof、地址常量等）。BlockType 处理了基本类型。
---⚠️ 缺少 sizeof/alignof 常量表达式（P2）
+1. ✅ [已修复] 常量折叠 — sizeof/alignof 已完整支持
+--新增 UnaryExprOrTypeTraitExpr AST 节点（NodeKinds.def + Expr.h）
+--新增 UnaryExprOrTypeTrait 枚举（SizeOf / AlignOf）
+--支持两种形式：sizeof(type) 和 sizeof expr
+--Parser: parseUnaryExprOrTypeTraitExpr() 解析 sizeof/alignof（含类型/表达式歧义消解）
+--CodeGenConstant: EmitConstant() 中新增 case，通过 TargetInfo::getTypeSize/getTypeAlign 求值
+--CodeGenFunction: EmitExpr() + EmitUnaryExprOrTypeTraitExpr() 返回 ConstantInt(i64)
+--AST dump 实现完整
+--⚠️ 地址常量（&x, &arr[i]）未处理 — P2
 
-2. 字符串字面量合并 — Clang 会合并相同的字符串字面量。BlockType 每次创建新的全局变量。
---P2 问题
+2. ✅ [已修复] 字符串字面量合并 — 已实现池化去重
+--新增 StringLiteralPool（DenseMap<StringRef, GlobalVariable*>）在 CodeGenModule
+--EmitStringLiteral 先查池，命中则复用已有全局变量，未命中则创建并注册
+--减少重复字符串的全局变量数量，与 Clang 行为一致
 
-3. 静态初始化 — Clang 区分静态初始化和动态初始化。BlockType 未区分。
---P2 问题
+3. ✅ [已修复] 静态初始化 — 已区分三种初始化类型
+--ClassifyGlobalInit() 区分：零初始化、常量初始化、动态初始化
+--constexpr 变量 → ConstantInitialization
+--能被 EmitConstantForType 求值的 → ConstantInitialization
+--其他 → DynamicInitialization（延迟到 EmitDynamicGlobalInit 处理）
+--DynamicInitVars 队列正确管理延迟初始化
 
 ## -----------------------------------------------------------
 
 ## CGCXX 对比 Clang CGCXX + CGClass + CGVTables
-1. VTable 布局 — Clang 的 VTable 布局包含：
---offset-to-top（偏移到顶部）
---RTTI 指针
---虚函数指针（含覆盖方法）
-BlockType 简化为只有 RTTI + 虚函数指针。
---⚠️ 缺少 offset-to-top（P2）
+1. ✅ [已修复] VTable 布局 — 已包含 offset-to-top + RTTI + 虚函数指针
+--EmitVTable() 生成布局：[offset-to-top(i64→ptr)] [RTTI ptr] [base vfuncs...] [own new vfuncs...]
+--GetVTableIndex() 正确跳过头部 2 条目（Idx = 2）
+--覆盖检测：遍历基类虚函数，查找派生类同名同参方法
+--⚠️ 多重继承下非主 vtable 的 offset-to-top 应为非零值 — P2
 
-2. VTable 继承 — Clang 正确处理派生类继承基类的 VTable。BlockType 未处理。
---P2 问题
+2. ✅ [已修复] VTable 继承 — 单一继承已正确处理
+--EmitVTable() 先收集基类虚函数（检查覆盖），再添加自身新增虚函数
+--ComputeClassLayout() 处理基类子对象偏移 + vptr 位置
+--构造函数中 InitializeVTablePtr() 在每个基类初始化后立即更新 vptr
+--⚠️ 多重继承下多个子 vtable 未处理 — P2
 
-3. 虚析构函数 — Clang 为虚析构函数生成 deleting/complete 两个版本。BlockType 未处理。
---P2 问题
+3. ⚠️ 虚析构函数 — 未生成 deleting/complete 两个版本
+--当前 EmitDestructor() 只生成单一析构函数
+--Clang ABI 要求：complete destructor（析构对象+基类+成员）+ deleting destructor（调用 complete 后 operator delete）
+--⚠️ 虚析构函数 vtable 条目应指向 deleting destructor — P2
 
 ## -----------------------------------------------------------
 
@@ -254,7 +283,7 @@ C. 关联关系错误
 
 3. ✅ PointerType::getPointeeType() 返回 const Type* — 代码中使用 QualType(PT->getPointeeType(), Qualifier::None) 正确
 
-4. ⚠️ TargetInfo 构造函数使用 DataLayout(StringRef) — 如果传入无效的三元组，DataLayout 会是空的（P2）
+4. ✅ [已确认] TargetInfo 构造函数使用 DataLayout(StringRef) — getDataLayoutForTriple() 有 64-bit fallback，无效三元组默认使用 64-bit 布局（风险可控，P2 不需立即修复）
 
 
 ## ---------------------------------------------------------------
@@ -276,9 +305,13 @@ C. 关联关系错误
 ## P2 问题（后续改进）
 1. ✅ [已修复] 函数属性设置（inline→AlwaysInline, noexcept→DoesNotThrow）
 2. ✅ [已修复] 全局变量 isConstant 判断（isConstexpr || isConstQualified）
-3. 字符串字面量未合并
-4. VTable 布局缺少 offset-to-top
-5. Record 类型布局未处理基类子对象
-6. LongDouble 在 macOS 上应映射为 double 而非 FP128
+3. ✅ [已修复] 字符串字面量合并（StringLiteralPool 池化去重）
+4. ✅ [已修复] VTable 布局已包含 offset-to-top + RTTI ptr
+5. ⚠️ Record 类型布局缺少精确填充计算（padding/alignment）
+6. ✅ [已修复] LongDouble 在 macOS 上已适配为 double（8 字节），Linux 为 FP128（16 字节）
 7. GetFieldIndex 效率低（遍历所有 RecordTypeCache）
 8. ✅ [已修复] FunctionTypeCache 已添加
+9. ✅ [已修复] sret 参数（大结构体返回值通过内存传递）已处理
+10. ✅ [已修复] inreg 属性已处理（框架就绪，当前 shouldUseInReg 返回 false）
+11. 虚继承布局未处理
+12. ✅ [已修复] sizeof/alignof 常量表达式 — 完整 AST + Parser + CodeGen 支持

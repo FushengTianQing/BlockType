@@ -174,6 +174,7 @@ private:
 
   llvm::Value *EmitBinaryOperator(BinaryOperator *BO);
   llvm::Value *EmitUnaryOperator(UnaryOperator *UO);
+  llvm::Value *EmitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *E);
   llvm::Value *EmitCallExpr(CallExpr *CE);
   llvm::Value *EmitMemberExpr(MemberExpr *ME);
   llvm::Value *EmitDeclRefExpr(DeclRefExpr *DRE);

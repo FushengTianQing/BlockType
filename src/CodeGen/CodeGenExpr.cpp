@@ -471,6 +471,28 @@ llvm::Value *CodeGenFunction::EmitBinaryOperator(BinaryOperator *BinaryOp) {
 }
 
 //===----------------------------------------------------------------------===//
+// sizeof/alignof expression
+//===----------------------------------------------------------------------===//
+
+llvm::Value *CodeGenFunction::EmitUnaryExprOrTypeTraitExpr(
+    UnaryExprOrTypeTraitExpr *E) {
+  if (!E) return nullptr;
+
+  QualType ArgTy = E->getTypeOfArgument();
+  if (ArgTy.isNull()) return nullptr;
+
+  uint64_t Val = 0;
+  if (E->getTraitKind() == UnaryExprOrTypeTrait::SizeOf) {
+    Val = CGM.getTarget().getTypeSize(ArgTy);
+  } else {
+    Val = CGM.getTarget().getTypeAlign(ArgTy);
+  }
+
+  // sizeof/alignof always evaluates to a compile-time constant (i64)
+  return llvm::ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()), Val);
+}
+
+//===----------------------------------------------------------------------===//
 // UnaryOperator
 //===----------------------------------------------------------------------===//
 

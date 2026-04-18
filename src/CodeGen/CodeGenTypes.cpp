@@ -267,55 +267,113 @@ llvm::FunctionType *CodeGenTypes::GetFunctionType(const FunctionType *FT) {
   return llvm::FunctionType::get(RetTy, ParamTys, FT->isVariadic());
 }
 
-llvm::FunctionType *CodeGenTypes::GetFunctionTypeForDecl(FunctionDecl *FD) {
-  // 检查缓存
-  auto It = FunctionTypeCache.find(FD);
-  if (It != FunctionTypeCache.end()) return It->second;
+bool CodeGenTypes::needsSRet(QualType RetTy) const {
+  if (RetTy.isNull()) return false;
+  const Type *Ty = RetTy.getTypePtr();
 
+  // 只有 record 类型需要 sret
+  if (!Ty->isRecordType()) return false;
+
+  // 查询 TargetInfo：如果结构体可以在寄存器中返回，则不需要 sret
+  return !CGM.getTarget().isStructReturnInRegister(RetTy);
+}
+
+bool CodeGenTypes::shouldUseInReg(QualType ParamTy) const {
+  // 当前简化实现：不使用 inreg
+  // 后续可扩展：某些 ABI（如 x86 32-bit）对 this 指针和小结构体使用 inreg
+  (void)ParamTy;
+  return false;
+}
+
+llvm::FunctionType *CodeGenTypes::GetFunctionTypeForDecl(FunctionDecl *FD) {
+  // 委托给 GetFunctionABI，返回其中的 FnTy
+  return GetFunctionABI(FD)->FnTy;
+}
+
+const FunctionABITy *CodeGenTypes::GetFunctionABI(FunctionDecl *FD) {
+  // 检查缓存
+  auto It = FunctionABICache.find(FD);
+  if (It != FunctionABICache.end()) return &It->second;
+
+  FunctionABITy ABI;
   QualType FT = FD->getType();
-  llvm::FunctionType *Result = nullptr;
 
   if (!FT.isNull()) {
-  if (auto *FnTy = llvm::dyn_cast<FunctionType>(FT.getTypePtr())) {
-    // 非静态成员函数需要添加 this 指针作为第一个参数
-    if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
-      if (!MD->isStatic()) {
-        llvm::Type *RetTy = ConvertType(
-            QualType(FnTy->getReturnType(), Qualifier::None));
-        if (!RetTy) RetTy = llvm::Type::getVoidTy(CGM.getLLVMContext());
+    if (auto *FnTy = llvm::dyn_cast<FunctionType>(FT.getTypePtr())) {
+      QualType RetQT(QualType(FnTy->getReturnType(), Qualifier::None));
+      llvm::Type *RetTy = ConvertType(RetQT);
+      if (!RetTy) RetTy = llvm::Type::getVoidTy(CGM.getLLVMContext());
 
-        llvm::SmallVector<llvm::Type *, 8> ParamTys;
-        // this 指针（指向类的指针）
-        if (MD->getParent()) {
-          llvm::StructType *ClassTy = GetRecordType(MD->getParent());
-          ParamTys.push_back(llvm::PointerType::get(ClassTy, 0));
-        } else {
-          ParamTys.push_back(llvm::PointerType::get(CGM.getLLVMContext(), 0));
-        }
+      // 检查返回值是否需要 sret
+      bool UseSRet = needsSRet(RetQT);
 
-        for (const Type *PT : FnTy->getParamTypes()) {
-          llvm::Type *P = ConvertType(QualType(PT, Qualifier::None));
-          if (P) ParamTys.push_back(P);
-        }
+      llvm::SmallVector<llvm::Type *, 8> ParamTys;
+      llvm::SmallVector<ABIArgInfo, 8> ParamInfos;
 
-        Result = llvm::FunctionType::get(RetTy, ParamTys, FnTy->isVariadic());
+      // sret：如果返回值通过内存传递，改为 void 返回并添加隐式首参数
+      if (UseSRet) {
+        ABI.RetInfo = ABIArgInfo::getSRet(RetTy);
+        ParamTys.push_back(llvm::PointerType::get(RetTy, 0));
+        ParamInfos.push_back(ABIArgInfo::getSRet(RetTy));
+        RetTy = llvm::Type::getVoidTy(CGM.getLLVMContext());
+      } else {
+        ABI.RetInfo = ABIArgInfo::getDirect();
       }
-    }
 
-    if (!Result) {
-      Result = GetFunctionType(FnTy);
+      // 非静态成员函数需要添加 this 指针作为第一个参数
+      if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
+        if (!MD->isStatic()) {
+          llvm::Type *ThisTy = nullptr;
+          if (MD->getParent()) {
+            llvm::StructType *ClassTy = GetRecordType(MD->getParent());
+            ThisTy = llvm::PointerType::get(ClassTy, 0);
+          } else {
+            ThisTy = llvm::PointerType::get(CGM.getLLVMContext(), 0);
+          }
+
+          // this 指针的插入位置：sret 之后
+          ParamTys.push_back(ThisTy);
+          // this 指针 inreg 判断
+          if (CGM.getTarget().isThisPassedInRegister()) {
+            ParamInfos.push_back(ABIArgInfo::getInReg());
+          } else {
+            ParamInfos.push_back(ABIArgInfo::getDirect());
+          }
+        }
+      }
+
+      // 显式参数
+      for (const Type *PT : FnTy->getParamTypes()) {
+        llvm::Type *P = ConvertType(QualType(PT, Qualifier::None));
+        if (P) {
+          ParamTys.push_back(P);
+          if (shouldUseInReg(QualType(PT, Qualifier::None))) {
+            ParamInfos.push_back(ABIArgInfo::getInReg());
+          } else {
+            ParamInfos.push_back(ABIArgInfo::getDirect());
+          }
+        }
+      }
+
+      ABI.FnTy = llvm::FunctionType::get(RetTy, ParamTys, FnTy->isVariadic());
+      ABI.ParamInfos = std::move(ParamInfos);
     }
   }
-  } // end !FT.isNull()
 
-  if (!Result) {
+  if (!ABI.FnTy) {
     // Fallback: void()
-    Result = llvm::FunctionType::get(
+    ABI.FnTy = llvm::FunctionType::get(
         llvm::Type::getVoidTy(CGM.getLLVMContext()), false);
+    ABI.RetInfo = ABIArgInfo::getDirect();
   }
 
-  FunctionTypeCache[FD] = Result;
-  return Result;
+  // 同时缓存 FunctionTypeCache（向后兼容）
+  FunctionTypeCache[FD] = ABI.FnTy;
+
+  // 缓存 ABI 信息
+  auto &Cached = FunctionABICache[FD];
+  Cached = std::move(ABI);
+  return &Cached;
 }
 
 //===----------------------------------------------------------------------===//

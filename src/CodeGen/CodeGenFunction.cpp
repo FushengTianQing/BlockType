@@ -152,6 +152,9 @@ llvm::Value *CodeGenFunction::EmitExpr(Expr *Expression) {
     return EmitBinaryOperator(llvm::cast<BinaryOperator>(Expression));
   case ASTNode::NodeKind::UnaryOperatorKind:
     return EmitUnaryOperator(llvm::cast<UnaryOperator>(Expression));
+  case ASTNode::NodeKind::UnaryExprOrTypeTraitExprKind:
+    return EmitUnaryExprOrTypeTraitExpr(
+        llvm::cast<UnaryExprOrTypeTraitExpr>(Expression));
   case ASTNode::NodeKind::ConditionalOperatorKind:
     return EmitConditionalOperator(llvm::cast<ConditionalOperator>(Expression));
 
