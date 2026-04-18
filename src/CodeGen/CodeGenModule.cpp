@@ -115,6 +115,237 @@ void CodeGenModule::EmitDeferred() {
     EmitGlobalVar(VD);
   }
   DeferredGlobalVars.clear();
+
+  // 发射需要动态初始化的全局变量
+  for (VarDecl *VD : DynamicInitVars) {
+    EmitDynamicGlobalInit(VD);
+  }
+  DynamicInitVars.clear();
+}
+
+//===----------------------------------------------------------------------===//
+// 属性处理
+//===----------------------------------------------------------------------===//
+
+GlobalDeclAttributes CodeGenModule::GetGlobalDeclAttributes(const Decl *D) {
+  GlobalDeclAttributes Attrs;
+
+  if (!D) return Attrs;
+
+  // 检查 Decl 是否具有 attribute 列表
+  // 搜索 Decl 所属的 CXXRecordDecl 或 TranslationUnitDecl 中的属性
+  // 当前 BlockType AST 中属性通过 AttributeDecl 节点表示，
+  // 它们作为 DeclContext 的成员出现。我们检查父上下文中的属性。
+
+  // 遍历 CXXRecordDecl 的成员寻找 AttributeDecl
+  if (auto *RD = llvm::dyn_cast<CXXRecordDecl>(D)) {
+    for (Decl *Member : RD->members()) {
+      if (auto *AttrList = llvm::dyn_cast<AttributeListDecl>(Member)) {
+        for (auto *Attr : AttrList->getAttributes()) {
+          auto Name = Attr->getAttributeName();
+          if (Name == "weak") {
+            Attrs.IsWeak = true;
+          } else if (Name == "dllimport") {
+            Attrs.IsDLLImport = true;
+          } else if (Name == "dllexport") {
+            Attrs.IsDLLExport = true;
+          } else if (Name == "used") {
+            Attrs.IsUsed = true;
+          } else if (Name == "deprecated") {
+            Attrs.IsDeprecated = true;
+          } else if (Name == "visibility") {
+            // visibility 属性带参数，通过 ArgumentExpr 解析
+            // 简化处理：如果存在 visibility 参数表达式，检查其值
+            // 当前 AST 中参数是 Expr*，不方便直接解析字符串
+            // 未来扩展时通过 Sema 传递解析后的 visibility 值
+          }
+        }
+      }
+    }
+  }
+
+  // 对于 FunctionDecl / VarDecl，检查其 DeclContext 中的属性
+  // 当前简化实现：通过 NamedDecl 的属性查找
+  // TODO: 当 Sema 支持属性传播时，直接从 FunctionDecl/VarDecl 获取
+
+  return Attrs;
+}
+
+void CodeGenModule::ApplyGlobalValueAttributes(llvm::GlobalValue *GV,
+                                                const GlobalDeclAttributes &Attrs) {
+  if (!GV) return;
+
+  // Weak 属性
+  if (Attrs.IsWeak) {
+    GV->setLinkage(llvm::GlobalValue::WeakAnyLinkage);
+  }
+
+  // DLL 属性
+  if (Attrs.IsDLLExport) {
+    GV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+  }
+  if (Attrs.IsDLLImport) {
+    GV->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
+  }
+
+  // Used 属性（即使未被引用也保留）— 通过 metadata 实现
+  if (Attrs.IsUsed) {
+    // llvm.used 是一个全局数组，包含必须保留的符号
+    // 简化：通过设置 linkage 为 External 确保不被优化掉
+    // TODO: 完整实现需要维护 llvm.used 全局变量
+  }
+
+  // Deprecated 属性 — 通过 metadata 标记
+  if (Attrs.IsDeprecated) {
+    // 简化：不阻止优化，仅标记
+  }
+
+  // Visibility
+  GV->setVisibility(GetVisibility(Attrs));
+}
+
+//===----------------------------------------------------------------------===//
+// Linkage / Visibility
+//===----------------------------------------------------------------------===//
+
+llvm::GlobalValue::LinkageTypes
+CodeGenModule::GetFunctionLinkage(const FunctionDecl *FD) {
+  if (!FD) return llvm::Function::ExternalLinkage;
+
+  // 构造/析构函数：ExternalLinkage
+  if (llvm::isa<CXXConstructorDecl>(FD) || llvm::isa<CXXDestructorDecl>(FD)) {
+    return llvm::Function::ExternalLinkage;
+  }
+
+  // 静态成员函数 — ExternalLinkage（类成员没有 TU 级别的 static）
+  // 但普通 static 自由函数使用 InternalLinkage
+  if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
+    if (MD->isStatic()) {
+      // 静态成员函数可以有 InternalLinkage（如果需要）
+      return llvm::Function::ExternalLinkage;
+    }
+    return llvm::Function::ExternalLinkage;
+  }
+
+  // inline 函数：LinkOnceODR（允许跨 TU 合并，保持 ODR 语义）
+  if (FD->isInline()) {
+    return llvm::Function::LinkOnceODRLinkage;
+  }
+
+  // Weak 函数（通过属性检查）
+  auto Attrs = GetGlobalDeclAttributes(FD);
+  if (Attrs.IsWeak) {
+    return llvm::Function::WeakAnyLinkage;
+  }
+
+  // 默认：ExternalLinkage
+  // static 函数应由 Sema 标记 isStatic()，这里检查
+  // Note: 当前 FunctionDecl 没有 isStatic() 方法（只有 VarDecl 有）
+  // TODO: 当 FunctionDecl 支持 StorageClass 时添加检查
+  return llvm::Function::ExternalLinkage;
+}
+
+llvm::GlobalValue::LinkageTypes
+CodeGenModule::GetVariableLinkage(const VarDecl *VD) {
+  if (!VD) return llvm::GlobalValue::ExternalLinkage;
+
+  // static 局部/全局变量使用 InternalLinkage
+  if (VD->isStatic()) {
+    return llvm::GlobalValue::InternalLinkage;
+  }
+
+  // constexpr 变量：LinkOnceODR（如果全局可见的话）
+  if (VD->isConstexpr()) {
+    // constexpr 全局变量可以作为常量合并
+    return llvm::GlobalValue::LinkOnceODRLinkage;
+  }
+
+  // Weak 变量
+  auto Attrs = GetGlobalDeclAttributes(VD);
+  if (Attrs.IsWeak) {
+    return llvm::GlobalValue::WeakAnyLinkage;
+  }
+
+  return llvm::GlobalValue::ExternalLinkage;
+}
+
+llvm::GlobalValue::VisibilityTypes
+CodeGenModule::GetVisibility(const GlobalDeclAttributes &Attrs) {
+  if (Attrs.IsHiddenVisibility) {
+    return llvm::GlobalValue::HiddenVisibility;
+  }
+  return llvm::GlobalValue::DefaultVisibility;
+}
+
+//===----------------------------------------------------------------------===//
+// 初始化分类
+//===----------------------------------------------------------------------===//
+
+InitKind CodeGenModule::ClassifyGlobalInit(const VarDecl *VD) {
+  if (!VD) return InitKind::ZeroInitialization;
+
+  // constexpr 变量总是常量初始化
+  if (VD->isConstexpr()) {
+    return InitKind::ConstantInitialization;
+  }
+
+  Expr *Init = VD->getInit();
+  if (!Init) {
+    // 无初始化器 → 零初始化
+    return InitKind::ZeroInitialization;
+  }
+
+  // 尝试用 CodeGenConstant 求值
+  // 如果能成功生成 llvm::Constant，则是常量初始化
+  llvm::Constant *ConstVal = getConstants().EmitConstantForType(Init, VD->getType());
+  if (ConstVal) {
+    return InitKind::ConstantInitialization;
+  }
+
+  // 其他情况 → 动态初始化（需要运行时求值）
+  return InitKind::DynamicInitialization;
+}
+
+void CodeGenModule::EmitDynamicGlobalInit(VarDecl *VD) {
+  if (!VD) return;
+
+  // 获取全局变量（应已由 EmitGlobalVar 创建，初始值为零）
+  llvm::GlobalVariable *GV = GetGlobalVar(VD);
+  if (!GV) return;
+
+  Expr *Init = VD->getInit();
+  if (!Init) return;
+
+  // 创建动态初始化函数
+  std::string InitFuncName = "__cxx_global_var_init.";
+  InitFuncName += VD->getName().str();
+
+  llvm::FunctionType *InitFTy = llvm::FunctionType::get(
+      llvm::Type::getVoidTy(LLVMCtx), false);
+  llvm::Function *InitFn = llvm::Function::Create(
+      InitFTy, llvm::Function::InternalLinkage, InitFuncName, TheModule.get());
+
+  llvm::BasicBlock *Entry = llvm::BasicBlock::Create(LLVMCtx, "entry", InitFn);
+  CodeGenFunction CGF(*this);
+  CGF.getBuilder().SetInsertPoint(Entry);
+  CGF.setCurrentFunction(InitFn);
+
+  // 计算初始值并存储
+  llvm::Value *InitVal = CGF.EmitExpr(Init);
+  if (InitVal) {
+    CGF.getBuilder().CreateStore(InitVal, GV);
+  }
+
+  CGF.getBuilder().CreateRetVoid();
+
+  // 注册为全局构造函数（默认优先级）
+  AddGlobalCtor(nullptr, 65535);  // 使用 nullptr 占位，实际用 InitFn
+
+  // 直接添加初始化函数到 llvm.global_ctors
+  // （AddGlobalCtor 需要 FunctionDecl，这里直接添加 llvm::Function）
+  // 简化：将 InitFn 作为全局构造函数
+  // 由于 AddGlobalCtor 需要 FunctionDecl，这里绕过它直接处理
+  GlobalCtorsDirect.push_back(InitFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -131,32 +362,47 @@ llvm::GlobalVariable *CodeGenModule::EmitGlobalVar(VarDecl *VD) {
   llvm::Type *Ty = getTypes().ConvertType(VD->getType());
   if (!Ty) return nullptr;
 
-  // 计算初始值
-  llvm::Constant *Init = nullptr;
-  if (Expr *InitExpr = VD->getInit()) {
-    Init = getConstants().EmitConstantForType(InitExpr, VD->getType());
-  }
-  if (!Init) {
-    Init = getConstants().EmitZeroValue(VD->getType());
-  }
+  // 分类初始化类型
+  InitKind Init = ClassifyGlobalInit(VD);
 
-  // 创建全局变量
-  // static 变量使用 InternalLinkage，其他使用 ExternalLinkage
-  auto Linkage = VD->isStatic()
-                     ? llvm::GlobalValue::InternalLinkage
-                     : llvm::GlobalValue::ExternalLinkage;
+  // 计算初始值
+  llvm::Constant *InitVal = nullptr;
   bool IsConstant = VD->isConstexpr() ||
                     VD->getType().isConstQualified();
 
+  if (Init == InitKind::ConstantInitialization) {
+    // 常量初始化：直接计算初始值
+    if (Expr *InitExpr = VD->getInit()) {
+      InitVal = getConstants().EmitConstantForType(InitExpr, VD->getType());
+    }
+  }
+  // 动态初始化和零初始化：使用零值作为初始值
+  // 动态初始化的变量稍后通过 EmitDynamicGlobalInit 处理
+  if (!InitVal) {
+    InitVal = getConstants().EmitZeroValue(VD->getType());
+  }
+
+  // 计算 Linkage（使用新的 GetVariableLinkage）
+  auto Linkage = GetVariableLinkage(VD);
+
   auto *GV = new llvm::GlobalVariable(
-      *TheModule, Ty, IsConstant, Linkage, Init,
+      *TheModule, Ty, IsConstant, Linkage, InitVal,
       Mangle->getMangledName(VD));
 
   // 设置对齐
   GV->setAlignment(llvm::Align(getTarget().getTypeAlign(VD->getType())));
 
+  // 应用属性（visibility, weak, dll 等）
+  auto Attrs = GetGlobalDeclAttributes(VD);
+  ApplyGlobalValueAttributes(GV, Attrs);
+
   // 注册映射
   GlobalValues[VD] = GV;
+
+  // 如果是动态初始化，加入延迟队列
+  if (Init == InitKind::DynamicInitialization) {
+    DynamicInitVars.push_back(VD);
+  }
 
   // 生成全局变量调试信息
   if (DebugInfo->isInitialized()) {
@@ -232,19 +478,11 @@ llvm::Function *CodeGenModule::GetOrCreateFunctionDecl(FunctionDecl *FD) {
   llvm::FunctionType *FTy = getTypes().GetFunctionTypeForDecl(FD);
   if (!FTy) return nullptr;
 
-  // 创建 LLVM 函数
-  // static 函数使用 InternalLinkage，其他使用 ExternalLinkage
-  auto Linkage = llvm::Function::ExternalLinkage;
-  if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
-    // 成员函数不使用 static linkage 语义
-  } else if (FD->isInline()) {
-    // inline 函数使用 LinkOnceODRLinkage（允许跨 TU 合并）
-    Linkage = llvm::Function::LinkOnceODRLinkage;
-  }
-  // Note: 普通函数的 static 判断需要 Sema 的 StorageClass 信息
+  // 计算 Linkage（使用新的 GetFunctionLinkage）
+  auto Linkage = GetFunctionLinkage(FD);
 
   llvm::Function *Fn = llvm::Function::Create(
-      FTy, Linkage, FD->getName(), TheModule.get());
+      FTy, Linkage, Mangle->getMangledName(FD), TheModule.get());
 
   // 设置参数名
   unsigned Idx = 0;
@@ -263,6 +501,10 @@ llvm::Function *CodeGenModule::GetOrCreateFunctionDecl(FunctionDecl *FD) {
   if (FD->hasNoexceptSpec() && FD->getNoexceptValue()) {
     Fn->setDoesNotThrow();
   }
+
+  // 应用全局属性（visibility, weak, dll 等）
+  auto Attrs = GetGlobalDeclAttributes(FD);
+  ApplyGlobalValueAttributes(Fn, Attrs);
 
   // 注册映射
   GlobalValues[FD] = Fn;
@@ -313,8 +555,24 @@ void CodeGenModule::AddGlobalDtor(FunctionDecl *FD, int Priority) {
 }
 
 void CodeGenModule::EmitGlobalCtorDtors() {
+  // 合并 GlobalCtors 和 GlobalCtorsDirect
+  llvm::SmallVector<std::pair<llvm::Function *, int>, 8> AllCtors;
+
+  // 从 FunctionDecl 的构造函数
+  for (auto &[FD, Priority] : GlobalCtors) {
+    if (FD) {
+      llvm::Function *Fn = GetOrCreateFunctionDecl(FD);
+      if (Fn) AllCtors.emplace_back(Fn, Priority);
+    }
+  }
+
+  // 从直接 llvm::Function 的构造函数（动态初始化）
+  for (auto *Fn : GlobalCtorsDirect) {
+    AllCtors.emplace_back(Fn, 65535);
+  }
+
   // 生成 llvm.global_ctors
-  if (!GlobalCtors.empty()) {
+  if (!AllCtors.empty()) {
     llvm::SmallVector<llvm::Constant *, 8> Ctors;
     llvm::StructType *EntryTy = llvm::StructType::get(
         LLVMCtx,
@@ -322,10 +580,7 @@ void CodeGenModule::EmitGlobalCtorDtors() {
          llvm::PointerType::get(LLVMCtx, 0),
          llvm::PointerType::get(LLVMCtx, 0)});
 
-    for (auto &[FD, Priority] : GlobalCtors) {
-      llvm::Function *Fn = GetOrCreateFunctionDecl(FD);
-      if (!Fn) continue;
-
+    for (auto &[Fn, Priority] : AllCtors) {
       Ctors.push_back(llvm::ConstantStruct::get(
           EntryTy,
           {llvm::ConstantInt::get(llvm::Type::getInt32Ty(LLVMCtx), Priority),

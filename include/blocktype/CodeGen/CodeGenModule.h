@@ -20,6 +20,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
 #include <memory>
+#include <optional>
 
 namespace blocktype {
 
@@ -39,6 +40,35 @@ class TargetInfo;
 /// 3. 维护 Decl → llvm::GlobalValue 的映射表
 /// 4. 处理全局初始化（全局构造/析构函数列表）
 /// 5. 管理目标平台信息（TargetInfo）
+/// 6. 处理函数/变量属性（visibility, weak, dllimport/dllexport）
+/// 7. 区分常量初始化和动态初始化
+
+//===----------------------------------------------------------------------===//
+// GlobalDeclAttributes — 全局符号属性（参照 Clang GlobalDecl/CodeGenModule）
+//===----------------------------------------------------------------------===//
+
+/// GlobalDeclAttributes — 描述全局符号的附加属性。
+struct GlobalDeclAttributes {
+  bool IsWeak = false;           ///< __attribute__((weak))
+  bool IsDLLImport = false;      ///< __attribute__((dllimport))
+  bool IsDLLExport = false;      ///< __attribute__((dllexport))
+  bool IsUsed = false;           ///< __attribute__((used))
+  bool IsDeprecated = false;     ///< [[deprecated]]
+  bool IsHiddenVisibility = false; ///< __attribute__((visibility("hidden")))
+  bool IsDefaultVisibility = true; ///< __attribute__((visibility("default")))
+};
+
+//===----------------------------------------------------------------------===//
+// InitKind — 全局变量初始化分类
+//===----------------------------------------------------------------------===//
+
+/// InitKind - Distinguishes constant vs dynamic initialization.
+enum class InitKind {
+  ZeroInitialization,     ///< Zero-init (no initializer or = 0)
+  ConstantInitialization, ///< Constant init (constexpr or constant expr)
+  DynamicInitialization   ///< Dynamic init (runtime evaluation required)
+};
+
 class CodeGenModule {
   ASTContext &Context;
   llvm::LLVMContext &LLVMCtx;
@@ -56,9 +86,15 @@ class CodeGenModule {
   /// 全局变量延迟发射队列
   llvm::SmallVector<VarDecl *, 16> DeferredGlobalVars;
 
-  /// 全局构造/析构函数
+  /// 需要动态初始化的全局变量（常量初始化的变量直接在 EmitGlobalVar 中完成）
+  llvm::SmallVector<VarDecl *, 16> DynamicInitVars;
+
+  /// 全局构造/析构函数（通过 FunctionDecl）
   llvm::SmallVector<std::pair<FunctionDecl *, int>, 4> GlobalCtors;
   llvm::SmallVector<std::pair<FunctionDecl *, int>, 4> GlobalDtors;
+
+  /// 直接使用 llvm::Function 的全局构造函数（用于动态初始化）
+  llvm::SmallVector<llvm::Function *, 8> GlobalCtorsDirect;
 
   /// 需要生成 vtable 的 CXXRecordDecl 集合
   llvm::SmallVector<CXXRecordDecl *, 8> VTableClasses;
@@ -81,6 +117,40 @@ public:
 
   /// 发射所有延迟定义。
   void EmitDeferred();
+
+  //===------------------------------------------------------------------===//
+  // 属性处理（参照 Clang CodeGenModule::getGlobalValueAttributes）
+  //===------------------------------------------------------------------===//
+
+  /// 收集全局声明上的属性（从 AST 或 Decl 属性）。
+  GlobalDeclAttributes GetGlobalDeclAttributes(const Decl *D);
+
+  /// 将属性应用到 llvm::GlobalValue。
+  void ApplyGlobalValueAttributes(llvm::GlobalValue *GV,
+                                  const GlobalDeclAttributes &Attrs);
+
+  //===------------------------------------------------------------------===//
+  // Linkage / Visibility
+  //===------------------------------------------------------------------===//
+
+  /// 计算函数的正确 Linkage。
+  llvm::GlobalValue::LinkageTypes GetFunctionLinkage(const FunctionDecl *FD);
+
+  /// 计算全局变量的正确 Linkage。
+  llvm::GlobalValue::LinkageTypes GetVariableLinkage(const VarDecl *VD);
+
+  /// 计算全局符号的 Visibility。
+  llvm::GlobalValue::VisibilityTypes GetVisibility(const GlobalDeclAttributes &Attrs);
+
+  //===------------------------------------------------------------------===//
+  // 初始化分类
+  //===------------------------------------------------------------------===//
+
+  /// 判断全局变量的初始化类型。
+  InitKind ClassifyGlobalInit(const VarDecl *VD);
+
+  /// 发射动态初始化的全局变量。
+  void EmitDynamicGlobalInit(VarDecl *VD);
 
   //===------------------------------------------------------------------===//
   // 全局变量生成
