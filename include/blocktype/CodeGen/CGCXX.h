@@ -22,11 +22,14 @@ class GlobalVariable;
 class ArrayType;
 class Function;
 class Value;
+class IRBuilderBase;
+class AllocaInst;
 } // namespace llvm
 
 namespace blocktype {
 
 class CodeGenModule;
+class CodeGenFunction;
 
 /// CGCXX — C++ 特有代码生成（类、构造/析构、虚函数表、继承）。
 ///
@@ -36,6 +39,7 @@ class CodeGenModule;
 /// 3. 生成析构函数（成员析构、基类析构）
 /// 4. 生成虚函数表（vtable 布局、vptr 初始化）
 /// 5. 处理继承（单一/多重/虚继承）
+/// 6. 生成成员函数调用（虚/非虚分派）
 class CGCXX {
   CodeGenModule &CGM;
 
@@ -45,8 +49,20 @@ class CGCXX {
   /// 字段偏移缓存：FieldDecl → 偏移量（字节）
   llvm::DenseMap<const FieldDecl *, uint64_t> FieldOffsetCache;
 
-  /// 检查 CXXRecordDecl 是否有虚函数
+  /// 类大小缓存：CXXRecordDecl → 大小（字节）
+  llvm::DenseMap<const CXXRecordDecl *, uint64_t> ClassSizeCache;
+
+  /// 基类偏移缓存：(CXXRecordDecl*, CXXRecordDecl*) → 偏移量
+  /// Key: (Derived, Base) → Base 在 Derived 中的偏移量
+  llvm::DenseMap<std::pair<const CXXRecordDecl *, const CXXRecordDecl *>,
+                 uint64_t>
+      BaseOffsetCache;
+
+  /// 检查 CXXRecordDecl 是否有虚函数（包括继承的）
   static bool hasVirtualFunctions(CXXRecordDecl *RD);
+
+  /// 检查 CXXRecordDecl 或其任何基类是否有虚函数
+  bool hasVirtualFunctionsInHierarchy(CXXRecordDecl *RD);
 
 public:
   explicit CGCXX(CodeGenModule &M) : CGM(M) {}
@@ -64,14 +80,17 @@ public:
   /// 获取类的完整大小。
   uint64_t GetClassSize(CXXRecordDecl *RD);
 
+  /// 获取基类在派生类中的偏移量。
+  uint64_t GetBaseOffset(CXXRecordDecl *Derived, CXXRecordDecl *Base);
+
   //===------------------------------------------------------------------===//
   // 构造函数 / 析构函数
   //===------------------------------------------------------------------===//
 
-  /// 生成构造函数的代码。
+  /// 生成构造函数的完整代码（使用 CodeGenFunction）。
   void EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn);
 
-  /// 生成析构函数的代码。
+  /// 生成析构函数的完整代码（使用 CodeGenFunction）。
   void EmitDestructor(CXXDestructorDecl *Dtor, llvm::Function *Fn);
 
   //===------------------------------------------------------------------===//
@@ -87,31 +106,51 @@ public:
   /// 计算虚函数表中方法的索引。
   unsigned GetVTableIndex(CXXMethodDecl *MD);
 
-  /// 生成虚函数调用。
-  llvm::Value *EmitVirtualCall(CXXMethodDecl *MD, llvm::Value *This,
+  /// 生成虚函数调用（vptr load → GEP → load → indirect call）。
+  llvm::Value *EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
+                                llvm::Value *This,
                                 llvm::ArrayRef<llvm::Value *> Args);
+
+  /// 初始化对象的 vptr 指针（在构造函数中调用）。
+  void InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
+                            CXXRecordDecl *RD);
 
   //===------------------------------------------------------------------===//
   // 继承
   //===------------------------------------------------------------------===//
 
-  /// 生成派生类到基类的偏移量。
-  llvm::Value *EmitBaseOffset(llvm::Value *DerivedPtr, CXXRecordDecl *Base);
+  /// 生成派生类到基类的偏移量（用于指针调整）。
+  llvm::Value *EmitBaseOffset(CodeGenFunction &CGF, llvm::Value *DerivedPtr,
+                               CXXRecordDecl *Base);
 
   /// 生成基类到派生类的偏移量。
-  llvm::Value *EmitDerivedOffset(llvm::Value *BasePtr, CXXRecordDecl *Derived);
+  llvm::Value *EmitDerivedOffset(CodeGenFunction &CGF, llvm::Value *BasePtr,
+                                  CXXRecordDecl *Derived);
+
+  /// 将派生类指针调整为基类子对象指针。
+  llvm::Value *EmitCastToBase(CodeGenFunction &CGF, llvm::Value *DerivedPtr,
+                               CXXRecordDecl *Base);
+
+  /// 将基类指针调整为派生类指针。
+  llvm::Value *EmitCastToDerived(CodeGenFunction &CGF, llvm::Value *BasePtr,
+                                  CXXRecordDecl *Derived);
 
   //===------------------------------------------------------------------===//
   // 成员初始化
   //===------------------------------------------------------------------===//
 
   /// 生成基类初始化器。
-  void EmitBaseInitializer(CXXRecordDecl *Class, llvm::Value *This,
-                           CXXRecordDecl::BaseSpecifier *Base, Expr *Init);
+  void EmitBaseInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
+                            llvm::Value *This, CXXRecordDecl::BaseSpecifier *Base,
+                            Expr *Init);
 
   /// 生成成员初始化器。
-  void EmitMemberInitializer(CXXRecordDecl *Class, llvm::Value *This,
-                             FieldDecl *Field, Expr *Init);
+  void EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
+                              llvm::Value *This, FieldDecl *Field, Expr *Init);
+
+  /// 生成所有基类和成员的析构代码（用于析构函数）。
+  void EmitDestructorBody(CodeGenFunction &CGF, CXXRecordDecl *Class,
+                           llvm::Value *This);
 };
 
 } // namespace blocktype

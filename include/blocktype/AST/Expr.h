@@ -627,13 +627,20 @@ public:
 
 /// CXXConstructExpr - Constructor call expression.
 class CXXConstructExpr : public Expr {
+  CXXConstructorDecl *Constructor;
   llvm::SmallVector<Expr *, 4> Args;
 
 public:
-  CXXConstructExpr(SourceLocation Loc, llvm::ArrayRef<Expr *> Args)
-      : Expr(Loc), Args(Args.begin(), Args.end()) {}
+  CXXConstructExpr(SourceLocation Loc, llvm::ArrayRef<Expr *> Args,
+                   CXXConstructorDecl *Ctor = nullptr)
+      : Expr(Loc), Constructor(Ctor), Args(Args.begin(), Args.end()) {}
 
   llvm::ArrayRef<Expr *> getArgs() const { return Args; }
+  unsigned getNumArgs() const { return Args.size(); }
+
+  /// 获取被调用的构造函数声明（可能为 nullptr）
+  CXXConstructorDecl *getConstructor() const { return Constructor; }
+  void setConstructor(CXXConstructorDecl *Ctor) { Constructor = Ctor; }
 
   NodeKind getKind() const override { return NodeKind::CXXConstructExprKind; }
 

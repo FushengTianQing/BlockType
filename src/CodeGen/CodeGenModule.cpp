@@ -82,6 +82,9 @@ void CodeGenModule::EmitTranslationUnit(TranslationUnitDecl *TU) {
   // 发射延迟定义（全局变量定义）
   EmitDeferred();
 
+  // 发射所有需要的虚函数表
+  EmitVTables();
+
   // 第二遍：生成函数体
   for (Decl *D : TU->decls()) {
     if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
@@ -170,6 +173,18 @@ llvm::Function *CodeGenModule::EmitFunction(FunctionDecl *FD) {
   // 如果函数体已经生成过（检查是否有基本块）
   if (!Fn->empty()) return Fn;
 
+  // 构造函数分派到 CGCXX::EmitConstructor
+  if (auto *Ctor = llvm::dyn_cast<CXXConstructorDecl>(FD)) {
+    getCXX().EmitConstructor(Ctor, Fn);
+    return Fn;
+  }
+
+  // 析构函数分派到 CGCXX::EmitDestructor
+  if (auto *Dtor = llvm::dyn_cast<CXXDestructorDecl>(FD)) {
+    getCXX().EmitDestructor(Dtor, Fn);
+    return Fn;
+  }
+
   // 使用 CodeGenFunction 生成函数体
   CodeGenFunction CGF(*this);
   CGF.EmitFunctionBody(FD, Fn);
@@ -245,6 +260,22 @@ void CodeGenModule::EmitVTable(CXXRecordDecl *RD) {
 void CodeGenModule::EmitClassLayout(CXXRecordDecl *RD) {
   if (!RD) return;
   getCXX().ComputeClassLayout(RD);
+
+  // 如果类有虚函数，记录需要生成 vtable
+  bool HasVirtual = false;
+  for (CXXMethodDecl *MD : RD->methods()) {
+    if (MD->isVirtual()) { HasVirtual = true; break; }
+  }
+  if (HasVirtual) {
+    VTableClasses.push_back(RD);
+  }
+}
+
+void CodeGenModule::EmitVTables() {
+  for (CXXRecordDecl *RD : VTableClasses) {
+    getCXX().EmitVTable(RD);
+  }
+  VTableClasses.clear();
 }
 
 //===----------------------------------------------------------------------===//

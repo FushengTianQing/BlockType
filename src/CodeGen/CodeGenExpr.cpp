@@ -8,6 +8,7 @@
 
 #include "blocktype/CodeGen/CodeGenFunction.h"
 #include "blocktype/CodeGen/CodeGenModule.h"
+#include "blocktype/CodeGen/CGCXX.h"
 #include "blocktype/CodeGen/CodeGenTypes.h"
 #include "blocktype/CodeGen/CodeGenConstant.h"
 #include "blocktype/CodeGen/TargetInfo.h"
@@ -618,6 +619,28 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
           Arguments.push_back(BaseValue);
         }
       }
+
+      // 虚函数调用：使用 vtable 进行间接调用
+      if (MemberDecl->isVirtual() && !Arguments.empty()) {
+        // 收集非 this 参数
+        llvm::SmallVector<llvm::Value *, 8> NonThisArgs;
+        for (Expr *Argument : CallExpression->getArgs()) {
+          llvm::Value *ArgValue = EmitExpr(Argument);
+          if (ArgValue) {
+            NonThisArgs.push_back(ArgValue);
+          }
+        }
+
+        // 使用 CGCXX::EmitVirtualCall 生成虚函数调用
+        llvm::Value *ThisPtr = Arguments[0];
+        llvm::Value *VirtualCallResult =
+            CGM.getCXX().EmitVirtualCall(*this, MemberDecl, ThisPtr,
+                                          NonThisArgs);
+        if (VirtualCallResult) {
+          return VirtualCallResult;
+        }
+        // 虚函数调用失败，降级为普通调用
+      }
     }
   }
 
@@ -1102,6 +1125,10 @@ llvm::Value *CodeGenFunction::EmitLValue(Expr *Expression) {
 //===----------------------------------------------------------------------===//
 
 llvm::Value *CodeGenFunction::EmitCXXThisExpr(CXXThisExpr *ThisExpression) {
+  // 优先使用 setThisPointer 设置的值（构造/析构函数场景）
+  if (ThisValue) {
+    return ThisValue;
+  }
   // this 指针是函数的第一个参数
   if (!CurFn || CurFn->arg_empty()) {
     return nullptr;
@@ -1114,16 +1141,44 @@ llvm::Value *CodeGenFunction::EmitCXXConstructExpr(
   if (!ConstructExpression) {
     return nullptr;
   }
-  // 分配 alloca + 构造
-  // 简化：创建零初始化的结构体
-  llvm::Type *Type =
-      CGM.getTypes().ConvertType(ConstructExpression->getType());
+
+  CXXConstructorDecl *CtorDecl = ConstructExpression->getConstructor();
+  QualType ConstructType = ConstructExpression->getType();
+
+  llvm::Type *Type = CGM.getTypes().ConvertType(ConstructType);
   if (!Type) {
     return nullptr;
   }
-  llvm::AllocaInst *Alloca =
-      CreateAlloca(ConstructExpression->getType(), "construct");
-  Builder.CreateStore(llvm::Constant::getNullValue(Type), Alloca);
+
+  // 分配 alloca 存储构造的对象
+  llvm::AllocaInst *Alloca = CreateAlloca(ConstructType, "construct");
+
+  if (CtorDecl) {
+    // 获取构造函数的 LLVM Function
+    llvm::Function *CtorFn = CGM.GetOrCreateFunctionDecl(CtorDecl);
+    if (CtorFn) {
+      // 构建参数列表：this + 构造函数参数
+      llvm::SmallVector<llvm::Value *, 8> Args;
+      Args.push_back(Alloca); // this 指针指向 alloca
+
+      for (Expr *Arg : ConstructExpression->getArgs()) {
+        llvm::Value *ArgVal = EmitExpr(Arg);
+        if (ArgVal) {
+          Args.push_back(ArgVal);
+        }
+      }
+
+      // 调用构造函数
+      Builder.CreateCall(CtorFn, Args, "ctor.call");
+    } else {
+      // 无法获取构造函数，零初始化
+      Builder.CreateStore(llvm::Constant::getNullValue(Type), Alloca);
+    }
+  } else {
+    // 无构造函数声明（trivial 类型或隐式默认构造）
+    Builder.CreateStore(llvm::Constant::getNullValue(Type), Alloca);
+  }
+
   return Builder.CreateLoad(Type, Alloca, "construct.val");
 }
 

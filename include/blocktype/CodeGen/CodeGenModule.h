@@ -56,6 +56,9 @@ class CodeGenModule {
   llvm::SmallVector<std::pair<FunctionDecl *, int>, 4> GlobalCtors;
   llvm::SmallVector<std::pair<FunctionDecl *, int>, 4> GlobalDtors;
 
+  /// 需要生成 vtable 的 CXXRecordDecl 集合
+  llvm::SmallVector<CXXRecordDecl *, 8> VTableClasses;
+
 public:
   CodeGenModule(ASTContext &Ctx, llvm::LLVMContext &LLVMCtx,
                 llvm::StringRef ModuleName, llvm::StringRef TargetTriple);
@@ -104,6 +107,9 @@ public:
 
   /// 生成类的虚函数表。
   void EmitVTable(CXXRecordDecl *RD);
+
+  /// 生成所有需要的虚函数表。
+  void EmitVTables();
 
   /// 生成类的布局信息。
   void EmitClassLayout(CXXRecordDecl *RD);

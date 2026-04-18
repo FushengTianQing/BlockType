@@ -47,6 +47,9 @@ class CodeGenFunction {
   /// 当前函数的 FunctionDecl。
   FunctionDecl *CurFD = nullptr;
 
+  /// 当前函数的 this 指针值（用于 CXXThisExpr）。
+  llvm::Value *ThisValue = nullptr;
+
   /// 局部变量映射：VarDecl → AllocaInst*
   llvm::DenseMap<const VarDecl *, llvm::AllocaInst *> LocalDecls;
 
@@ -154,6 +157,15 @@ public:
   CodeGenModule &getCGM() const { return CGM; }
   llvm::Function *getCurrentFunction() const { return CurFn; }
   FunctionDecl *getCurrentFunctionDecl() const { return CurFD; }
+
+  /// 设置当前 LLVM 函数（供 CGCXX 的构造/析构函数生成使用）
+  void setCurrentFunction(llvm::Function *Fn) { CurFn = Fn; }
+
+  /// 设置 this 指针（用于 CXXThisExpr 求值）
+  void setThisPointer(llvm::Value *This) { ThisValue = This; }
+
+  /// 获取 this 指针
+  llvm::Value *getThisPointer() const { return ThisValue; }
 
 private:
   //===------------------------------------------------------------------===//
