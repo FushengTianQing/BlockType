@@ -23,6 +23,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/Casting.h"
+#include <string>
 
 using namespace blocktype;
 
@@ -433,9 +434,15 @@ llvm::GlobalVariable *CGCXX::EmitVTable(CXXRecordDecl *RD) {
       llvm::ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()), 0),
       llvm::PointerType::get(CGM.getLLVMContext(), 0)));
 
-  // RTTI 指针占位
-  VTableEntries.push_back(llvm::ConstantPointerNull::get(
-      llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+  // RTTI 指针：指向 typeinfo 全局变量
+  llvm::GlobalVariable *TypeInfo = EmitTypeInfo(RD);
+  if (TypeInfo) {
+    VTableEntries.push_back(llvm::ConstantExpr::getBitCast(
+        TypeInfo, llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+  } else {
+    VTableEntries.push_back(llvm::ConstantPointerNull::get(
+        llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+  }
 
   // 收集基类的虚函数（检查覆盖）
   for (const auto &Base : RD->bases()) {
@@ -666,8 +673,324 @@ void CGCXX::InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
 }
 
 //===----------------------------------------------------------------------===//
-// 继承
+// RTTI（运行时类型信息）
 //===----------------------------------------------------------------------===//
+
+llvm::GlobalVariable *CGCXX::EmitTypeInfo(CXXRecordDecl *RD) {
+  if (!RD) return nullptr;
+
+  // 查缓存
+  auto It = TypeInfos.find(RD);
+  if (It != TypeInfos.end()) return It->second;
+
+  auto &Ctx = CGM.getLLVMContext();
+
+  // === 1. 生成 typeinfo name (_ZTS<ClassN>) ===
+  std::string TINameStr = CGM.getMangler().getTypeinfoName(RD);
+  std::string ClassName = RD->getName().str();
+  // 内容：类名 + null 终止符
+  llvm::Constant *NameInit = llvm::ConstantDataArray::getString(
+      Ctx, llvm::StringRef(ClassName), /*AddNull=*/true);
+  auto *NameGV = new llvm::GlobalVariable(
+      *CGM.getModule(), NameInit->getType(), /*isConstant=*/true,
+      llvm::GlobalValue::LinkOnceODRLinkage, NameInit, TINameStr);
+  NameGV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+  // === 2. 生成 typeinfo 对象 (_ZTI<ClassN>) ===
+  // 结构: [ vptr, name_ptr [, base_info...] ]
+  // vptr 指向对应 RTTI 类的 vtable（__class_type_info / __si_class_type_info / __vmi_class_type_info）
+  // 这些是 libcxxabi 中的外部符号
+
+  llvm::SmallVector<llvm::Constant *, 8> TIFields;
+  llvm::PointerType *PtrTy = llvm::PointerType::get(Ctx, 0);
+
+  // 2a. vptr：指向对应 RTTI 类的 vtable + 16（跳过 offset-to-top + RTTI ptr 两个槽位）
+  // 声明外部 vtable 全局变量
+  auto *VTableArrTy = llvm::ArrayType::get(PtrTy, 3);
+  auto *VTableExtern = CGM.getModule()->getOrInsertGlobal(
+      getRTTIClassVTableName(RD), VTableArrTy);
+  // vtable + 16 bytes = element [0, 2]（跳过前两个指针大小的槽位）
+  llvm::Constant *VTablePtr = llvm::ConstantExpr::getInBoundsGetElementPtr(
+      VTableArrTy, VTableExtern,
+      llvm::ArrayRef<llvm::Constant *>{
+          llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), 0),
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 2)});
+  TIFields.push_back(VTablePtr);
+
+  // 2b. name 指针
+  llvm::Constant *NamePtr = llvm::ConstantExpr::getBitCast(NameGV, PtrTy);
+  TIFields.push_back(NamePtr);
+
+  // 2c. 根据继承类型追加基类信息
+  unsigned NumBases = RD->getNumBases();
+  if (NumBases == 0) {
+    // __class_type_info: 只有 vptr + name
+  } else if (NumBases == 1) {
+    // __si_class_type_info: vptr + name + base typeinfo 指针
+    auto &Base = RD->bases()[0];
+    if (auto *RT = llvm::dyn_cast<RecordType>(Base.getType().getTypePtr())) {
+      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        llvm::GlobalVariable *BaseTI = EmitTypeInfo(BaseCXX);
+        TIFields.push_back(
+            BaseTI ? llvm::cast<llvm::Constant>(BaseTI)
+                   : llvm::ConstantPointerNull::get(PtrTy));
+      }
+    }
+  } else {
+    // __vmi_class_type_info: vptr + name + flags + base_count + {flags, offset}[]
+    // flags: 0 = public, non-virtual, non-shadow
+    unsigned Flags = 0;
+    TIFields.push_back(
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), Flags));
+    TIFields.push_back(
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), NumBases));
+    for (const auto &Base : RD->bases()) {
+      // 每个基类: [flags(32-bit), offset(32-bit)] 或 [flags(64-bit), offset(64-bit)]
+      // Itanium ABI: long base_flags, long base_offset
+      unsigned BaseFlags = 0;
+      uint64_t BaseOffset = 0;
+      if (auto *RT =
+              llvm::dyn_cast<RecordType>(Base.getType().getTypePtr())) {
+        if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+          BaseOffset = GetBaseOffset(RD, BaseCXX);
+          // 确保基类 typeinfo 先生成
+          EmitTypeInfo(BaseCXX);
+        }
+      }
+      TIFields.push_back(
+          llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), BaseFlags));
+      TIFields.push_back(
+          llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), BaseOffset));
+    }
+  }
+
+  // 构建 typeinfo 结构体类型
+  auto *TIStructTy = llvm::StructType::get(Ctx,
+      llvm::SmallVector<llvm::Type *, 8>(TIFields.size(), PtrTy));
+  // 对于 __vmi_class_type_info，字段类型混合了 i32/i64，需要重新计算
+  if (NumBases > 1) {
+    llvm::SmallVector<llvm::Type *, 8> FieldTys;
+    FieldTys.push_back(PtrTy); // vptr
+    FieldTys.push_back(PtrTy); // name
+    FieldTys.push_back(llvm::Type::getInt32Ty(Ctx)); // flags
+    FieldTys.push_back(llvm::Type::getInt32Ty(Ctx)); // base_count
+    for (unsigned i = 0; i < NumBases; ++i) {
+      FieldTys.push_back(llvm::Type::getInt64Ty(Ctx)); // base_flags
+      FieldTys.push_back(llvm::Type::getInt64Ty(Ctx)); // base_offset
+    }
+    TIStructTy = llvm::StructType::get(Ctx, FieldTys);
+  } else {
+    // 无基类或单继承：所有字段都是 ptr
+    TIStructTy = llvm::StructType::get(Ctx,
+        llvm::SmallVector<llvm::Type *, 8>(TIFields.size(), PtrTy));
+  }
+
+  llvm::Constant *TIInit = llvm::ConstantStruct::get(TIStructTy, TIFields);
+
+  std::string TIName = CGM.getMangler().getRTTIName(RD);
+  auto *TIGV = new llvm::GlobalVariable(
+      *CGM.getModule(), TIStructTy, /*isConstant=*/true,
+      llvm::GlobalValue::LinkOnceODRLinkage, TIInit, TIName);
+  TIGV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+
+  TypeInfos[RD] = TIGV;
+  return TIGV;
+}
+
+std::string CGCXX::getRTTIClassVTableName(CXXRecordDecl *RD) {
+  if (!RD) return "_ZTVN10__cxxabiv117__class_type_infoE";
+  unsigned NumBases = RD->getNumBases();
+  if (NumBases == 0) {
+    // __class_type_info vtable
+    return "_ZTVN10__cxxabiv117__class_type_infoE";
+  } else if (NumBases == 1) {
+    // __si_class_type_info vtable
+    return "_ZTVN10__cxxabiv120__si_class_type_infoE";
+  } else {
+    // __vmi_class_type_info vtable
+    return "_ZTVN10__cxxabiv121__vmi_class_type_infoE";
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// dynamic_cast
+//===----------------------------------------------------------------------===//
+
+llvm::Value *CGCXX::EmitDynamicCast(CodeGenFunction &CGF,
+                                     CXXDynamicCastExpr *CastExpr) {
+  if (!CastExpr) return nullptr;
+
+  auto &Builder = CGF.getBuilder();
+  auto &Ctx = CGM.getLLVMContext();
+
+  // 1. 求值子表达式
+  llvm::Value *SrcPtr = CGF.EmitExpr(CastExpr->getSubExpr());
+  if (!SrcPtr) return nullptr;
+
+  QualType DestType = CastExpr->getDestType();
+  if (DestType.isNull()) return SrcPtr;
+
+  // 判断是引用类型还是指针类型
+  bool DestIsRef = false;
+  QualType DestPointeeType;
+  if (auto *RefTy = llvm::dyn_cast<ReferenceType>(DestType.getTypePtr())) {
+    DestIsRef = true;
+    DestPointeeType = RefTy->getReferencedType();
+  } else if (auto *PtrTy = llvm::dyn_cast<PointerType>(DestType.getTypePtr())) {
+    DestPointeeType = PtrTy->getPointeeType();
+  } else {
+    // 非指针/引用目标，fallback bitcast
+    auto *DestLLVMTy = CGM.getTypes().ConvertType(DestType);
+    if (SrcPtr->getType()->isPointerTy() && DestLLVMTy->isPointerTy()) {
+      return Builder.CreateBitCast(SrcPtr, DestLLVMTy, "dyn.cast");
+    }
+    return SrcPtr;
+  }
+
+  // 获取源类型的 RecordDecl
+  QualType SrcExprType = CastExpr->getSubExpr()->getType();
+  // 如果源是指针，取指向类型
+  if (auto *SrcPtrTy = llvm::dyn_cast<PointerType>(SrcExprType.getTypePtr())) {
+    SrcExprType = SrcPtrTy->getPointeeType();
+  }
+  // 如果源是引用，取引用类型
+  if (auto *SrcRefTy = llvm::dyn_cast<ReferenceType>(SrcExprType.getTypePtr())) {
+    SrcExprType = SrcRefTy->getReferencedType();
+  }
+
+  CXXRecordDecl *SrcRD = nullptr;
+  if (auto *RT = llvm::dyn_cast<RecordType>(SrcExprType.getTypePtr())) {
+    SrcRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+  }
+  CXXRecordDecl *DstRD = nullptr;
+  if (auto *RT = llvm::dyn_cast<RecordType>(DestPointeeType.getTypePtr())) {
+    DstRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+  }
+
+  // 非多态类型或缺少 RD 信息，fallback 为 static bitcast
+  if (!SrcRD || !DstRD || !hasVirtualFunctionsInHierarchy(SrcRD)) {
+    auto *DestLLVMTy = CGM.getTypes().ConvertType(DestType);
+    if (SrcPtr->getType()->isPointerTy() && DestLLVMTy->isPointerTy()) {
+      return Builder.CreateBitCast(SrcPtr, DestLLVMTy, "dyn.cast");
+    }
+    return SrcPtr;
+  }
+
+  // 如果 SrcPtr 不是指针类型，需要先取地址（引用情况）
+  llvm::PointerType *PtrTy = llvm::PointerType::get(Ctx, 0);
+  if (!SrcPtr->getType()->isPointerTy()) {
+    SrcPtr = Builder.CreatePtrToInt(SrcPtr, llvm::Type::getInt64Ty(Ctx));
+    SrcPtr = Builder.CreateIntToPtr(SrcPtr, PtrTy, "src.ptr");
+  }
+
+  // 2. Null check（仅指针类型需要；引用类型失败时抛 bad_cast）
+  llvm::Function *CurFn = CGF.getCurrentFunction();
+  llvm::BasicBlock *EntryBB = Builder.GetInsertBlock();
+
+  llvm::BasicBlock *CastBB =
+      llvm::BasicBlock::Create(Ctx, "dyn.cast", CurFn);
+  llvm::BasicBlock *NullBB =
+      llvm::BasicBlock::Create(Ctx, "dyn.cast.null", CurFn);
+  llvm::BasicBlock *MergeBB =
+      llvm::BasicBlock::Create(Ctx, "dyn.cast.merge", CurFn);
+
+  llvm::Value *NullVal = llvm::ConstantPointerNull::get(PtrTy);
+  llvm::Value *IsNotNull = Builder.CreateICmpNE(SrcPtr, NullVal, "dyn.cast.notnull");
+  Builder.CreateCondBr(IsNotNull, CastBB, NullBB);
+
+  // === CastBB: 执行运行时检查 ===
+  Builder.SetInsertPoint(CastBB);
+
+  // 3. 加载 vptr → vtable
+  llvm::Value *VTablePtrAddr = Builder.CreateBitCast(
+      SrcPtr, llvm::PointerType::get(PtrTy, 0), "vtable.ptr.addr");
+  llvm::Value *VTable = Builder.CreateLoad(PtrTy, VTablePtrAddr, "vtable");
+
+  // 4. 从 vtable slot[1] 加载 RTTI 指针
+  auto *VTableArrTy = llvm::ArrayType::get(PtrTy, 2);
+  llvm::Value *RTTISlotPtr = Builder.CreateInBoundsGEP(
+      VTableArrTy, VTable,
+      {llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), 0),
+       llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 1)},
+      "rtti.slot");
+  llvm::Value *SrcTypeInfo = Builder.CreateLoad(PtrTy, RTTISlotPtr, "src.ti");
+
+  // 5. 获取目标类型的 typeinfo
+  llvm::GlobalVariable *DstTypeInfo = EmitTypeInfo(DstRD);
+  llvm::Value *DstTI = DstTypeInfo
+      ? llvm::cast<llvm::Value>(Builder.CreateBitCast(DstTypeInfo, PtrTy))
+      : NullVal;
+
+  // 6. 计算 src2dst 偏移量
+  int64_t SrcToDst = -1; // -1 表示未知，让运行时全路径搜索
+  // 如果 SrcRD 派生自 DstRD（upcast），偏移量已知
+  if (SrcRD->isDerivedFrom(DstRD)) {
+    SrcToDst = static_cast<int64_t>(GetBaseOffset(SrcRD, DstRD));
+  }
+
+  // 7. 声明并调用 __dynamic_cast
+  // __dynamic_cast(void *src, const __class_type_info *src_type,
+  //                const __class_type_info *dst_type, int64_t src2dst_offset)
+  llvm::FunctionType *DynCastTy = llvm::FunctionType::get(
+      PtrTy,
+      {PtrTy, PtrTy, PtrTy, llvm::Type::getInt64Ty(Ctx)},
+      false);
+  llvm::FunctionCallee DynCastFn =
+      CGM.getModule()->getOrInsertFunction("__dynamic_cast", DynCastTy);
+
+  llvm::Value *SrcToDstVal =
+      llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), SrcToDst, true);
+  llvm::Value *DynCastResult = Builder.CreateCall(
+      DynCastFn, {SrcPtr, SrcTypeInfo, DstTI, SrcToDstVal}, "dyn.cast.result");
+
+  // 8. bitcast 到目标指针类型
+  auto *DestLLVMTy = CGM.getTypes().ConvertType(DestType);
+  llvm::Type *ResultPtrTy = DestLLVMTy;
+  // 对于指针类型目标，直接 bitcast
+  // 对于引用类型目标，也使用指针类型
+  if (ResultPtrTy->isPointerTy()) {
+    DynCastResult = Builder.CreateBitCast(DynCastResult, ResultPtrTy, "dyn.cast.typed");
+  }
+
+  llvm::Value *CastResult = DynCastResult;
+  Builder.CreateBr(MergeBB);
+
+  // === NullBB: null 输入 ===
+  Builder.SetInsertPoint(NullBB);
+
+  if (DestIsRef) {
+    // 引用类型 dynamic_cast 失败时调用 __cxa_bad_cast()
+    llvm::FunctionType *BadCastTy =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx), false);
+    llvm::FunctionCallee BadCastFn =
+        CGM.getModule()->getOrInsertFunction("__cxa_bad_cast", BadCastTy);
+    Builder.CreateCall(BadCastFn);
+    Builder.CreateUnreachable();
+  } else {
+    // 指针类型返回 null
+    Builder.CreateBr(MergeBB);
+  }
+
+  // === MergeBB: PHI 节点 ===
+  Builder.SetInsertPoint(MergeBB);
+
+  if (!DestIsRef) {
+    llvm::PHINode *PHI = Builder.CreatePHI(CastResult->getType(), 2, "dyn.cast.phi");
+    PHI->addIncoming(CastResult, CastBB);
+    // NullBB 可能跳到 MergeBB 或 unreachable
+    llvm::BasicBlock *NullSucc = NullBB->getTerminator()
+        ? NullBB->getTerminator()->getSuccessor(0) : nullptr;
+    if (NullSucc == MergeBB) {
+      llvm::Value *NullResult = llvm::ConstantPointerNull::get(
+          llvm::cast<llvm::PointerType>(CastResult->getType()));
+      PHI->addIncoming(NullResult, NullBB);
+    }
+    return PHI;
+  }
+
+  // 引用类型直接返回 CastResult（bad_cast 已在上面的路径处理）
+  return CastResult;
+}
 
 llvm::Value *CGCXX::EmitBaseOffset(CodeGenFunction &CGF,
                                      llvm::Value *DerivedPtr,

@@ -1106,13 +1106,18 @@ llvm::Value *CodeGenFunction::EmitCastExpr(CastExpr *CastExpression) {
     }
     return SubExpression;
   }
-  case CastKind::CXXDynamic:
-    // dynamic_cast: 简化为 bitcast + null check
+  case CastKind::CXXDynamic: {
+    // dynamic_cast: 委托给 CGCXX::EmitDynamicCast 进行运行时类型检查
+    if (auto *DynCast = llvm::dyn_cast<CXXDynamicCastExpr>(CastExpression)) {
+      return CGM.getCXX().EmitDynamicCast(*this, DynCast);
+    }
+    // fallback: 无 CXXDynamicCastExpr 节点，bitcast
     if (SubExpression->getType()->isPointerTy() &&
         DestLLVMType->isPointerTy()) {
       return Builder.CreateBitCast(SubExpression, DestLLVMType, "dyn.cast");
     }
     return SubExpression;
+  }
   case CastKind::CXXConst:
     // const_cast: 类型不变（LLVM 不区分 const）
     return SubExpression;

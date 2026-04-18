@@ -325,7 +325,13 @@ void CXXStaticCastExpr::dump(raw_ostream &OS, unsigned Indent) const {
 
 void CXXDynamicCastExpr::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "CXXDynamicCastExpr: " << getCastKindName(Kind) << "\n";
+  OS << "CXXDynamicCastExpr: " << getCastKindName(Kind);
+  if (!DestType.isNull() && DestType.getTypePtr()) {
+    OS << " dest='";
+    DestType.getTypePtr()->dump(OS);
+    OS << "'";
+  }
+  OS << "\n";
   if (SubExpr)
     SubExpr->dump(OS, Indent + 1);
 }

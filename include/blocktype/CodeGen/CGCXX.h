@@ -46,6 +46,9 @@ class CGCXX {
   /// VTable 缓存：CXXRecordDecl → llvm::GlobalVariable
   llvm::DenseMap<const CXXRecordDecl *, llvm::GlobalVariable *> VTables;
 
+  /// RTTI 缓存：CXXRecordDecl → typeinfo 全局变量（_ZTI...）
+  llvm::DenseMap<const CXXRecordDecl *, llvm::GlobalVariable *> TypeInfos;
+
   /// 字段偏移缓存：FieldDecl → 偏移量（字节）
   llvm::DenseMap<const FieldDecl *, uint64_t> FieldOffsetCache;
 
@@ -63,6 +66,9 @@ class CGCXX {
 
   /// 检查 CXXRecordDecl 或其任何基类是否有虚函数
   bool hasVirtualFunctionsInHierarchy(CXXRecordDecl *RD);
+
+  /// 获取 RTTI 类的 vtable 名称（libcxxabi 外部符号）
+  static std::string getRTTIClassVTableName(CXXRecordDecl *RD);
 
 public:
   explicit CGCXX(CodeGenModule &M) : CGM(M) {}
@@ -114,6 +120,23 @@ public:
   /// 初始化对象的 vptr 指针（在构造函数中调用）。
   void InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
                             CXXRecordDecl *RD);
+
+  //===------------------------------------------------------------------===//
+  // RTTI（运行时类型信息）
+  //===------------------------------------------------------------------===//
+
+  /// 生成 RTTI 全局变量（typeinfo name + typeinfo 对象）。
+  /// 返回 typeinfo 对象的 llvm::GlobalVariable*（即 _ZTI... 符号）。
+  llvm::GlobalVariable *EmitTypeInfo(CXXRecordDecl *RD);
+
+  //===------------------------------------------------------------------===//
+  // dynamic_cast
+  //===------------------------------------------------------------------===//
+
+  /// 生成 dynamic_cast 运行时检查代码。
+  /// 处理 null check → 加载 vtable RTTI → 调用 __dynamic_cast。
+  llvm::Value *EmitDynamicCast(CodeGenFunction &CGF,
+                                class CXXDynamicCastExpr *CastExpr);
 
   //===------------------------------------------------------------------===//
   // 继承

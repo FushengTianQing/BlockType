@@ -616,7 +616,7 @@ Expr *Parser::parseCXXDynamicCastExpr() {
     emitError(DiagID::err_expected_rparen);
   }
 
-  return Context.create<CXXDynamicCastExpr>(CastLoc, SubExpr);
+  return Context.create<CXXDynamicCastExpr>(CastLoc, SubExpr, CastType);
 }
 
 Expr *Parser::parseCXXConstCastExpr() {

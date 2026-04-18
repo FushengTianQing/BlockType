@@ -1016,9 +1016,13 @@ public:
 
 /// CXXDynamicCastExpr - dynamic_cast expression.
 class CXXDynamicCastExpr : public CastExpr {
+  QualType DestType;
+
 public:
-  CXXDynamicCastExpr(SourceLocation Loc, Expr *SubExpr)
-      : CastExpr(Loc, SubExpr, CastKind::CXXDynamic) {}
+  CXXDynamicCastExpr(SourceLocation Loc, Expr *SubExpr, QualType DestType)
+      : CastExpr(Loc, SubExpr, CastKind::CXXDynamic), DestType(DestType) {}
+
+  QualType getDestType() const { return DestType; }
 
   NodeKind getKind() const override { return NodeKind::CXXDynamicCastExprKind; }
 
