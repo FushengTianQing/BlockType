@@ -167,13 +167,35 @@ TemplateInstantiator::ExpandPack(Expr *Pattern,
                                  const TemplateArgumentList &Args) {
   llvm::SmallVector<Expr *, 4> Result;
 
-  llvm::ArrayRef<TemplateArgument> PackArgs = Args.getPackArgument();
-  if (PackArgs.empty())
+  // Collect ALL pack arguments (support multi-pack expansion).
+  // Per C++ [temp.variadic]: when multiple packs appear in a pattern,
+  // all packs must have the same length and are expanded simultaneously.
+  llvm::SmallVector<llvm::ArrayRef<TemplateArgument>, 4> AllPacks;
+  llvm::ArrayRef<TemplateArgument> ArgList = Args.asArray();
+  for (const auto &Arg : ArgList) {
+    if (Arg.isPack())
+      AllPacks.push_back(Arg.getAsPack());
+  }
+
+  if (AllPacks.empty())
     return Result;
 
-  for (const TemplateArgument &PA : PackArgs) {
+  // Verify all packs have the same length
+  size_t PackSize = AllPacks[0].size();
+  for (unsigned P = 1; P < AllPacks.size(); ++P) {
+    if (AllPacks[P].size() != PackSize) {
+      // Pack length mismatch — per C++ this is ill-formed.
+      // Return empty to signal failure.
+      return Result;
+    }
+  }
+
+  // Expand: for each index, build a substitution list with one element
+  // from each pack, then substitute.
+  for (unsigned I = 0; I < PackSize; ++I) {
     TemplateArgumentList SingleArg;
-    SingleArg.push_back(PA);
+    for (unsigned P = 0; P < AllPacks.size(); ++P)
+      SingleArg.push_back(AllPacks[P][I]);
 
     Expr *Inst = SubstituteExpr(Pattern, SingleArg);
     if (Inst)
@@ -188,14 +210,28 @@ TemplateInstantiator::ExpandPackType(QualType Pattern,
                                      const TemplateArgumentList &Args) {
   llvm::SmallVector<QualType, 4> Result;
 
-  // Find all pack arguments
-  llvm::ArrayRef<TemplateArgument> PackArgs = Args.getPackArgument();
-  if (PackArgs.empty())
+  // Collect ALL pack arguments (support multi-pack expansion)
+  llvm::SmallVector<llvm::ArrayRef<TemplateArgument>, 4> AllPacks;
+  llvm::ArrayRef<TemplateArgument> ArgList = Args.asArray();
+  for (const auto &Arg : ArgList) {
+    if (Arg.isPack())
+      AllPacks.push_back(Arg.getAsPack());
+  }
+
+  if (AllPacks.empty())
     return Result;
 
-  for (const TemplateArgument &PA : PackArgs) {
+  // Verify all packs have the same length
+  size_t PackSize = AllPacks[0].size();
+  for (unsigned P = 1; P < AllPacks.size(); ++P) {
+    if (AllPacks[P].size() != PackSize)
+      return Result;
+  }
+
+  for (unsigned I = 0; I < PackSize; ++I) {
     TemplateArgumentList SingleArg;
-    SingleArg.push_back(PA);
+    for (unsigned P = 0; P < AllPacks.size(); ++P)
+      SingleArg.push_back(AllPacks[P][I]);
 
     QualType SubT = SubstituteType(Pattern, SingleArg);
     if (!SubT.isNull())
@@ -341,9 +377,13 @@ Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
 
   const TemplateArgument &Selected = PackArgs[Index];
   if (Selected.isType()) {
-    // Return a type expression — for now create a placeholder
-    // In a full implementation, this would create a TypeExpr or similar
-    return PIE;
+    // Create a placeholder expression that carries the selected type.
+    // We use a CXXBoolLiteral as a carrier since it has a simple constructor
+    // that accepts a type, and then override its type with the selected type.
+    QualType SelectedType = Selected.getAsType();
+    auto *Result = Context.create<CXXBoolLiteral>(
+        PIE->getLocation(), true, SelectedType);
+    return Result;
   }
   if (Selected.isExpression()) {
     return const_cast<Expr *>(Selected.getAsExpr());

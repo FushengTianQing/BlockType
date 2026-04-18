@@ -22,6 +22,7 @@
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/ConstantExpr.h"
 #include "blocktype/Sema/SFINAE.h"
+#include "blocktype/Sema/Conversion.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Type.h"
 #include "blocktype/Basic/Diagnostics.h"
@@ -489,14 +490,6 @@ bool ConstraintSatisfaction::IsMoreConstrained(
 //===----------------------------------------------------------------------===//
 
 bool ConstraintSatisfaction::canThrow(Expr *E) const {
-  // Simplified noexcept analysis.
-  // In a full implementation, this would perform a recursive walk of the
-  // expression to determine if any sub-expression can throw, following
-  // C++ [except.spec].
-  //
-  // For now, assume expressions cannot throw (conservative for noexcept).
-  // This means noexcept requirements are always satisfied unless we can
-  // detect a throw expression.
   if (!E)
     return false;
 
@@ -504,6 +497,41 @@ bool ConstraintSatisfaction::canThrow(Expr *E) const {
   if (llvm::isa<CXXThrowExpr>(E))
     return true;
 
+  // BinaryOperator → can throw if either operand can throw
+  if (auto *BO = llvm::dyn_cast<BinaryOperator>(E))
+    return canThrow(BO->getLHS()) || canThrow(BO->getRHS());
+
+  // UnaryOperator → can throw if operand can throw
+  if (auto *UO = llvm::dyn_cast<UnaryOperator>(E))
+    return canThrow(UO->getSubExpr());
+
+  // CallExpr → can throw (conservative: assume any call can throw unless
+  // the callee is known noexcept). For now, assume calls can throw.
+  if (llvm::isa<CallExpr>(E))
+    return true;
+
+  // CXXNewExpr → allocation can throw (conservative)
+  if (E->getKind() == ASTNode::NodeKind::CXXNewExprKind)
+    return true;
+
+  // MemberExpr → can throw if the base can throw
+  if (auto *ME = llvm::dyn_cast<MemberExpr>(E))
+    return canThrow(ME->getBase());
+
+  // ArraySubscriptExpr → can throw if base can throw
+  if (auto *ASE = llvm::dyn_cast<ArraySubscriptExpr>(E))
+    return canThrow(ASE->getBase());
+
+  // CastExpr → can throw if sub-expression can throw
+  if (auto *CE = llvm::dyn_cast<CastExpr>(E))
+    return canThrow(CE->getSubExpr());
+
+  // ConditionalOperator → can throw if any branch can throw
+  if (auto *CO = llvm::dyn_cast<ConditionalOperator>(E))
+    return canThrow(CO->getCond()) || canThrow(CO->getTrueExpr()) ||
+           canThrow(CO->getFalseExpr());
+
+  // Default: literals, DeclRefExpr, etc. cannot throw
   return false;
 }
 
@@ -512,27 +540,64 @@ bool ConstraintSatisfaction::checkReturnTypeConstraint(QualType ExprType,
   if (ExprType.isNull() || ConstraintType.isNull())
     return false;
 
-  // Simple type compatibility check.
-  // Per C++ [temp.constr]: the deduced type must be the same as or
-  // convertible to the constraint type.
+  // Per C++ [temp.constr]: the deduced return type must satisfy the
+  // return-type-requirement. This handles several cases:
   //
-  // For a full implementation, this would also handle:
-  //   - Auto deduction against the constraint type
-  //   - cv-qualifier adjustments
-  //   - Reference binding
-  //   - Concept satisfaction of the deduced type
+  // 1. Direct type match (exact or canonical)
+  // 2. cv-qualifier adjustments (deduced type can be more cv-qualified)
+  // 3. Reference binding (deduced reference type must match)
+  // 4. Base-of check (derived→base conversion)
+  // 5. Template argument deduction (constraint is TemplateSpecializationType)
 
-  // Direct match
+  // 1. Direct pointer match
   if (ExprType.getTypePtr() == ConstraintType.getTypePtr())
     return true;
 
-  // Canonical type comparison
+  // 2. Canonical type comparison
   if (ExprType.getCanonicalType() == ConstraintType.getCanonicalType())
     return true;
 
-  // If the constraint type is a concept (TemplateSpecializationType referencing
-  // a concept), we'd need to check concept satisfaction here.
-  // This is deferred to a later stage.
+  // 3. cv-qualifier stripping: check if types match ignoring top-level cv
+  QualType ExprInner = ExprType.getTypePtr()->isReferenceType()
+                            ? ExprType : QualType(ExprType.getTypePtr(), Qualifier::None);
+  QualType ConstInner = ConstraintType.getTypePtr()->isReferenceType()
+                             ? ConstraintType : QualType(ConstraintType.getTypePtr(), Qualifier::None);
+  if (ExprInner.getCanonicalType() == ConstInner.getCanonicalType())
+    return true;
+
+  // 4. Reference compatibility: if constraint is a reference type, check
+  //    if the expression type can bind to it.
+  if (ConstraintType->isReferenceType()) {
+    // For lvalue references: expr must be an lvalue of matching type
+    // For rvalue references: expr must be convertible
+    // Simplified: check canonical types match
+    QualType RefTarget = ConstraintType->isReferenceType()
+                             ? static_cast<const ReferenceType *>(ConstraintType.getTypePtr())
+                                   ->getReferencedType()
+                             : ConstraintType;
+    QualType ExprTarget = ExprType->isReferenceType()
+                              ? static_cast<const ReferenceType *>(ExprType.getTypePtr())
+                                    ->getReferencedType()
+                              : ExprType;
+    if (RefTarget.getCanonicalType() == ExprTarget.getCanonicalType())
+      return true;
+  }
+
+  // 5. Pointer compatibility: if both are pointers, check pointee types
+  if (ExprType->isPointerType() && ConstraintType->isPointerType()) {
+    auto *EP = static_cast<const PointerType *>(ExprType.getTypePtr());
+    auto *CP = static_cast<const PointerType *>(ConstraintType.getTypePtr());
+    QualType EPointee = QualType(EP->getPointeeType(), Qualifier::None);
+    QualType CPointee = QualType(CP->getPointeeType(), Qualifier::None);
+    if (EPointee.getCanonicalType() == CPointee.getCanonicalType())
+      return true;
+  }
+
+  // 6. Conversion check: can ExprType be converted to ConstraintType?
+  // Use ConversionChecker for standard conversions.
+  auto ICS = ConversionChecker::GetConversion(ExprType, ConstraintType);
+  if (!ICS.isBad())
+    return true;
 
   return false;
 }

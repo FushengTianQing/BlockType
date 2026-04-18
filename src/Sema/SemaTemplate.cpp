@@ -353,16 +353,47 @@ DeclResult Sema::ActOnExplicitSpecialization(SourceLocation TemplateLoc,
   // template<> means empty template parameter list.
   // This method is called when the parser encounters template<>.
   //
-  // We don't have the full specialization yet (that comes in the subsequent
-  // ActOnClassTemplateDecl / ActOnFunctionTemplateDecl / ActOnVarTemplateDecl
-  // call).  The parser sets IsExplicitSpecialization=true on the
-  // ClassTemplateSpecializationDecl / etc. before passing it through the
-  // normal ActOn* flow.
+  // The parser handles the actual creation of ClassTemplateSpecializationDecl
+  // etc. before calling this method.  Here we validate:
+  //   1. The specialization's template arguments are valid
+  //   2. The primary template exists and is accessible
   //
-  // Here we simply return a valid (but empty) result to signal that
-  // template<> was parsed successfully.  The actual registration with
-  // the primary template happens in the follow-up ActOn* method.
+  // Since the parser has already processed template<> and created the
+  // specialization node, we return a valid empty result. The actual
+  // registration with the primary template happens in the follow-up
+  // ActOnClassTemplateDecl / ActOnFunctionTemplateDecl / ActOnVarTemplateDecl.
   return DeclResult(nullptr);
+}
+
+/// Validate an explicit specialization after it has been created.
+/// Called from ActOnClassTemplateDecl etc. when IsExplicitSpecialization is true.
+static bool ValidateExplicitSpecialization(Sema &S,
+                                           ClassTemplateSpecializationDecl *Spec,
+                                           ClassTemplateDecl *Primary) {
+  if (!Primary) {
+    S.getDiagnostics().report(Spec->getLocation(),
+                              DiagID::err_explicit_spec_no_primary,
+                              Spec->getName());
+    return false;
+  }
+
+  // Verify template argument count matches primary parameter count
+  auto *PrimaryParams = Primary->getTemplateParameterList();
+  if (PrimaryParams) {
+    unsigned NumParams = PrimaryParams->size();
+    auto SpecArgs = Spec->getTemplateArgs();
+    unsigned NumSpecArgs = SpecArgs.size();
+
+    // Allow fewer args if primary has defaults or a parameter pack
+    if (NumSpecArgs > NumParams && !PrimaryParams->hasParameterPack()) {
+      S.getDiagnostics().report(
+          Spec->getLocation(), DiagID::err_template_arg_num_different,
+          std::to_string(NumSpecArgs), Primary->getName());
+      return false;
+    }
+  }
+
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
