@@ -75,7 +75,7 @@ Expr *Parser::parseCXXNewExpression() {
   }
 
   // Create CXXNewExpr
-  return Context.create<CXXNewExpr>(NewLoc, ArraySize, Initializer);
+  return Context.create<CXXNewExpr>(NewLoc, ArraySize, Initializer, Type);
 }
 
 Expr *Parser::parseCXXDeleteExpression() {
@@ -98,8 +98,18 @@ Expr *Parser::parseCXXDeleteExpression() {
     Argument = createRecoveryExpr(DeleteLoc);
   }
 
-  // Create CXXDeleteExpr
-  return Context.create<CXXDeleteExpr>(DeleteLoc, Argument, IsArrayDelete);
+  // 尝试从参数表达式推导被删除的元素类型
+  QualType AllocatedType;
+  if (Argument) {
+    QualType ArgType = Argument->getType();
+    if (auto *PtrType = llvm::dyn_cast<PointerType>(ArgType.getTypePtr())) {
+      AllocatedType = PtrType->getPointeeType();
+    }
+  }
+
+  // Create CXXDeleteExpr with AllocatedType
+  return Context.create<CXXDeleteExpr>(DeleteLoc, Argument, IsArrayDelete,
+                                       AllocatedType);
 }
 
 //===----------------------------------------------------------------------===//

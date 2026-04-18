@@ -896,13 +896,18 @@ public:
 class CXXNewExpr : public Expr {
   Expr *ArraySize;
   Expr *Initializer;
+  QualType AllocatedType; ///< 被分配的类型 T（非指针）
 
 public:
-  CXXNewExpr(SourceLocation Loc, Expr *ArraySize, Expr *Initializer)
-      : Expr(Loc), ArraySize(ArraySize), Initializer(Initializer) {}
+  CXXNewExpr(SourceLocation Loc, Expr *ArraySize, Expr *Initializer,
+             QualType AllocatedType = QualType())
+      : Expr(Loc), ArraySize(ArraySize), Initializer(Initializer),
+        AllocatedType(AllocatedType) {}
 
   Expr *getArraySize() const { return ArraySize; }
   Expr *getInitializer() const { return Initializer; }
+  QualType getAllocatedType() const { return AllocatedType; }
+  bool isArray() const { return ArraySize != nullptr; }
 
   NodeKind getKind() const override { return NodeKind::CXXNewExprKind; }
 
@@ -923,13 +928,17 @@ public:
 class CXXDeleteExpr : public Expr {
   Expr *Argument;
   bool IsArray;
+  QualType AllocatedType; ///< 被删除的元素类型 T（非指针）
 
 public:
-  CXXDeleteExpr(SourceLocation Loc, Expr *Argument, bool IsArray)
-      : Expr(Loc), Argument(Argument), IsArray(IsArray) {}
+  CXXDeleteExpr(SourceLocation Loc, Expr *Argument, bool IsArray,
+                QualType AllocatedType = QualType())
+      : Expr(Loc), Argument(Argument), IsArray(IsArray),
+        AllocatedType(AllocatedType) {}
 
   Expr *getArgument() const { return Argument; }
   bool isArrayForm() const { return IsArray; }
+  QualType getAllocatedType() const { return AllocatedType; }
 
   NodeKind getKind() const override { return NodeKind::CXXDeleteExprKind; }
 

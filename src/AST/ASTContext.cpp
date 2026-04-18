@@ -45,23 +45,36 @@ BuiltinType *ASTContext::getBuiltinType(BuiltinKind Kind) {
 }
 
 PointerType *ASTContext::getPointerType(const Type *Pointee) {
-  // Create new pointer type (no deduplication for simplicity)
+  // Check cache first — same pointee type must produce same PointerType*
+  auto It = PointerTypeCache.find(Pointee);
+  if (It != PointerTypeCache.end())
+    return It->second;
+
   void *Mem = Allocator.Allocate(sizeof(PointerType), alignof(PointerType));
   PointerType *PT = new (Mem) PointerType(Pointee);
+  PointerTypeCache[Pointee] = PT;
   return PT;
 }
 
 LValueReferenceType *ASTContext::getLValueReferenceType(const Type *Referenced) {
-  // Create new reference type (no deduplication for simplicity)
+  auto It = LValueRefTypeCache.find(Referenced);
+  if (It != LValueRefTypeCache.end())
+    return It->second;
+
   void *Mem = Allocator.Allocate(sizeof(LValueReferenceType), alignof(LValueReferenceType));
   LValueReferenceType *RT = new (Mem) LValueReferenceType(Referenced);
+  LValueRefTypeCache[Referenced] = RT;
   return RT;
 }
 
 RValueReferenceType *ASTContext::getRValueReferenceType(const Type *Referenced) {
-  // Create new reference type (no deduplication for simplicity)
+  auto It = RValueRefTypeCache.find(Referenced);
+  if (It != RValueRefTypeCache.end())
+    return It->second;
+
   void *Mem = Allocator.Allocate(sizeof(RValueReferenceType), alignof(RValueReferenceType));
   RValueReferenceType *RT = new (Mem) RValueReferenceType(Referenced);
+  RValueRefTypeCache[Referenced] = RT;
   return RT;
 }
 

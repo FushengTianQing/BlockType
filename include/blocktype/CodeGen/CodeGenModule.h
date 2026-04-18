@@ -122,6 +122,16 @@ public:
   /// 发射所有延迟定义。
   void EmitDeferred();
 
+  /// Sema 后处理：遍历 AST，为 CXXNewExpr/CXXDeleteExpr 设置 ExprTy。
+  /// Parser 直接创建 new/delete 节点时不经过 Sema，需要在此补设类型。
+  void SemaPostProcessAST(TranslationUnitDecl *TU);
+
+  /// Sema 后处理辅助：递归遍历 Stmt。
+  void SemaVisitStmt(Stmt *S);
+
+  /// Sema 后处理辅助：递归遍历 Expr。
+  void SemaVisitExpr(Expr *E);
+
   //===------------------------------------------------------------------===//
   // 属性处理（参照 Clang CodeGenModule::getGlobalValueAttributes）
   //===------------------------------------------------------------------===//

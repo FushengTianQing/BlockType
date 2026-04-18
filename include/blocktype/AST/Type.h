@@ -626,6 +626,10 @@ public:
   // Dump
   void dump() const;
   void dump(llvm::raw_ostream &OS) const;
+
+  /// getAsString - 返回类型的字符串表示（如 "int"、"const MyClass*"）。
+  /// 复用已有的 dump() 基础设施生成。
+  std::string getAsString() const;
 };
 
 //===----------------------------------------------------------------------===//

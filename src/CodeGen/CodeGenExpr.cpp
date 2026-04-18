@@ -1402,32 +1402,200 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(CXXNewExpr *NewExpression) {
     return nullptr;
   }
 
-  // new T() 返回 T*，需要获取被分配的类型 T
-  QualType AllocType = NewExpression->getType();
-  QualType ElementType = AllocType;
-  if (auto *PtrType = llvm::dyn_cast<PointerType>(AllocType.getTypePtr())) {
-    ElementType = QualType(PtrType->getPointeeType(), Qualifier::None);
+  // 获取被分配的元素类型 T
+  QualType ElementType = NewExpression->getAllocatedType();
+  if (ElementType.isNull()) {
+    // SemaPostProcessAST 应已设置 ExprTy = T*，从中推导
+    QualType AllocType = NewExpression->getType();
+    if (auto *PtrType = llvm::dyn_cast<PointerType>(AllocType.getTypePtr())) {
+      ElementType = PtrType->getPointeeType();
+    }
+  }
+  if (ElementType.isNull()) {
+    return nullptr;
   }
 
+  auto &Ctx = CGM.getLLVMContext();
+  llvm::IRBuilder<> &B = Builder;
   uint64_t TypeSize = CGM.getTarget().getTypeSize(ElementType);
-  llvm::Value *Size = llvm::ConstantInt::get(
-      llvm::Type::getInt64Ty(CGM.getLLVMContext()), TypeSize);
 
   // 获取或声明 malloc
   llvm::FunctionType *MallocType = llvm::FunctionType::get(
-      llvm::PointerType::get(CGM.getLLVMContext(), 0),
-      {llvm::Type::getInt64Ty(CGM.getLLVMContext())}, false);
+      llvm::PointerType::get(Ctx, 0),
+      {llvm::Type::getInt64Ty(Ctx)}, false);
   llvm::FunctionCallee Malloc =
       CGM.getModule()->getOrInsertFunction("malloc", MallocType);
 
-  llvm::Value *Memory = Builder.CreateCall(Malloc, {Size}, "new");
+  // 获取或声明 memset（用于零初始化）
+  llvm::FunctionType *MemsetType = llvm::FunctionType::get(
+      llvm::Type::getVoidTy(Ctx),
+      {llvm::PointerType::get(Ctx, 0), llvm::Type::getInt32Ty(Ctx),
+       llvm::Type::getInt64Ty(Ctx)},
+      false);
+  llvm::FunctionCallee Memset =
+      CGM.getModule()->getOrInsertFunction("llvm.memset.p0.i64", MemsetType);
 
-  // 转换为正确的指针类型
-  llvm::Type *LLVMAllocType = CGM.getTypes().ConvertType(AllocType);
-  if (LLVMAllocType && LLVMAllocType->isPointerTy()) {
-    return Builder.CreateBitCast(Memory, LLVMAllocType, "new.cast");
+  Expr *ArraySizeExpr = NewExpression->getArraySize();
+  llvm::Value *ResultPtr = nullptr;
+
+  if (ArraySizeExpr) {
+    // === 数组形式: new T[n] ===
+    // 布局: [size_t count][T elem0][T elem1]...[T elemN-1]
+    // 返回指向 elem0 的指针（跳过 count cookie）
+
+    llvm::Value *ArrayCount = EmitExpr(ArraySizeExpr);
+    if (!ArrayCount) return nullptr;
+
+    // 确保数组计数是 i64
+    llvm::Type *Int64Ty = llvm::Type::getInt64Ty(Ctx);
+    if (ArrayCount->getType() != Int64Ty) {
+      ArrayCount = B.CreateIntCast(ArrayCount, Int64Ty, false, "arr.count");
+    }
+
+    // 计算总大小 = CookieSize + sizeof(T) * n
+    llvm::Value *ElemSize = llvm::ConstantInt::get(Int64Ty, TypeSize);
+    llvm::Value *DataSize = B.CreateMul(ElemSize, ArrayCount, "data.size");
+    llvm::Value *CookieSize = llvm::ConstantInt::get(Int64Ty, ArrayCookie::CookieSize);
+    llvm::Value *TotalSize = B.CreateAdd(CookieSize, DataSize, "total.size");
+
+    // malloc(total_size)
+    llvm::Value *RawMemory = B.CreateCall(Malloc, {TotalSize}, "new.arr.raw");
+
+    // 在 cookie 位置存储数组长度
+    llvm::Value *CookiePtr = B.CreateBitCast(
+        RawMemory, llvm::PointerType::get(Int64Ty, 0), "cookie.ptr");
+    B.CreateStore(ArrayCount, CookiePtr);
+
+    // 计算返回指针 = raw + sizeof(size_t)
+    llvm::Value *RawInt = B.CreatePtrToInt(
+        RawMemory, Int64Ty, "raw.int");
+    llvm::Value *DataInt = B.CreateAdd(
+        RawInt, CookieSize, "data.int");
+    ResultPtr = B.CreateIntToPtr(
+        DataInt, llvm::PointerType::get(Ctx, 0), "new.arr");
+
+    // 零初始化数组内存（可选，但对 POD 类型很重要）
+    B.CreateCall(Memset, {ResultPtr, llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 0), DataSize});
+
+    // 如果元素类型有非 trivial 析构函数，需要对每个元素调用构造函数
+    // 查找元素类型的 CXXRecordDecl
+    CXXRecordDecl *ElementRD = nullptr;
+    if (auto *RT = llvm::dyn_cast<RecordType>(ElementType.getTypePtr())) {
+      ElementRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    }
+
+    if (ElementRD && ElementRD->hasDestructor()) {
+      // 查找默认构造函数
+      CXXConstructorDecl *DefaultCtor = nullptr;
+      for (CXXMethodDecl *MD : ElementRD->methods()) {
+        if (auto *Ctor = llvm::dyn_cast<CXXConstructorDecl>(MD)) {
+          if (Ctor->getNumParams() == 0) {
+            DefaultCtor = Ctor;
+            break;
+          }
+        }
+      }
+
+      if (DefaultCtor) {
+        llvm::Function *CtorFn = CGM.GetOrCreateFunctionDecl(DefaultCtor);
+        if (CtorFn) {
+          // 构造循环: for (i = 0; i < count; ++i) ctor((char*)ptr + i * sizeof(T))
+          llvm::Function *CurFn = getCurrentFunction();
+          llvm::BasicBlock *LoopBB =
+              llvm::BasicBlock::Create(Ctx, "arr.ctor.loop", CurFn);
+          llvm::BasicBlock *BodyBB =
+              llvm::BasicBlock::Create(Ctx, "arr.ctor.body", CurFn);
+          llvm::BasicBlock *ExitBB =
+              llvm::BasicBlock::Create(Ctx, "arr.ctor.exit", CurFn);
+
+          // i = 0 — 在 entry 块创建 alloca
+          llvm::AllocaInst *Counter = nullptr;
+          {
+            llvm::IRBuilder<>::InsertPoint SavedIP = B.saveIP();
+            llvm::Instruction *InsertPos =
+                CurFn->getEntryBlock().getFirstNonPHIOrDbg();
+            if (InsertPos)
+              B.SetInsertPoint(InsertPos);
+            else
+              B.SetInsertPoint(&CurFn->getEntryBlock());
+            Counter = B.CreateAlloca(Int64Ty, nullptr, "arr.ctor.i");
+            B.restoreIP(SavedIP);
+          }
+          B.CreateStore(llvm::ConstantInt::get(Int64Ty, 0), Counter);
+          B.CreateBr(LoopBB);
+
+          // LoopBB: if (i < count) goto Body else goto Exit
+          B.SetInsertPoint(LoopBB);
+          llvm::Value *CounterVal = B.CreateLoad(Int64Ty, Counter, "i");
+          llvm::Value *Cond = B.CreateICmpSLT(CounterVal, ArrayCount, "arr.ctor.cond");
+          B.CreateCondBr(Cond, BodyBB, ExitBB);
+
+          // BodyBB: ctor(base + i * sizeof(T)); i++
+          B.SetInsertPoint(BodyBB);
+          llvm::Value *Offset = B.CreateMul(CounterVal, ElemSize, "elem.offset");
+          llvm::Value *ElemIntPtr = B.CreateAdd(
+              B.CreatePtrToInt(ResultPtr, Int64Ty, "base.int"),
+              Offset, "elem.int");
+          llvm::Value *ElemPtr = B.CreateIntToPtr(
+              ElemIntPtr, llvm::PointerType::get(Ctx, 0), "elem.ptr");
+          B.CreateCall(CtorFn, {ElemPtr}, "arr.ctor.call");
+
+          // i++
+          llvm::Value *NextCounter = B.CreateAdd(
+              CounterVal, llvm::ConstantInt::get(Int64Ty, 1), "i.next");
+          B.CreateStore(NextCounter, Counter);
+          B.CreateBr(LoopBB);
+
+          // ExitBB: 继续后续代码
+          B.SetInsertPoint(ExitBB);
+        }
+      }
+    }
+  } else {
+    // === 单元素形式: new T ===
+    llvm::Value *Size = llvm::ConstantInt::get(
+        llvm::Type::getInt64Ty(Ctx), TypeSize);
+    llvm::Value *Memory = B.CreateCall(Malloc, {Size}, "new");
+
+    // 零初始化
+    B.CreateCall(Memset, {Memory,
+                          llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 0),
+                          Size});
+
+    // 处理初始化器
+    Expr *Initializer = NewExpression->getInitializer();
+    if (auto *ConstructExpr = llvm::dyn_cast_or_null<CXXConstructExpr>(Initializer)) {
+      // 在分配的内存上调用构造函数
+      CXXConstructorDecl *CtorDecl = ConstructExpr->getConstructor();
+      if (CtorDecl) {
+        llvm::Function *CtorFn = CGM.GetOrCreateFunctionDecl(CtorDecl);
+        if (CtorFn) {
+          llvm::SmallVector<llvm::Value *, 8> Args;
+          Args.push_back(Memory); // this
+          for (Expr *Arg : ConstructExpr->getArgs()) {
+            llvm::Value *ArgVal = EmitExpr(Arg);
+            if (ArgVal) Args.push_back(ArgVal);
+          }
+          B.CreateCall(CtorFn, Args, "new.ctor");
+        }
+      }
+    }
+
+    ResultPtr = Memory;
   }
-  return Memory;
+
+  // 转换为正确的指针类型（SemaPostProcessAST 已设置 ExprTy = T*）
+  QualType AllocType = NewExpression->getType();
+  if (AllocType.isNull()) {
+    // 后备：构造指针类型 ElementType*
+    auto *PtrTy = CGM.getASTContext().getPointerType(ElementType.getTypePtr());
+    AllocType = QualType(PtrTy, Qualifier::None);
+  }
+  llvm::Type *LLVMAllocType = CGM.getTypes().ConvertType(AllocType);
+  if (LLVMAllocType && LLVMAllocType->isPointerTy() && ResultPtr) {
+    return B.CreateBitCast(ResultPtr, LLVMAllocType, "new.cast");
+  }
+  return ResultPtr;
 }
 
 llvm::Value *CodeGenFunction::EmitCXXDeleteExpr(
@@ -1441,16 +1609,132 @@ llvm::Value *CodeGenFunction::EmitCXXDeleteExpr(
     return nullptr;
   }
 
-  // 调用 free
+  auto &Ctx = CGM.getLLVMContext();
+  llvm::IRBuilder<> &B = Builder;
+
+  // 获取被删除的元素类型 — 优先使用 AllocatedType（Parse 层/Sema 已设置）
+  QualType ElementType = DeleteExpression->getAllocatedType();
+  if (ElementType.isNull()) {
+    // 后备：从 Argument 表达式类型推导 T* → T
+    QualType ArgType = DeleteExpression->getArgument()->getType();
+    if (auto *PtrType = llvm::dyn_cast<PointerType>(ArgType.getTypePtr())) {
+      ElementType = PtrType->getPointeeType();
+    }
+    if (ElementType.isNull()) {
+      ElementType = ArgType;
+    }
+  }
+
+  // 转换参数为 i8*
+  llvm::Value *PtrArgument = B.CreateBitCast(
+      Argument, llvm::PointerType::get(Ctx, 0), "del.cast");
+
+  // 获取元素类型的 CXXRecordDecl（如果有的话）
+  CXXRecordDecl *ElementRD = nullptr;
+  if (auto *RT = llvm::dyn_cast<RecordType>(ElementType.getTypePtr())) {
+    ElementRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+  }
+
+  // 获取 free
   llvm::FunctionType *FreeType = llvm::FunctionType::get(
-      llvm::Type::getVoidTy(CGM.getLLVMContext()),
-      {llvm::PointerType::get(CGM.getLLVMContext(), 0)}, false);
+      llvm::Type::getVoidTy(Ctx),
+      {llvm::PointerType::get(Ctx, 0)}, false);
   llvm::FunctionCallee Free =
       CGM.getModule()->getOrInsertFunction("free", FreeType);
 
-  llvm::Value *PtrArgument = Builder.CreateBitCast(
-      Argument, llvm::PointerType::get(CGM.getLLVMContext(), 0), "del.cast");
-  Builder.CreateCall(Free, {PtrArgument});
+  if (DeleteExpression->isArrayForm()) {
+    // === 数组形式: delete[] ptr ===
+    // 读取 cookie 获取数组长度，逆序调用析构，free(raw)
+
+    llvm::Type *Int64Ty = llvm::Type::getInt64Ty(Ctx);
+
+    // RawPtr = ptr - CookieSize
+    llvm::Value *PtrInt = B.CreatePtrToInt(PtrArgument, Int64Ty, "del.ptr.int");
+    llvm::Value *CookieOffset = llvm::ConstantInt::get(Int64Ty, ArrayCookie::CookieSize);
+    llvm::Value *RawIntPtr = B.CreateSub(PtrInt, CookieOffset, "del.raw.int");
+    llvm::Value *RawPtr = B.CreateIntToPtr(
+        RawIntPtr, llvm::PointerType::get(Ctx, 0), "del.raw");
+
+    // 读取数组长度
+    llvm::Value *CookiePtr = B.CreateBitCast(
+        RawPtr, llvm::PointerType::get(Int64Ty, 0), "del.cookie.ptr");
+    llvm::Value *ArrayCount = B.CreateLoad(Int64Ty, CookiePtr, "del.arr.count");
+
+    // 如果元素类型有析构函数，逆序调用
+    if (ElementRD && ElementRD->hasDestructor()) {
+      llvm::Function *DtorFn = CGM.getCXX().GetDestructor(ElementRD);
+      if (DtorFn) {
+        uint64_t ElemSize = CGM.getTarget().getTypeSize(ElementType);
+        llvm::Value *ElemSizeVal = llvm::ConstantInt::get(Int64Ty, ElemSize);
+
+        // 逆序析构循环: for (i = count-1; i >= 0; --i) dtor(base + i * sizeof(T))
+        llvm::Function *CurFn = getCurrentFunction();
+        llvm::BasicBlock *LoopBB =
+            llvm::BasicBlock::Create(Ctx, "del.dtor.loop", CurFn);
+        llvm::BasicBlock *BodyBB =
+            llvm::BasicBlock::Create(Ctx, "del.dtor.body", CurFn);
+        llvm::BasicBlock *ExitBB =
+            llvm::BasicBlock::Create(Ctx, "del.dtor.exit", CurFn);
+
+        // i = count - 1
+        llvm::AllocaInst *Counter = nullptr;
+        {
+          llvm::IRBuilder<>::InsertPoint SavedIP = B.saveIP();
+          llvm::Instruction *InsertPos =
+              CurFn->getEntryBlock().getFirstNonPHIOrDbg();
+          if (InsertPos)
+            B.SetInsertPoint(InsertPos);
+          else
+            B.SetInsertPoint(&CurFn->getEntryBlock());
+          Counter = B.CreateAlloca(Int64Ty, nullptr, "del.dtor.i");
+          B.restoreIP(SavedIP);
+        }
+        llvm::Value *CountMinusOne = B.CreateSub(
+            ArrayCount, llvm::ConstantInt::get(Int64Ty, 1), "count.dec");
+        B.CreateStore(CountMinusOne, Counter);
+        B.CreateBr(LoopBB);
+
+        // LoopBB: if (i >= 0) goto Body else goto Exit
+        B.SetInsertPoint(LoopBB);
+        llvm::Value *CounterVal = B.CreateLoad(Int64Ty, Counter, "i");
+        llvm::Value *Cond = B.CreateICmpSGE(
+            CounterVal, llvm::ConstantInt::get(Int64Ty, 0), "del.dtor.cond");
+        B.CreateCondBr(Cond, BodyBB, ExitBB);
+
+        // BodyBB: dtor(base + i * sizeof(T)); --i
+        B.SetInsertPoint(BodyBB);
+        llvm::Value *Offset = B.CreateMul(CounterVal, ElemSizeVal, "dtor.offset");
+        llvm::Value *ElemIntPtr = B.CreateAdd(
+            B.CreatePtrToInt(PtrArgument, Int64Ty, "del.base.int"),
+            Offset, "del.elem.int");
+        llvm::Value *ElemPtr = B.CreateIntToPtr(
+            ElemIntPtr, llvm::PointerType::get(Ctx, 0), "del.elem.ptr");
+        B.CreateCall(DtorFn, {ElemPtr}, "del.dtor.call");
+
+        // --i
+        llvm::Value *NextCounter = B.CreateSub(
+            CounterVal, llvm::ConstantInt::get(Int64Ty, 1), "i.dec");
+        B.CreateStore(NextCounter, Counter);
+        B.CreateBr(LoopBB);
+
+        // ExitBB: free(raw)
+        B.SetInsertPoint(ExitBB);
+      }
+    }
+
+    // free(raw_ptr) — 释放原始 malloc 返回的地址（含 cookie）
+    B.CreateCall(Free, {RawPtr});
+  } else {
+    // === 单元素形式: delete ptr ===
+    // 如果元素类型有析构函数，先调用析构
+    if (ElementRD && ElementRD->hasDestructor()) {
+      CGM.getCXX().EmitDestructorCall(*this, ElementRD, PtrArgument);
+    }
+
+    // free(ptr)
+    B.CreateCall(Free, {PtrArgument});
+  }
+
   return nullptr;
 }
 

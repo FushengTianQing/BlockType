@@ -28,6 +28,14 @@ class AllocaInst;
 
 namespace blocktype {
 
+/// ArrayCookie — new[]/delete[] 数组分配的 cookie 布局常量。
+/// 布局: [count(size_t)][elem0][elem1]...[elemN-1]
+/// new[] 返回 ptr + CookieSize，delete[] 从 ptr - CookieSize 读取 count。
+namespace ArrayCookie {
+/// cookie 大小（存储数组元素数量的 size_t 字节数）
+constexpr uint64_t CookieSize = sizeof(uint64_t); // 8 on 64-bit
+} // namespace ArrayCookie
+
 class CodeGenModule;
 class CodeGenFunction;
 
@@ -98,6 +106,14 @@ public:
 
   /// 生成析构函数的完整代码（使用 CodeGenFunction）。
   void EmitDestructor(CXXDestructorDecl *Dtor, llvm::Function *Fn);
+
+  /// 查找类的析构函数并返回对应的 llvm::Function。
+  /// 如果类没有析构函数或析构函数是 trivial 的，返回 nullptr。
+  llvm::Function *GetDestructor(CXXRecordDecl *RD);
+
+  /// 在给定指针上调用析构函数（如果存在非 trivial 析构）。
+  void EmitDestructorCall(CodeGenFunction &CGF, CXXRecordDecl *RD,
+                           llvm::Value *Ptr);
 
   //===------------------------------------------------------------------===//
   // 虚函数表

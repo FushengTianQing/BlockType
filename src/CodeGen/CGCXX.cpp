@@ -379,6 +379,26 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
 // 析构函数
 //===----------------------------------------------------------------------===//
 
+llvm::Function *CGCXX::GetDestructor(CXXRecordDecl *RD) {
+  if (!RD || !RD->hasDestructor())
+    return nullptr;
+
+  for (CXXMethodDecl *MD : RD->methods()) {
+    if (auto *Dtor = llvm::dyn_cast<CXXDestructorDecl>(MD)) {
+      return CGM.GetOrCreateFunctionDecl(Dtor);
+    }
+  }
+  return nullptr;
+}
+
+void CGCXX::EmitDestructorCall(CodeGenFunction &CGF, CXXRecordDecl *RD,
+                                 llvm::Value *Ptr) {
+  llvm::Function *DtorFn = GetDestructor(RD);
+  if (DtorFn && Ptr) {
+    CGF.getBuilder().CreateCall(DtorFn, {Ptr}, "dtor.call");
+  }
+}
+
 void CGCXX::EmitDestructor(CXXDestructorDecl *Dtor, llvm::Function *Fn) {
   if (!Fn || !Dtor) return;
   if (!Fn->empty()) return;

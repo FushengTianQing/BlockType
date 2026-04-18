@@ -713,4 +713,177 @@ void Sema::Diag(SourceLocation Loc, DiagID ID, llvm::StringRef Extra) {
   Diags.report(Loc, ID, Extra);
 }
 
+//===----------------------------------------------------------------------===//
+// CXXNewExpr / CXXDeleteExpr semantic analysis
+//===----------------------------------------------------------------------===//
+
+ExprResult Sema::ActOnCXXNewExpr(CXXNewExpr *E) {
+  if (!E)
+    return ExprResult::getInvalid();
+
+  QualType AllocType = E->getAllocatedType();
+  if (AllocType.isNull()) {
+    Diags.report(E->getLocation(), DiagID::err_expected_type);
+    return ExprResult::getInvalid();
+  }
+
+  // 设置 ExprTy = AllocType*（new 表达式的结果类型是指针）
+  auto *PtrTy = Context.getPointerType(AllocType.getTypePtr());
+  E->setType(QualType(PtrTy, Qualifier::None));
+
+  return ExprResult(E);
+}
+
+ExprResult Sema::ActOnCXXDeleteExpr(CXXDeleteExpr *E) {
+  if (!E)
+    return ExprResult::getInvalid();
+
+  // 从 Argument 表达式的类型推导被删除的元素类型
+  QualType AllocatedType;
+  if (E->getArgument()) {
+    QualType ArgType = E->getArgument()->getType();
+    if (auto *PtrType = llvm::dyn_cast<PointerType>(ArgType.getTypePtr())) {
+      AllocatedType = PtrType->getPointeeType();
+    }
+  }
+
+  // 如果 AllocatedType 已由 Parse 层设置，保留它；否则使用推导结果
+  if (E->getAllocatedType().isNull() && !AllocatedType.isNull()) {
+    // CXXDeleteExpr 的 AllocatedType 是 const 字段，无法修改。
+    // 但由于构造函数中已传入，这里只在 ExprTy 上设置 void。
+  }
+
+  // delete 表达式的结果类型是 void
+  auto *VoidType = Context.getBuiltinType(BuiltinKind::Void);
+  E->setType(QualType(VoidType, Qualifier::None));
+
+  return ExprResult(E);
+}
+
+namespace {
+
+/// ASTVisitor — 遍历 AST 树，对 CXXNewExpr/CXXDeleteExpr 调用 Sema 方法。
+/// 使用递归遍历所有 Stmt/Expr 节点。
+class ASTVisitor {
+  Sema &S;
+
+public:
+  ASTVisitor(Sema &SemaRef) : S(SemaRef) {}
+
+  void visitTU(TranslationUnitDecl *TU) {
+    for (Decl *D : TU->decls()) {
+      visitDecl(D);
+    }
+  }
+
+  void visitDecl(Decl *D) {
+    if (!D) return;
+
+    if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
+      if (FD->getBody())
+        visitStmt(FD->getBody());
+    } else if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
+      if (VD->getInit())
+        visitExpr(VD->getInit());
+    }
+  }
+
+  void visitStmt(Stmt *S) {
+    if (!S) return;
+
+    // 遍历复合语句的子语句
+    if (auto *CS = llvm::dyn_cast<CompoundStmt>(S)) {
+      for (Stmt *Child : CS->getBody())
+        visitStmt(Child);
+      return;
+    }
+
+    // 表达式语句
+    if (auto *ES = llvm::dyn_cast<ExprStmt>(S)) {
+      visitExpr(ES->getExpr());
+      return;
+    }
+
+    // if/while/for/do
+    if (auto *IS = llvm::dyn_cast<IfStmt>(S)) {
+      visitExpr(IS->getCond());
+      visitStmt(IS->getThen());
+      visitStmt(IS->getElse());
+      return;
+    }
+    if (auto *WS = llvm::dyn_cast<WhileStmt>(S)) {
+      visitExpr(WS->getCond());
+      visitStmt(WS->getBody());
+      return;
+    }
+    if (auto *FS = llvm::dyn_cast<ForStmt>(S)) {
+      visitStmt(FS->getInit());
+      visitExpr(FS->getCond());
+      visitExpr(FS->getInc());
+      visitStmt(FS->getBody());
+      return;
+    }
+    if (auto *DS = llvm::dyn_cast<DoStmt>(S)) {
+      visitStmt(DS->getBody());
+      visitExpr(DS->getCond());
+      return;
+    }
+
+    // return
+    if (auto *RS = llvm::dyn_cast<ReturnStmt>(S)) {
+      visitExpr(RS->getRetValue());
+      return;
+    }
+
+    // decl statement
+    if (auto *DS2 = llvm::dyn_cast<DeclStmt>(S)) {
+      for (Decl *D : DS2->getDecls())
+        visitDecl(D);
+      return;
+    }
+  }
+
+  void visitExpr(Expr *E) {
+    if (!E) return;
+
+    // 对 new/delete 表达式调用 Sema 处理
+    if (auto *NewE = llvm::dyn_cast<CXXNewExpr>(E)) {
+      S.ActOnCXXNewExpr(NewE);
+    } else if (auto *DelE = llvm::dyn_cast<CXXDeleteExpr>(E)) {
+      S.ActOnCXXDeleteExpr(DelE);
+    }
+
+    // 递归遍历子表达式
+    if (auto *BO = llvm::dyn_cast<BinaryOperator>(E)) {
+      visitExpr(BO->getLHS());
+      visitExpr(BO->getRHS());
+    } else if (auto *UO = llvm::dyn_cast<UnaryOperator>(E)) {
+      visitExpr(UO->getSubExpr());
+    } else if (auto *CE = llvm::dyn_cast<CallExpr>(E)) {
+      visitExpr(CE->getCallee());
+      for (Expr *Arg : CE->getArgs())
+        visitExpr(Arg);
+    } else if (auto *CCE = llvm::dyn_cast<CXXConstructExpr>(E)) {
+      for (Expr *Arg : CCE->getArgs())
+        visitExpr(Arg);
+    } else if (auto *ME = llvm::dyn_cast<MemberExpr>(E)) {
+      visitExpr(ME->getBase());
+    } else if (auto *ASE = llvm::dyn_cast<ArraySubscriptExpr>(E)) {
+      visitExpr(ASE->getBase());
+      for (Expr *Idx : ASE->getIndices())
+        visitExpr(Idx);
+    } else if (auto *Cast = llvm::dyn_cast<CStyleCastExpr>(E)) {
+      visitExpr(Cast->getSubExpr());
+    }
+  }
+};
+
+} // anonymous namespace
+
+void Sema::ProcessAST(TranslationUnitDecl *TU) {
+  if (!TU) return;
+  ASTVisitor Visitor(*this);
+  Visitor.visitTU(TU);
+}
+
 } // namespace blocktype

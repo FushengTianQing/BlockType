@@ -301,6 +301,15 @@ public:
                                   SourceLocation QuestionLoc,
                                   SourceLocation ColonLoc);
 
+  /// Process a CXXNewExpr: set ExprTy = T*, validate type completeness.
+  ExprResult ActOnCXXNewExpr(CXXNewExpr *E);
+
+  /// Process a CXXDeleteExpr: set ExprTy = void, set AllocatedType.
+  ExprResult ActOnCXXDeleteExpr(CXXDeleteExpr *E);
+
+  /// Post-parse AST traversal: process all new/delete expressions.
+  void ProcessAST(TranslationUnitDecl *TU);
+
   //===------------------------------------------------------------------===//
   // Statement handling
   //===------------------------------------------------------------------===//

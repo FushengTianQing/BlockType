@@ -675,4 +675,11 @@ void QualType::dump(llvm::raw_ostream &OS) const {
   Ty->dump(OS);
 }
 
+std::string QualType::getAsString() const {
+  std::string Str;
+  llvm::raw_string_ostream OS(Str);
+  dump(OS);
+  return Str;
+}
+
 } // namespace blocktype

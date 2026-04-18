@@ -283,9 +283,15 @@ void DesignatedInitExpr::dump(raw_ostream &OS, unsigned Indent) const {
 
 void CXXNewExpr::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "CXXNewExpr: new\n";
+  OS << "CXXNewExpr: new";
   if (ArraySize)
-    ArraySize->dump(OS, Indent + 1);
+    OS << "[]";
+  OS << "\n";
+  if (ArraySize) {
+    printIndent(OS, Indent + 1);
+    OS << "array size:\n";
+    ArraySize->dump(OS, Indent + 2);
+  }
   if (Initializer)
     Initializer->dump(OS, Indent + 1);
 }
@@ -296,7 +302,12 @@ void CXXNewExpr::dump(raw_ostream &OS, unsigned Indent) const {
 
 void CXXDeleteExpr::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "CXXDeleteExpr: " << (IsArray ? "delete[]" : "delete") << "\n";
+  OS << "CXXDeleteExpr: " << (IsArray ? "delete[]" : "delete");
+  if (!AllocatedType.isNull()) {
+    OS << " ";
+    AllocatedType.dump(OS);
+  }
+  OS << "\n";
   if (Argument)
     Argument->dump(OS, Indent + 1);
 }

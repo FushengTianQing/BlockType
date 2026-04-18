@@ -71,6 +71,15 @@ class ASTContext {
   /// Cache: EnumDecl* -> EnumType* (ensures uniqueness for type comparison)
   llvm::DenseMap<EnumDecl *, EnumType *> EnumTypeCache;
 
+  /// Cache: const Type* -> PointerType* (ensures uniqueness for type comparison)
+  llvm::DenseMap<const Type *, PointerType *> PointerTypeCache;
+
+  /// Cache: const Type* -> LValueReferenceType* (ensures uniqueness)
+  llvm::DenseMap<const Type *, LValueReferenceType *> LValueRefTypeCache;
+
+  /// Cache: const Type* -> RValueReferenceType* (ensures uniqueness)
+  llvm::DenseMap<const Type *, RValueReferenceType *> RValueRefTypeCache;
+
 public:
   ASTContext() = default;
   ~ASTContext();
