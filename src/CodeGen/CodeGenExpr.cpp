@@ -1405,7 +1405,7 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(CXXNewExpr *NewExpression) {
   // 获取被分配的元素类型 T
   QualType ElementType = NewExpression->getAllocatedType();
   if (ElementType.isNull()) {
-    // SemaPostProcessAST 应已设置 ExprTy = T*，从中推导
+    // Sema::ProcessAST 应已设置 ExprTy = T*，从中推导
     QualType AllocType = NewExpression->getType();
     if (auto *PtrType = llvm::dyn_cast<PointerType>(AllocType.getTypePtr())) {
       ElementType = PtrType->getPointeeType();
@@ -1584,7 +1584,7 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(CXXNewExpr *NewExpression) {
     ResultPtr = Memory;
   }
 
-  // 转换为正确的指针类型（SemaPostProcessAST 已设置 ExprTy = T*）
+  // 转换为正确的指针类型（Sema::ProcessAST 已设置 ExprTy = T*）
   QualType AllocType = NewExpression->getType();
   if (AllocType.isNull()) {
     // 后备：构造指针类型 ElementType*

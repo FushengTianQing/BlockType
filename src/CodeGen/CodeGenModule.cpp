@@ -64,9 +64,6 @@ const llvm::DataLayout &CodeGenModule::getDataLayout() const {
 void CodeGenModule::EmitTranslationUnit(TranslationUnitDecl *TU) {
   if (!TU) return;
 
-  // Sema 后处理：为 new/delete 表达式设置 ExprTy
-  SemaPostProcessAST(TU);
-
   // 初始化调试信息
   // 使用 "input.cpp" 作为默认文件名（真实编译器从 SourceManager 获取）
   DebugInfo->Initialize("input.cpp", ".");
@@ -660,94 +657,4 @@ void CodeGenModule::EmitGlobalCtorDtors() {
   }
 }
 
-//===----------------------------------------------------------------------===//
-// Sema 后处理：为 new/delete 表达式设置 ExprTy
-//===----------------------------------------------------------------------===//
 
-void CodeGenModule::SemaPostProcessAST(TranslationUnitDecl *TU) {
-  for (Decl *D : TU->decls()) {
-    if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
-      if (FD->getBody())
-        SemaVisitStmt(FD->getBody());
-    } else if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
-      if (VD->getInit())
-        SemaVisitExpr(VD->getInit());
-    }
-  }
-}
-
-void CodeGenModule::SemaVisitStmt(Stmt *S) {
-  if (!S) return;
-
-  if (auto *CS = llvm::dyn_cast<CompoundStmt>(S)) {
-    for (Stmt *Child : CS->getBody())
-      SemaVisitStmt(Child);
-  } else if (auto *ES = llvm::dyn_cast<ExprStmt>(S)) {
-    SemaVisitExpr(ES->getExpr());
-  } else if (auto *IS = llvm::dyn_cast<IfStmt>(S)) {
-    SemaVisitExpr(IS->getCond());
-    SemaVisitStmt(IS->getThen());
-    SemaVisitStmt(IS->getElse());
-  } else if (auto *WS = llvm::dyn_cast<WhileStmt>(S)) {
-    SemaVisitExpr(WS->getCond());
-    SemaVisitStmt(WS->getBody());
-  } else if (auto *FS = llvm::dyn_cast<ForStmt>(S)) {
-    SemaVisitStmt(FS->getInit());
-    SemaVisitExpr(FS->getCond());
-    SemaVisitExpr(FS->getInc());
-    SemaVisitStmt(FS->getBody());
-  } else if (auto *DS = llvm::dyn_cast<DoStmt>(S)) {
-    SemaVisitStmt(DS->getBody());
-    SemaVisitExpr(DS->getCond());
-  } else if (auto *RS = llvm::dyn_cast<ReturnStmt>(S)) {
-    SemaVisitExpr(RS->getRetValue());
-  } else if (auto *DS2 = llvm::dyn_cast<DeclStmt>(S)) {
-    for (Decl *D : DS2->getDecls()) {
-      if (auto *VD = llvm::dyn_cast<VarDecl>(D))
-        SemaVisitExpr(VD->getInit());
-    }
-  }
-}
-
-void CodeGenModule::SemaVisitExpr(Expr *E) {
-  if (!E) return;
-
-  // 对 CXXNewExpr 设置 ExprTy = AllocatedType*
-  if (auto *NewE = llvm::dyn_cast<CXXNewExpr>(E)) {
-    QualType AllocType = NewE->getAllocatedType();
-    if (!AllocType.isNull() && NewE->getType().isNull()) {
-      auto *PtrTy = Context.getPointerType(AllocType.getTypePtr());
-      NewE->setType(QualType(PtrTy, Qualifier::None));
-    }
-  }
-  // 对 CXXDeleteExpr 设置 ExprTy = void
-  if (auto *DelE = llvm::dyn_cast<CXXDeleteExpr>(E)) {
-    if (DelE->getType().isNull()) {
-      auto *VoidType = Context.getBuiltinType(BuiltinKind::Void);
-      DelE->setType(QualType(VoidType, Qualifier::None));
-    }
-  }
-
-  // 递归遍历子表达式
-  if (auto *BO = llvm::dyn_cast<BinaryOperator>(E)) {
-    SemaVisitExpr(BO->getLHS());
-    SemaVisitExpr(BO->getRHS());
-  } else if (auto *UO = llvm::dyn_cast<UnaryOperator>(E)) {
-    SemaVisitExpr(UO->getSubExpr());
-  } else if (auto *CE = llvm::dyn_cast<CallExpr>(E)) {
-    SemaVisitExpr(CE->getCallee());
-    for (Expr *Arg : CE->getArgs())
-      SemaVisitExpr(Arg);
-  } else if (auto *CCE = llvm::dyn_cast<CXXConstructExpr>(E)) {
-    for (Expr *Arg : CCE->getArgs())
-      SemaVisitExpr(Arg);
-  } else if (auto *ME = llvm::dyn_cast<MemberExpr>(E)) {
-    SemaVisitExpr(ME->getBase());
-  } else if (auto *ASE = llvm::dyn_cast<ArraySubscriptExpr>(E)) {
-    SemaVisitExpr(ASE->getBase());
-    for (Expr *Idx : ASE->getIndices())
-      SemaVisitExpr(Idx);
-  } else if (auto *Cast = llvm::dyn_cast<CStyleCastExpr>(E)) {
-    SemaVisitExpr(Cast->getSubExpr());
-  }
-}

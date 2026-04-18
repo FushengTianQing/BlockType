@@ -8,6 +8,7 @@
 #include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Lex/Preprocessor.h"
 #include "blocktype/Parse/Parser.h"
+#include "blocktype/Sema/Sema.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/ASTDumper.h"
 #include "blocktype/AST/Decl.h"
@@ -211,14 +212,18 @@ int main(int argc, char *argv[]) {
       continue;
     }
     
-    // 7. 可选：输出 AST
+    // 7. 语义分析
+    Sema S(Context, Diags);
+    S.ProcessAST(TU);
+
+    // 8. 可选：输出 AST
     if (ASTDump && TU) {
       outs() << "\n=== AST Dump for " << File << " ===\n";
       TU->dump(outs());
       outs() << "=== End AST Dump ===\n\n";
     }
     
-    // 8. AI 辅助分析（可选）
+    // 9. AI 辅助分析（可选）
     if (AIAssist && Orchestrator) {
       AIRequest Request;
       Request.TaskType = AITaskType::SecurityCheck;
