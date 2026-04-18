@@ -486,6 +486,18 @@ llvm::Value *CodeGenFunction::EmitBinaryOperator(BinaryOperator *BinaryOp) {
     case BinaryOpKind::NE:
       return emitIntegerComparison(LeftHandSide, RightHandSide, Opcode,
                                     IsSigned, Builder);
+    case BinaryOpKind::Spaceship: {
+      // <=> 三路比较: (LHS > RHS) - (LHS < RHS) → -1, 0, or 1
+      auto *GT = Builder.CreateICmp(
+          IsSigned ? llvm::CmpInst::ICMP_SGT : llvm::CmpInst::ICMP_UGT,
+          LeftHandSide, RightHandSide, "scmp.gt");
+      auto *LT = Builder.CreateICmp(
+          IsSigned ? llvm::CmpInst::ICMP_SLT : llvm::CmpInst::ICMP_ULT,
+          LeftHandSide, RightHandSide, "scmp.lt");
+      auto *GTVal = Builder.CreateZExt(GT, LeftHandSide->getType(), "scmp.gtv");
+      auto *LTVal = Builder.CreateZExt(LT, LeftHandSide->getType(), "scmp.ltv");
+      return Builder.CreateSub(GTVal, LTVal, "spaceship");
+    }
     default:
       break;
     }
@@ -508,6 +520,17 @@ llvm::Value *CodeGenFunction::EmitBinaryOperator(BinaryOperator *BinaryOp) {
     case BinaryOpKind::EQ:
     case BinaryOpKind::NE:
       return emitFloatComparison(LeftHandSide, RightHandSide, Opcode, Builder);
+    case BinaryOpKind::Spaceship: {
+      // <=> 三路比较 (浮点): (LHS > RHS) - (LHS < RHS) → int -1, 0, or 1
+      auto *GT = Builder.CreateFCmp(llvm::CmpInst::FCMP_OGT,
+                                     LeftHandSide, RightHandSide, "scmp.gt");
+      auto *LT = Builder.CreateFCmp(llvm::CmpInst::FCMP_OLT,
+                                     LeftHandSide, RightHandSide, "scmp.lt");
+      llvm::Type *IntTy = CGM.getTypes().ConvertType(ResultType);
+      auto *GTVal = Builder.CreateZExt(GT, IntTy, "scmp.gtv");
+      auto *LTVal = Builder.CreateZExt(LT, IntTy, "scmp.ltv");
+      return Builder.CreateSub(GTVal, LTVal, "spaceship");
+    }
     default:
       break;
     }

@@ -384,9 +384,14 @@ QualType TypeCheck::getBinaryOperatorResultType(BinaryOpKind Op,
   // Per C++ [expr.rel], [expr.eq]
   if (Op == BinaryOpKind::LT || Op == BinaryOpKind::GT ||
       Op == BinaryOpKind::LE || Op == BinaryOpKind::GE ||
-      Op == BinaryOpKind::EQ || Op == BinaryOpKind::NE ||
-      Op == BinaryOpKind::Spaceship) {
+      Op == BinaryOpKind::EQ || Op == BinaryOpKind::NE) {
     return Context.getBoolType();
+  }
+
+  // Spaceship operator <=> (C++20): returns int (-1, 0, 1)
+  // Simplified: real C++20 returns std::strong_ordering etc.
+  if (Op == BinaryOpKind::Spaceship) {
+    return Context.getIntType();
   }
 
   // Logical operators: result is always bool
