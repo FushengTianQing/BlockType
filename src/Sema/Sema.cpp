@@ -77,6 +77,12 @@ void Sema::ActOnTranslationUnit(TranslationUnitDecl *TU) {
   CurContext = TU;
 }
 
+TranslationUnitDecl *Sema::ActOnTranslationUnitDecl(SourceLocation Loc) {
+  auto *TU = Context.create<TranslationUnitDecl>(Loc);
+  ActOnTranslationUnit(TU);
+  return TU;
+}
+
 //===----------------------------------------------------------------------===//
 // Declaration handling
 //===----------------------------------------------------------------------===//
@@ -180,6 +186,12 @@ DeclResult Sema::ActOnEnumConstant(EnumConstantDecl *ECD) {
     CurContext->addDecl(ECD);
 
   return DeclResult(ECD);
+}
+
+DeclResult Sema::ActOnEnumConstantDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                               QualType EnumType, Expr *Init) {
+  auto *ECD = Context.create<EnumConstantDecl>(Loc, Name, EnumType, Init);
+  return ActOnEnumConstant(ECD);
 }
 
 //===----------------------------------------------------------------------===//
@@ -393,6 +405,195 @@ void Sema::ActOnCXXDestructorDecl(CXXDestructorDecl *DD) {
 
 void Sema::ActOnFriendDecl(FriendDecl *FD) {
   // Friend declarations don't need symbol table registration
+}
+
+// Phase 3C: Class declaration factory methods
+
+DeclResult Sema::ActOnCXXRecordDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                            TagDecl::TagKind Kind) {
+  auto *RD = Context.create<CXXRecordDecl>(Loc, Name, Kind);
+  ActOnCXXRecordDecl(RD);
+  return DeclResult(RD);
+}
+
+DeclResult Sema::ActOnCXXMethodDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                            QualType Type,
+                                            llvm::ArrayRef<ParmVarDecl *> Params,
+                                            CXXRecordDecl *Class, Stmt *Body,
+                                            bool IsStatic, bool IsConst, bool IsVolatile,
+                                            bool IsVirtual, bool IsPureVirtual,
+                                            bool IsOverride, bool IsFinal,
+                                            bool IsDefaulted, bool IsDeleted,
+                                            CXXMethodDecl::RefQualifierKind RefQual,
+                                            bool HasNoexceptSpec, bool NoexceptValue,
+                                            Expr *NoexceptExpr,
+                                            AccessSpecifier Access) {
+  auto *MD = Context.create<CXXMethodDecl>(Loc, Name, Type, Params, Class, Body,
+      IsStatic, IsConst, IsVolatile, IsVirtual, IsPureVirtual,
+      IsOverride, IsFinal, IsDefaulted, IsDeleted,
+      RefQual, HasNoexceptSpec, NoexceptValue, NoexceptExpr, Access);
+  ActOnCXXMethodDecl(MD);
+  return DeclResult(MD);
+}
+
+DeclResult Sema::ActOnCXXConstructorDeclFactory(SourceLocation Loc,
+                                                 CXXRecordDecl *Class,
+                                                 llvm::ArrayRef<ParmVarDecl *> Params,
+                                                 Stmt *Body, bool IsExplicit) {
+  auto *CD = Context.create<CXXConstructorDecl>(Loc, Class, Params, Body, IsExplicit);
+  ActOnCXXConstructorDecl(CD);
+  return DeclResult(CD);
+}
+
+DeclResult Sema::ActOnCXXDestructorDeclFactory(SourceLocation Loc,
+                                                CXXRecordDecl *Class, Stmt *Body) {
+  auto *DD = Context.create<CXXDestructorDecl>(Loc, Class, Body);
+  ActOnCXXDestructorDecl(DD);
+  return DeclResult(DD);
+}
+
+DeclResult Sema::ActOnFriendTypeDecl(SourceLocation FriendLoc,
+                                      llvm::StringRef TypeName,
+                                      SourceLocation TypeNameLoc) {
+  QualType FriendType;
+  // 1. Try to look up type in current scope
+  if (CurrentScope) {
+    if (NamedDecl *Found = CurrentScope->lookup(TypeName)) {
+      if (auto *TD = llvm::dyn_cast<TypeDecl>(Found)) {
+        FriendType = Context.getTypeDeclType(TD);
+      }
+    }
+  }
+  // 2. If not found, create a forward declaration
+  if (FriendType.isNull()) {
+    auto *ForwardDecl = Context.create<RecordDecl>(TypeNameLoc, TypeName, TagDecl::TK_struct);
+    FriendType = Context.getTypeDeclType(ForwardDecl);
+  }
+  auto *FD = Context.create<FriendDecl>(FriendLoc, nullptr, FriendType, true);
+  ActOnFriendDecl(FD);
+  return DeclResult(FD);
+}
+
+DeclResult Sema::ActOnFriendFunctionDecl(SourceLocation FriendLoc,
+                                          SourceLocation NameLoc,
+                                          llvm::StringRef Name, QualType Type,
+                                          llvm::ArrayRef<ParmVarDecl *> Params) {
+  auto *FriendFunc = Context.create<FunctionDecl>(NameLoc, Name, Type, Params, nullptr);
+  auto *FD = Context.create<FriendDecl>(FriendLoc, FriendFunc, QualType(), false);
+  ActOnFriendDecl(FD);
+  return DeclResult(FD);
+}
+
+// Phase 3D: Template parameter factory methods
+
+DeclResult Sema::ActOnTemplateTypeParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                           unsigned Depth, unsigned Index,
+                                           bool IsParameterPack, bool IsTypename) {
+  auto *Param = Context.create<TemplateTypeParmDecl>(Loc, Name, Depth, Index,
+                                                      IsParameterPack, IsTypename);
+  return DeclResult(Param);
+}
+
+DeclResult Sema::ActOnNonTypeTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                              QualType Type, unsigned Depth,
+                                              unsigned Index, bool IsParameterPack) {
+  auto *Param = Context.create<NonTypeTemplateParmDecl>(Loc, Name, Type, Depth,
+                                                         Index, IsParameterPack);
+  return DeclResult(Param);
+}
+
+DeclResult Sema::ActOnTemplateTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                               unsigned Depth, unsigned Index,
+                                               bool IsParameterPack) {
+  auto *Param = Context.create<TemplateTemplateParmDecl>(Loc, Name, Depth,
+                                                          Index, IsParameterPack);
+  return DeclResult(Param);
+}
+
+// Phase 3E: Template wrapper factory methods
+
+DeclResult Sema::ActOnTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                          Decl *TemplatedDecl) {
+  auto *TD = Context.create<TemplateDecl>(Loc, Name, TemplatedDecl);
+  return DeclResult(TD);
+}
+
+DeclResult Sema::ActOnClassTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                               Decl *TemplatedDecl) {
+  auto *CTD = Context.create<ClassTemplateDecl>(Loc, Name, TemplatedDecl);
+  return DeclResult(CTD);
+}
+
+DeclResult Sema::ActOnFunctionTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                                  Decl *TemplatedDecl) {
+  auto *FTD = Context.create<FunctionTemplateDecl>(Loc, Name, TemplatedDecl);
+  return DeclResult(FTD);
+}
+
+DeclResult Sema::ActOnVarTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                             Decl *TemplatedDecl) {
+  auto *VTD = Context.create<VarTemplateDecl>(Loc, Name, TemplatedDecl);
+  return DeclResult(VTD);
+}
+
+DeclResult Sema::ActOnTypeAliasTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                                   Decl *TemplatedDecl) {
+  auto *TATD = Context.create<TypeAliasTemplateDecl>(Loc, Name, TemplatedDecl);
+  return DeclResult(TATD);
+}
+
+DeclResult Sema::ActOnClassTemplateSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                            ClassTemplateDecl *PrimaryTemplate,
+                                            llvm::ArrayRef<TemplateArgument> Args,
+                                            bool IsExplicit) {
+  auto *Spec = Context.create<ClassTemplateSpecializationDecl>(Loc, Name,
+      PrimaryTemplate, Args, IsExplicit);
+  PrimaryTemplate->addSpecialization(Spec);
+  return DeclResult(Spec);
+}
+
+DeclResult Sema::ActOnVarTemplateSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                          QualType Type, VarTemplateDecl *PrimaryTemplate,
+                                          llvm::ArrayRef<TemplateArgument> Args,
+                                          Expr *Init, bool IsExplicit) {
+  auto *Spec = Context.create<VarTemplateSpecializationDecl>(Loc, Name, Type,
+      PrimaryTemplate, Args, Init, IsExplicit);
+  PrimaryTemplate->addSpecialization(Spec);
+  return DeclResult(Spec);
+}
+
+DeclResult Sema::ActOnClassTemplatePartialSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                                   ClassTemplateDecl *PrimaryTemplate,
+                                                   llvm::ArrayRef<TemplateArgument> Args) {
+  auto *PartialSpec = Context.create<ClassTemplatePartialSpecializationDecl>(Loc, Name,
+      PrimaryTemplate, Args);
+  PrimaryTemplate->addSpecialization(PartialSpec);
+  return DeclResult(PartialSpec);
+}
+
+DeclResult Sema::ActOnVarTemplatePartialSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                                 QualType Type,
+                                                 VarTemplateDecl *PrimaryTemplate,
+                                                 llvm::ArrayRef<TemplateArgument> Args,
+                                                 Expr *Init) {
+  auto *PartialSpec = Context.create<VarTemplatePartialSpecializationDecl>(Loc, Name, Type,
+      PrimaryTemplate, Args, Init);
+  PrimaryTemplate->addSpecialization(PartialSpec);
+  return DeclResult(PartialSpec);
+}
+
+DeclResult Sema::ActOnConceptDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                         Expr *Constraint, SourceLocation TemplateLoc,
+                                         llvm::ArrayRef<NamedDecl *> TemplateParams) {
+  // Create TemplateDecl for the concept
+  auto *Template = Context.create<TemplateDecl>(TemplateLoc, Name, nullptr);
+  auto *TPL = new TemplateParameterList(TemplateLoc, SourceLocation(),
+                                         SourceLocation(), TemplateParams);
+  Template->setTemplateParameterList(TPL);
+
+  // Create ConceptDecl
+  auto *Concept = Context.create<ConceptDecl>(Loc, Name, Constraint, Template);
+  return DeclResult(Concept);
 }
 
 DeclResult Sema::ActOnFieldDeclFactory(SourceLocation Loc, llvm::StringRef Name,
@@ -1047,8 +1248,10 @@ StmtResult Sema::ActOnLabelStmt(SourceLocation Loc, llvm::StringRef LabelName,
 // C++ statement extensions (Phase 2B)
 //===----------------------------------------------------------------------===//
 
-StmtResult Sema::ActOnCXXForRangeStmt(SourceLocation ForLoc, VarDecl *RangeVar,
-                                       Expr *Range, Stmt *Body) {
+StmtResult Sema::ActOnCXXForRangeStmt(SourceLocation ForLoc,
+                                       SourceLocation VarLoc, llvm::StringRef VarName,
+                                       QualType VarType, Expr *Range, Stmt *Body) {
+  auto *RangeVar = Context.create<VarDecl>(VarLoc, VarName, VarType, nullptr);
   auto *FRS = Context.create<CXXForRangeStmt>(ForLoc, RangeVar, Range, Body);
   return StmtResult(FRS);
 }

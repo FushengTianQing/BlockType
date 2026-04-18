@@ -28,12 +28,12 @@ Stmt *Parser::parseCXXTryStatement() {
   // Parse try block
   if (!Tok.is(TokenKind::l_brace)) {
     emitError(DiagID::err_expected_lbrace);
-    return Context.create<NullStmt>(TryLoc);
+    return Actions.ActOnNullStmt(TryLoc).get();
   }
 
   Stmt *TryBlock = parseCompoundStatement();
   if (TryBlock == nullptr) {
-    TryBlock = Context.create<NullStmt>(TryLoc);
+    TryBlock = Actions.ActOnNullStmt(TryLoc).get();
   }
 
   // Parse catch clauses
@@ -59,7 +59,7 @@ Stmt *Parser::parseCXXCatchClause() {
   // Parse '('
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(CatchLoc);
+    return Actions.ActOnNullStmt(CatchLoc).get();
   }
 
   // Check for catch-all: catch (...)
@@ -82,7 +82,7 @@ Stmt *Parser::parseCXXCatchClause() {
         consumeToken();
       }
       // Create VarDecl for exception declaration
-      ExceptionDecl = Context.create<VarDecl>(VarLoc, VarName, ExceptionType, nullptr);
+      ExceptionDecl = llvm::cast<VarDecl>(Actions.ActOnVarDecl(VarLoc, VarName, ExceptionType, nullptr).get());
     }
   }
 
@@ -94,12 +94,12 @@ Stmt *Parser::parseCXXCatchClause() {
   // Parse catch block
   if (!Tok.is(TokenKind::l_brace)) {
     emitError(DiagID::err_expected_lbrace);
-    return Context.create<NullStmt>(CatchLoc);
+    return Actions.ActOnNullStmt(CatchLoc).get();
   }
 
   Stmt *CatchBlock = parseCompoundStatement();
   if (CatchBlock == nullptr) {
-    CatchBlock = Context.create<NullStmt>(CatchLoc);
+    CatchBlock = Actions.ActOnNullStmt(CatchLoc).get();
   }
 
   return Actions.ActOnCXXCatchStmt(CatchLoc, ExceptionDecl, CatchBlock).get();

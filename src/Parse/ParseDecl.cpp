@@ -1084,11 +1084,9 @@ void Parser::parseEnumerator(EnumDecl *Enum) {
     InitVal = parseExpression();
   }
 
-  // Create EnumConstantDecl
-  // Note: We should determine the enum type properly
-  EnumConstantDecl *Constant = Context.create<EnumConstantDecl>(
-      NameLoc, Name, QualType(), InitVal);
-  Actions.ActOnEnumConstant(Constant);
+  // Create EnumConstantDecl via Sema
+  EnumConstantDecl *Constant = llvm::cast<EnumConstantDecl>(
+      Actions.ActOnEnumConstantDeclFactory(NameLoc, Name, QualType(), InitVal).get());
   Enum->addEnumerator(Constant);
 }
 

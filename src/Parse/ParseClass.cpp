@@ -71,10 +71,10 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc,
     *ParsedTemplateArgs = std::move(TemplateArgs);
   }
 
-  // Create CXXRecordDecl
-  CXXRecordDecl *Class = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_class);
-  Actions.ActOnCXXRecordDecl(Class);
-  
+  // Create CXXRecordDecl via Sema
+  CXXRecordDecl *Class = llvm::cast<CXXRecordDecl>(
+      Actions.ActOnCXXRecordDeclFactory(NameLoc, Name, TagDecl::TK_class).get());
+
   // Add class to current scope before parsing body
   if (CurrentScope) {
     CurrentScope->addDecl(Class);
@@ -150,8 +150,8 @@ CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc,
   }
 
   // Create CXXRecordDecl (struct has public default access)
-  CXXRecordDecl *Struct = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_struct);
-  Actions.ActOnCXXRecordDecl(Struct);
+  CXXRecordDecl *Struct = llvm::cast<CXXRecordDecl>(
+      Actions.ActOnCXXRecordDeclFactory(NameLoc, Name, TagDecl::TK_struct).get());
 
   // Add struct to current scope before parsing body
   if (CurrentScope) {
@@ -201,8 +201,8 @@ CXXRecordDecl *Parser::parseUnionDeclaration(SourceLocation UnionLoc) {
   }
 
   // Create CXXRecordDecl (union has public default access)
-  CXXRecordDecl *Union = Context.create<CXXRecordDecl>(NameLoc, Name, TagDecl::TK_union);
-  Actions.ActOnCXXRecordDecl(Union);
+  CXXRecordDecl *Union = llvm::cast<CXXRecordDecl>(
+      Actions.ActOnCXXRecordDeclFactory(NameLoc, Name, TagDecl::TK_union).get());
 
   // Add union to current scope before parsing body
   if (CurrentScope) {
@@ -607,15 +607,15 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
       consumeToken();
     }
 
-    // Create CXXMethodDecl
+    // Create CXXMethodDecl via Sema
     AccessSpecifier Access =
         static_cast<AccessSpecifier>(Class->getCurrentAccess());
-    CXXMethodDecl *Method = Context.create<CXXMethodDecl>(NameLoc, Name, Type, Params, Class, Body,
-                                         IsStatic, IsConst, IsVolatile, IsVirtual, IsPureVirtual,
-                                         IsOverride, IsFinal, IsDefaulted, IsDeleted,
-                                         RefQual, HasNoexceptSpec, NoexceptValue, NoexceptExpr,
-                                         Access);
-    Actions.ActOnCXXMethodDecl(Method);
+    CXXMethodDecl *Method = llvm::cast<CXXMethodDecl>(
+        Actions.ActOnCXXMethodDeclFactory(NameLoc, Name, Type, Params, Class, Body,
+            IsStatic, IsConst, IsVolatile, IsVirtual, IsPureVirtual,
+            IsOverride, IsFinal, IsDefaulted, IsDeleted,
+            RefQual, HasNoexceptSpec, NoexceptValue, NoexceptExpr,
+            Access).get());
 
     // Add method to current scope
     if (CurrentScope) {
@@ -805,9 +805,9 @@ CXXConstructorDecl *Parser::parseConstructorDeclaration(CXXRecordDecl *Class,
   }
   consumeToken(); // consume ')'
 
-  // Create CXXConstructorDecl
-  CXXConstructorDecl *Ctor = Context.create<CXXConstructorDecl>(Loc, Class, Params, nullptr, false);
-  Actions.ActOnCXXConstructorDecl(Ctor);
+  // Create CXXConstructorDecl via Sema
+  CXXConstructorDecl *Ctor = llvm::cast<CXXConstructorDecl>(
+      Actions.ActOnCXXConstructorDeclFactory(Loc, Class, Params, nullptr, false).get());
 
   // Parse member initializer list (if present)
   if (Tok.is(TokenKind::colon)) {
@@ -851,9 +851,9 @@ CXXDestructorDecl *Parser::parseDestructorDeclaration(CXXRecordDecl *Class,
     Body = parseCompoundStatement();
   }
 
-  // Create CXXDestructorDecl
-  CXXDestructorDecl *Dtor = Context.create<CXXDestructorDecl>(Loc, Class, Body);
-  Actions.ActOnCXXDestructorDecl(Dtor);
+  // Create CXXDestructorDecl via Sema
+  CXXDestructorDecl *Dtor = llvm::cast<CXXDestructorDecl>(
+      Actions.ActOnCXXDestructorDeclFactory(Loc, Class, Body).get());
 
   // Add destructor to current scope
   if (CurrentScope) {
@@ -1013,27 +1013,9 @@ FriendDecl *Parser::parseFriendDeclaration(CXXRecordDecl *Class) {
     SourceLocation TypeNameLoc = Tok.getLocation();
     consumeToken();
 
-    // Look up or create the friend type
-    QualType FriendType;
-    if (CurrentScope) {
-      if (NamedDecl *Found = CurrentScope->lookup(TypeName)) {
-        if (auto *TD = llvm::dyn_cast<TypeDecl>(Found)) {
-          FriendType = Context.getTypeDeclType(TD);
-        }
-      }
-    }
-    
-    // If not found, create a forward declaration
-    if (FriendType.isNull()) {
-      // Create a forward declaration for the friend class
-      RecordDecl *ForwardDecl = Context.create<RecordDecl>(
-          TypeNameLoc, TypeName, TagDecl::TK_struct);
-      FriendType = Context.getTypeDeclType(ForwardDecl);
-    }
-    
-    FriendDecl *FD = Context.create<FriendDecl>(FriendLoc, nullptr, FriendType, true);
-    Actions.ActOnFriendDecl(FD);
-    Actions.ActOnFriendDecl(FD);
+    // Create friend type declaration via Sema (handles type lookup + forward decl)
+    FriendDecl *FD = llvm::cast<FriendDecl>(
+        Actions.ActOnFriendTypeDecl(FriendLoc, TypeName, TypeNameLoc).get());
 
     // Expect semicolon
     if (!Tok.is(TokenKind::semicolon)) {
@@ -1102,11 +1084,9 @@ FriendDecl *Parser::parseFriendDeclaration(CXXRecordDecl *Class) {
   }
   consumeToken();
 
-  // Create a FunctionDecl for the friend function
-  FunctionDecl *FriendFunc = Context.create<FunctionDecl>(NameLoc, Name, Type, Params, nullptr);
-
-  // Create FriendDecl
-  return Context.create<FriendDecl>(FriendLoc, FriendFunc, QualType(), false);
+  // Create friend function declaration via Sema
+  return llvm::cast<FriendDecl>(
+      Actions.ActOnFriendFunctionDecl(FriendLoc, NameLoc, Name, Type, Params).get());
 }
 
 } // namespace blocktype

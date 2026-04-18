@@ -279,7 +279,7 @@ Stmt *Parser::parseLabelStatement() {
   // Parse the sub-statement
   Stmt *SubStmt = parseStatement();
   if (!SubStmt) {
-    SubStmt = Context.create<NullStmt>(LabelLoc);
+    SubStmt = Actions.ActOnNullStmt(LabelLoc).get();
   }
 
   // Create label statement via Sema
@@ -308,7 +308,7 @@ Stmt *Parser::parseCaseStatement() {
   // Parse the sub-statement
   Stmt *SubStmt = parseStatement();
   if (!SubStmt) {
-    SubStmt = Context.create<NullStmt>(CaseLoc);
+    SubStmt = Actions.ActOnNullStmt(CaseLoc).get();
   }
 
   return Actions.ActOnCaseStmt(CaseVal, SubStmt, CaseLoc).get();
@@ -329,7 +329,7 @@ Stmt *Parser::parseDefaultStatement() {
   // Parse the sub-statement
   Stmt *SubStmt = parseStatement();
   if (!SubStmt) {
-    SubStmt = Context.create<NullStmt>(DefaultLoc);
+    SubStmt = Actions.ActOnNullStmt(DefaultLoc).get();
   }
 
   return Actions.ActOnDefaultStmt(SubStmt, DefaultLoc).get();
@@ -378,7 +378,7 @@ Stmt *Parser::parseGotoStatement() {
     emitError(DiagID::err_expected_identifier);
     skipUntil({TokenKind::semicolon});
     tryConsumeToken(TokenKind::semicolon);
-    return Context.create<NullStmt>(GotoLoc);
+    return Actions.ActOnNullStmt(GotoLoc).get();
   }
 
   StringRef LabelName = Tok.getText();
@@ -419,7 +419,7 @@ Stmt *Parser::parseIfStatement() {
     // Parse condition (only for regular if)
     if (!tryConsumeToken(TokenKind::l_paren)) {
       emitError(DiagID::err_expected_lparen);
-      return Context.create<NullStmt>(IfLoc);
+      return Actions.ActOnNullStmt(IfLoc).get();
     }
 
     Cond = parseExpression();
@@ -436,7 +436,7 @@ Stmt *Parser::parseIfStatement() {
   // Parse then statement
   Stmt *ThenStmt = parseStatement();
   if (!ThenStmt) {
-    ThenStmt = Context.create<NullStmt>(IfLoc);
+    ThenStmt = Actions.ActOnNullStmt(IfLoc).get();
   }
 
   // Parse optional else statement
@@ -445,7 +445,7 @@ Stmt *Parser::parseIfStatement() {
     consumeToken(); // consume 'else'
     ElseStmt = parseStatement();
     if (!ElseStmt) {
-      ElseStmt = Context.create<NullStmt>(IfLoc);
+      ElseStmt = Actions.ActOnNullStmt(IfLoc).get();
     }
   }
 
@@ -464,7 +464,7 @@ Stmt *Parser::parseSwitchStatement() {
   // Parse condition
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(SwitchLoc);
+    return Actions.ActOnNullStmt(SwitchLoc).get();
   }
 
   Expr *Cond = parseExpression();
@@ -480,7 +480,7 @@ Stmt *Parser::parseSwitchStatement() {
   // Parse body
   Stmt *Body = parseStatement();
   if (!Body) {
-    Body = Context.create<NullStmt>(SwitchLoc);
+    Body = Actions.ActOnNullStmt(SwitchLoc).get();
   }
 
   return Actions.ActOnSwitchStmt(Cond, Body, SwitchLoc).get();
@@ -497,7 +497,7 @@ Stmt *Parser::parseWhileStatement() {
   // Parse condition
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(WhileLoc);
+    return Actions.ActOnNullStmt(WhileLoc).get();
   }
 
   Expr *Cond = parseExpression();
@@ -513,7 +513,7 @@ Stmt *Parser::parseWhileStatement() {
   // Parse body
   Stmt *Body = parseStatement();
   if (!Body) {
-    Body = Context.create<NullStmt>(WhileLoc);
+    Body = Actions.ActOnNullStmt(WhileLoc).get();
   }
 
   return Actions.ActOnWhileStmt(Cond, Body, WhileLoc).get();
@@ -530,19 +530,19 @@ Stmt *Parser::parseDoStatement() {
   // Parse body
   Stmt *Body = parseStatement();
   if (!Body) {
-    Body = Context.create<NullStmt>(DoLoc);
+    Body = Actions.ActOnNullStmt(DoLoc).get();
   }
 
   // Parse 'while'
   if (!tryConsumeToken(TokenKind::kw_while)) {
     emitError(DiagID::err_expected);
-    return Context.create<DoStmt>(DoLoc, Body, nullptr);
+    return Actions.ActOnDoStmt(nullptr, Body, DoLoc).get();
   }
 
   // Parse condition
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<DoStmt>(DoLoc, Body, nullptr);
+    return Actions.ActOnDoStmt(nullptr, Body, DoLoc).get();
   }
 
   Expr *Cond = parseExpression();
@@ -571,7 +571,7 @@ Stmt *Parser::parseForStatement() {
 
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(ForLoc);
+    return Actions.ActOnNullStmt(ForLoc).get();
   }
 
   // Check for range-based for: for (decl : range)
@@ -636,7 +636,7 @@ Stmt *Parser::parseForStatement() {
     // Consume ':'
     if (!tryConsumeToken(TokenKind::colon)) {
       emitError(DiagID::err_expected);
-      return Context.create<NullStmt>(ForLoc);
+      return Actions.ActOnNullStmt(ForLoc).get();
     }
 
     // Parse range expression
@@ -652,14 +652,11 @@ Stmt *Parser::parseForStatement() {
     // Parse body
     Stmt *Body = parseStatement();
     if (!Body) {
-      Body = Context.create<NullStmt>(ForLoc);
+      Body = Actions.ActOnNullStmt(ForLoc).get();
     }
 
-    // Create range variable declaration (Phase 2D will migrate VarDecl)
-    VarDecl *RangeVar = Context.create<VarDecl>(VarLoc, VarName, VarType, nullptr);
-
-    // Create CXXForRangeStmt
-    return Actions.ActOnCXXForRangeStmt(ForLoc, RangeVar, Range, Body).get();
+    // Create CXXForRangeStmt (VarDecl created internally by Sema)
+    return Actions.ActOnCXXForRangeStmt(ForLoc, VarLoc, VarName, VarType, Range, Body).get();
   }
 
   // Parse traditional for loop
@@ -704,7 +701,7 @@ Stmt *Parser::parseForStatement() {
   // Parse body
   Stmt *Body = parseStatement();
   if (!Body) {
-    Body = Context.create<NullStmt>(ForLoc);
+    Body = Actions.ActOnNullStmt(ForLoc).get();
   }
 
   return Actions.ActOnForStmt(Init, Cond, Inc, Body, ForLoc).get();
@@ -720,7 +717,7 @@ Stmt *Parser::parseCXXForRangeStatement() {
 
   if (!tryConsumeToken(TokenKind::l_paren)) {
     emitError(DiagID::err_expected_lparen);
-    return Context.create<NullStmt>(ForLoc);
+    return Actions.ActOnNullStmt(ForLoc).get();
   }
 
   // Parse range declaration
@@ -743,7 +740,7 @@ Stmt *Parser::parseCXXForRangeStatement() {
     emitError(DiagID::err_expected_identifier);
     skipUntil({TokenKind::r_paren});
     tryConsumeToken(TokenKind::r_paren);
-    return Context.create<NullStmt>(ForLoc);
+    return Actions.ActOnNullStmt(ForLoc).get();
   }
 
   SourceLocation VarLoc = Tok.getLocation();
@@ -755,7 +752,7 @@ Stmt *Parser::parseCXXForRangeStatement() {
     emitError(DiagID::err_expected);
     skipUntil({TokenKind::r_paren});
     tryConsumeToken(TokenKind::r_paren);
-    return Context.create<NullStmt>(ForLoc);
+    return Actions.ActOnNullStmt(ForLoc).get();
   }
 
   // Parse range expression
@@ -771,14 +768,11 @@ Stmt *Parser::parseCXXForRangeStatement() {
   // Parse body
   Stmt *Body = parseStatement();
   if (!Body) {
-    Body = Context.create<NullStmt>(ForLoc);
+    Body = Actions.ActOnNullStmt(ForLoc).get();
   }
 
-  // Create range variable declaration (Phase 2D will migrate VarDecl)
-  VarDecl *RangeVar = Context.create<VarDecl>(VarLoc, VarName, VarType, nullptr);
-
-  // Create CXXForRangeStmt
-  return Actions.ActOnCXXForRangeStmt(ForLoc, RangeVar, Range, Body).get();
+  // Create CXXForRangeStmt (VarDecl created internally by Sema)
+  return Actions.ActOnCXXForRangeStmt(ForLoc, VarLoc, VarName, VarType, Range, Body).get();
 }
 
 } // namespace blocktype

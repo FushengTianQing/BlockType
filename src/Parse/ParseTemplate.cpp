@@ -55,7 +55,8 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
 
     // Create a TemplateDecl for the instantiation
     // Note: In a real compiler, this would be marked as an explicit instantiation
-    TemplateDecl *Template = Context.create<TemplateDecl>(TemplateLoc, "", InstantiatedDecl);
+    TemplateDecl *Template = llvm::cast<TemplateDecl>(
+        Actions.ActOnTemplateDeclFactory(TemplateLoc, "", InstantiatedDecl).get());
     return Template;
   }
 
@@ -90,16 +91,15 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       }
       
       if (PrimaryTemplate) {
-        // Create a proper ClassTemplateSpecializationDecl
-        // using the template arguments parsed from the class name
-        auto *Spec = Context.create<ClassTemplateSpecializationDecl>(
-            ClassDecl->getLocation(), ClassDecl->getName(),
-            PrimaryTemplate, SpecTemplateArgs, true);
-        // Add specialization to the primary template
-        PrimaryTemplate->addSpecialization(Spec);
-        Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), Spec);
+        // Create a proper ClassTemplateSpecializationDecl via Sema
+        auto *Spec = llvm::cast<ClassTemplateSpecializationDecl>(
+            Actions.ActOnClassTemplateSpecDecl(ClassDecl->getLocation(),
+                ClassDecl->getName(), PrimaryTemplate, SpecTemplateArgs, true).get());
+        Template = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), Spec).get());
       } else {
-        Template = Context.create<TemplateDecl>(TemplateLoc, ClassDecl->getName(), SpecializedDecl);
+        Template = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), SpecializedDecl).get());
       }
     } else if (auto *VD = llvm::dyn_cast<VarDecl>(SpecializedDecl)) {
       // Variable template specialization
@@ -116,14 +116,14 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       }
       
       if (PrimaryTemplate) {
-        auto *Spec = Context.create<VarTemplateSpecializationDecl>(
-            VD->getLocation(), VD->getName(), VD->getType(),
-            PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(),
-            VD->getInit(), true);
-        PrimaryTemplate->addSpecialization(Spec);
-        Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), Spec);
+        auto *Spec = llvm::cast<VarTemplateSpecializationDecl>(
+            Actions.ActOnVarTemplateSpecDecl(VD->getLocation(), VD->getName(), VD->getType(),
+                PrimaryTemplate, llvm::ArrayRef<TemplateArgument>(), VD->getInit(), true).get());
+        Template = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateLoc, VD->getName(), Spec).get());
       } else {
-        Template = Context.create<TemplateDecl>(TemplateLoc, VD->getName(), SpecializedDecl);
+        Template = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateLoc, VD->getName(), SpecializedDecl).get());
       }
     } else if (auto *FuncDecl = llvm::dyn_cast<FunctionDecl>(SpecializedDecl)) {
       // Function template specialization
@@ -135,14 +135,16 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       }
       
       if (PrimaryTemplate) {
-        Template = Context.create<FunctionTemplateDecl>(
-            TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+        Template = llvm::cast<FunctionTemplateDecl>(
+            Actions.ActOnFunctionTemplateDeclFactory(TemplateLoc, FuncDecl->getName(), SpecializedDecl).get());
       } else {
-        Template = Context.create<TemplateDecl>(TemplateLoc, FuncDecl->getName(), SpecializedDecl);
+        Template = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateLoc, FuncDecl->getName(), SpecializedDecl).get());
       }
     } else {
       // Fallback for other types
-      Template = Context.create<TemplateDecl>(TemplateLoc, "", SpecializedDecl);
+      Template = llvm::cast<TemplateDecl>(
+          Actions.ActOnTemplateDeclFactory(TemplateLoc, "", SpecializedDecl).get());
     }
     
     return Template;
@@ -198,12 +200,10 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   
   if (auto *FuncDecl = llvm::dyn_cast<FunctionDecl>(TemplatedDecl)) {
     // Function template
-    Template = Context.create<FunctionTemplateDecl>(TemplateLoc, FuncDecl->getName(), TemplatedDecl);
+    Template = llvm::cast<FunctionTemplateDecl>(
+        Actions.ActOnFunctionTemplateDeclFactory(TemplateLoc, FuncDecl->getName(), TemplatedDecl).get());
   } else if (auto *ClassDecl = llvm::dyn_cast<CXXRecordDecl>(TemplatedDecl)) {
-    // Check if this is a partial specialization:
-    // A partial specialization occurs when a class with the same name as an
-    // existing class template is being redeclared with template parameters.
-    // e.g., template<typename T> class Vector<T*> { ... };
+    // Check if this is a partial specialization
     bool IsPartialSpec = false;
     ClassTemplateDecl *PrimaryTemplate = nullptr;
     
@@ -218,24 +218,24 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     
     if (IsPartialSpec && PrimaryTemplate) {
       // Class template partial specialization
-      auto *PartialSpec = Context.create<ClassTemplatePartialSpecializationDecl>(
-          ClassDecl->getLocation(), ClassDecl->getName(),
-          PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>());
-      PrimaryTemplate->addSpecialization(PartialSpec);
+      auto *PartialSpec = llvm::cast<ClassTemplatePartialSpecializationDecl>(
+          Actions.ActOnClassTemplatePartialSpecDecl(ClassDecl->getLocation(),
+              ClassDecl->getName(), PrimaryTemplate,
+              llvm::ArrayRef<TemplateArgument>()).get());
       
-      // Create TemplateParameterList for the partial specialization
       auto *PartialTPL = new TemplateParameterList(
           TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
       PartialSpec->setTemplateParameterList(PartialTPL);
       
-      // Return a wrapper TemplateDecl for the partial specialization
-      Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), PartialSpec);
+      Template = llvm::cast<ClassTemplateDecl>(
+          Actions.ActOnClassTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), PartialSpec).get());
       popScope();
       return Template;
     }
     
     // Regular class template
-    Template = Context.create<ClassTemplateDecl>(TemplateLoc, ClassDecl->getName(), TemplatedDecl);
+    Template = llvm::cast<ClassTemplateDecl>(
+        Actions.ActOnClassTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), TemplatedDecl).get());
   } else if (auto *VD = llvm::dyn_cast<VarDecl>(TemplatedDecl)) {
     // Check for variable template partial specialization
     bool IsPartialSpec = false;
@@ -251,29 +251,32 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     }
     
     if (IsPartialSpec && PrimaryTemplate) {
-      auto *PartialSpec = Context.create<VarTemplatePartialSpecializationDecl>(
-          VD->getLocation(), VD->getName(), VD->getType(),
-          PrimaryTemplate, /*Args=*/llvm::ArrayRef<TemplateArgument>(),
-          VD->getInit());
-      PrimaryTemplate->addSpecialization(PartialSpec);
+      auto *PartialSpec = llvm::cast<VarTemplatePartialSpecializationDecl>(
+          Actions.ActOnVarTemplatePartialSpecDecl(VD->getLocation(), VD->getName(),
+              VD->getType(), PrimaryTemplate,
+              llvm::ArrayRef<TemplateArgument>(), VD->getInit()).get());
       
       auto *PartialTPL = new TemplateParameterList(
           TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
       PartialSpec->setTemplateParameterList(PartialTPL);
       
-      Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), PartialSpec);
+      Template = llvm::cast<VarTemplateDecl>(
+          Actions.ActOnVarTemplateDeclFactory(TemplateLoc, VD->getName(), PartialSpec).get());
       popScope();
       return Template;
     }
     
     // Variable template
-    Template = Context.create<VarTemplateDecl>(TemplateLoc, VD->getName(), TemplatedDecl);
+    Template = llvm::cast<VarTemplateDecl>(
+        Actions.ActOnVarTemplateDeclFactory(TemplateLoc, VD->getName(), TemplatedDecl).get());
   } else if (auto *TAD = llvm::dyn_cast<TypeAliasDecl>(TemplatedDecl)) {
     // Type alias template
-    Template = Context.create<TypeAliasTemplateDecl>(TemplateLoc, TAD->getName(), TemplatedDecl);
+    Template = llvm::cast<TypeAliasTemplateDecl>(
+        Actions.ActOnTypeAliasTemplateDeclFactory(TemplateLoc, TAD->getName(), TemplatedDecl).get());
   } else {
-    // Fallback for other types (e.g., ConceptDecl already wraps itself)
-    Template = Context.create<TemplateDecl>(TemplateLoc, "", TemplatedDecl);
+    // Fallback for other types
+    Template = llvm::cast<TemplateDecl>(
+        Actions.ActOnTemplateDeclFactory(TemplateLoc, "", TemplatedDecl).get());
   }
 
   // Create TemplateParameterList and assign it to the template
@@ -353,8 +356,8 @@ NamedDecl *Parser::parseTemplateParameter() {
 
     // Create a TemplateTypeParmDecl with the constraint info stored in the name
     // (In a full implementation, we'd store the constraint expression)
-    TemplateTypeParmDecl *Param = Context.create<TemplateTypeParmDecl>(
-        NameLoc, Name, 0, 0, IsParameterPack, false);
+    TemplateTypeParmDecl *Param = llvm::cast<TemplateTypeParmDecl>(
+        Actions.ActOnTemplateTypeParmDecl(NameLoc, Name, 0, 0, IsParameterPack, false).get());
 
     // Parse default argument (optional)
     if (Tok.is(TokenKind::equal)) {
@@ -402,8 +405,8 @@ NamedDecl *Parser::parseTemplateParameter() {
         consumeToken();
       }
 
-      TemplateTypeParmDecl *Param = Context.create<TemplateTypeParmDecl>(
-          NameLoc, Name, 0, 0, IsParameterPack, false);
+      TemplateTypeParmDecl *Param = llvm::cast<TemplateTypeParmDecl>(
+          Actions.ActOnTemplateTypeParmDecl(NameLoc, Name, 0, 0, IsParameterPack, false).get());
 
       // Parse default argument (optional)
       if (Tok.is(TokenKind::equal)) {
@@ -453,8 +456,8 @@ TemplateTypeParmDecl *Parser::parseTemplateTypeParameter() {
 
   // Create TemplateTypeParmDecl
   // Use 0 for depth and index (will be set correctly later)
-  TemplateTypeParmDecl *Param = Context.create<TemplateTypeParmDecl>(
-      NameLoc, Name, 0, 0, IsParameterPack, IsTypename);
+  TemplateTypeParmDecl *Param = llvm::cast<TemplateTypeParmDecl>(
+      Actions.ActOnTemplateTypeParmDecl(NameLoc, Name, 0, 0, IsParameterPack, IsTypename).get());
 
   // Parse default argument (optional)
   if (Tok.is(TokenKind::equal)) {
@@ -518,8 +521,8 @@ NonTypeTemplateParmDecl *Parser::parseNonTypeTemplateParameter() {
 
   // Create NonTypeTemplateParmDecl
   // Use 0 for depth and index (will be set correctly later)
-  NonTypeTemplateParmDecl *Param = Context.create<NonTypeTemplateParmDecl>(
-      NameLoc, Name, Type, 0, 0, IsParameterPack);
+  NonTypeTemplateParmDecl *Param = llvm::cast<NonTypeTemplateParmDecl>(
+      Actions.ActOnNonTypeTemplateParmDecl(NameLoc, Name, Type, 0, 0, IsParameterPack).get());
 
   // Parse default argument (optional)
   if (Tok.is(TokenKind::equal)) {
@@ -606,8 +609,8 @@ TemplateTemplateParmDecl *Parser::parseTemplateTemplateParameter() {
 
   // Create TemplateTemplateParmDecl
   // Use 0 for depth and index (will be set correctly later)
-  TemplateTemplateParmDecl *Param = Context.create<TemplateTemplateParmDecl>(
-      NameLoc, Name, 0, 0, IsParameterPack);
+  TemplateTemplateParmDecl *Param = llvm::cast<TemplateTemplateParmDecl>(
+      Actions.ActOnTemplateTemplateParmDecl(NameLoc, Name, 0, 0, IsParameterPack).get());
 
   // Set constraint if present
   if (Constraint) {
@@ -643,8 +646,8 @@ TemplateTemplateParmDecl *Parser::parseTemplateTemplateParameter() {
       
       // If not found, create a placeholder TemplateDecl
       if (!DefaultTemplate) {
-        DefaultTemplate = Context.create<TemplateDecl>(
-            TemplateNameLoc, TemplateName, nullptr);
+        DefaultTemplate = llvm::cast<TemplateDecl>(
+            Actions.ActOnTemplateDeclFactory(TemplateNameLoc, TemplateName, nullptr).get());
       }
       
       Param->setDefaultArgument(DefaultTemplate);
@@ -903,14 +906,9 @@ ConceptDecl *Parser::parseConceptDefinition(SourceLocation Loc,
   }
   consumeToken(); // consume ';'
 
-  // Create TemplateDecl for the concept with TemplateParameterList
-  TemplateDecl *Template = Context.create<TemplateDecl>(Loc, ConceptName, nullptr);
-  auto *TPL = new TemplateParameterList(
-      Loc, SourceLocation(), SourceLocation(), TemplateParams);
-  Template->setTemplateParameterList(TPL);
-
-  // Create ConceptDecl
-  ConceptDecl *Concept = Context.create<ConceptDecl>(ConceptNameLoc, ConceptName, Constraint, Template);
+  // Create ConceptDecl via Sema (creates TemplateDecl + ConceptDecl internally)
+  ConceptDecl *Concept = llvm::cast<ConceptDecl>(
+      Actions.ActOnConceptDeclFactory(ConceptNameLoc, ConceptName, Constraint, Loc, TemplateParams).get());
   Actions.ActOnConceptDecl(Concept);
 
   return Concept;

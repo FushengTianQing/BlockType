@@ -249,7 +249,7 @@ Expr *Parser::parseLambdaExpression() {
   SourceLocation LBraceLoc = Tok.getLocation();
   Stmt *Body = parseCompoundStatement();
   if (Body == nullptr) {
-    Body = Context.create<NullStmt>(Tok.getLocation());
+    Body = Actions.ActOnNullStmt(Tok.getLocation()).get();
   }
   SourceLocation RBraceLoc = Tok.getLocation();
 

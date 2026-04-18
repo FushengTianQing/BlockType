@@ -246,6 +246,7 @@ public:
 
   TranslationUnitDecl *getCurTranslationUnitDecl() const { return CurTU; }
   void ActOnTranslationUnit(TranslationUnitDecl *TU);
+  TranslationUnitDecl *ActOnTranslationUnitDecl(SourceLocation Loc);
 
   //===------------------------------------------------------------------===//
   // Declaration handling (ActOnXXX pattern)
@@ -268,6 +269,8 @@ public:
   /// Process an enum constant declaration: evaluate and cache its value.
   /// Per C++ [dcl.enum], enum constant values are evaluated at declaration time.
   DeclResult ActOnEnumConstant(EnumConstantDecl *ECD);
+  DeclResult ActOnEnumConstantDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                           QualType EnumType, Expr *Init);
 
   // Declaration factory methods (Phase 2D)
   StmtResult ActOnDeclStmtFromDecl(Decl *D);
@@ -330,6 +333,36 @@ public:
   void ActOnCXXConstructorDecl(CXXConstructorDecl *CD);
   void ActOnCXXDestructorDecl(CXXDestructorDecl *DD);
   void ActOnFriendDecl(FriendDecl *FD);
+
+  // Class declaration factory methods (Phase 3C)
+  DeclResult ActOnCXXRecordDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                       TagDecl::TagKind Kind);
+  DeclResult ActOnCXXMethodDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                       QualType Type,
+                                       llvm::ArrayRef<ParmVarDecl *> Params,
+                                       CXXRecordDecl *Class, Stmt *Body,
+                                       bool IsStatic, bool IsConst, bool IsVolatile,
+                                       bool IsVirtual, bool IsPureVirtual,
+                                       bool IsOverride, bool IsFinal,
+                                       bool IsDefaulted, bool IsDeleted,
+                                       CXXMethodDecl::RefQualifierKind RefQual,
+                                       bool HasNoexceptSpec, bool NoexceptValue,
+                                       Expr *NoexceptExpr,
+                                       AccessSpecifier Access);
+  DeclResult ActOnCXXConstructorDeclFactory(SourceLocation Loc,
+                                            CXXRecordDecl *Class,
+                                            llvm::ArrayRef<ParmVarDecl *> Params,
+                                            Stmt *Body, bool IsExplicit);
+  DeclResult ActOnCXXDestructorDeclFactory(SourceLocation Loc,
+                                           CXXRecordDecl *Class, Stmt *Body);
+  DeclResult ActOnFriendTypeDecl(SourceLocation FriendLoc,
+                                 llvm::StringRef TypeName,
+                                 SourceLocation TypeNameLoc);
+  DeclResult ActOnFriendFunctionDecl(SourceLocation FriendLoc,
+                                     SourceLocation NameLoc,
+                                     llvm::StringRef Name, QualType Type,
+                                     llvm::ArrayRef<ParmVarDecl *> Params);
+
   DeclResult ActOnFieldDeclFactory(SourceLocation Loc, llvm::StringRef Name,
                                    QualType Type, Expr *BitWidth,
                                    bool IsMutable, Expr *InClassInit,
@@ -337,6 +370,48 @@ public:
   DeclResult ActOnAccessSpecDeclFactory(SourceLocation Loc,
                                         AccessSpecifier Access,
                                         SourceLocation ColonLoc);
+
+  // Template parameter factory methods (Phase 3D)
+  DeclResult ActOnTemplateTypeParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                       unsigned Depth, unsigned Index,
+                                       bool IsParameterPack, bool IsTypename);
+  DeclResult ActOnNonTypeTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                          QualType Type, unsigned Depth,
+                                          unsigned Index, bool IsParameterPack);
+  DeclResult ActOnTemplateTemplateParmDecl(SourceLocation Loc, llvm::StringRef Name,
+                                           unsigned Depth, unsigned Index,
+                                           bool IsParameterPack);
+
+  // Template wrapper factory methods (Phase 3E)
+  DeclResult ActOnTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                      Decl *TemplatedDecl);
+  DeclResult ActOnClassTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                           Decl *TemplatedDecl);
+  DeclResult ActOnFunctionTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                              Decl *TemplatedDecl);
+  DeclResult ActOnVarTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                         Decl *TemplatedDecl);
+  DeclResult ActOnTypeAliasTemplateDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                               Decl *TemplatedDecl);
+  DeclResult ActOnClassTemplateSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                        ClassTemplateDecl *PrimaryTemplate,
+                                        llvm::ArrayRef<TemplateArgument> Args,
+                                        bool IsExplicit);
+  DeclResult ActOnVarTemplateSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                      QualType Type, VarTemplateDecl *PrimaryTemplate,
+                                      llvm::ArrayRef<TemplateArgument> Args,
+                                      Expr *Init, bool IsExplicit);
+  DeclResult ActOnClassTemplatePartialSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                               ClassTemplateDecl *PrimaryTemplate,
+                                               llvm::ArrayRef<TemplateArgument> Args);
+  DeclResult ActOnVarTemplatePartialSpecDecl(SourceLocation Loc, llvm::StringRef Name,
+                                             QualType Type,
+                                             VarTemplateDecl *PrimaryTemplate,
+                                             llvm::ArrayRef<TemplateArgument> Args,
+                                             Expr *Init);
+  DeclResult ActOnConceptDeclFactory(SourceLocation Loc, llvm::StringRef Name,
+                                     Expr *Constraint, SourceLocation TemplateLoc,
+                                     llvm::ArrayRef<NamedDecl *> TemplateParams);
 
   //===------------------------------------------------------------------===//
   // Expression handling
@@ -475,8 +550,9 @@ public:
                             Stmt *SubStmt);
 
   // C++ statement extensions (Phase 2B)
-  StmtResult ActOnCXXForRangeStmt(SourceLocation ForLoc, VarDecl *RangeVar,
-                                  Expr *Range, Stmt *Body);
+  StmtResult ActOnCXXForRangeStmt(SourceLocation ForLoc,
+                                  SourceLocation VarLoc, llvm::StringRef VarName,
+                                  QualType VarType, Expr *Range, Stmt *Body);
   StmtResult ActOnCXXTryStmt(SourceLocation TryLoc, Stmt *TryBlock,
                              llvm::ArrayRef<Stmt *> Handlers);
   StmtResult ActOnCXXCatchStmt(SourceLocation CatchLoc, VarDecl *ExceptionDecl,

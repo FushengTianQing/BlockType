@@ -36,8 +36,7 @@ TranslationUnitDecl *Parser::parseTranslationUnit() {
   
   // Create TranslationUnitDecl
   SourceLocation StartLoc = Tok.getLocation();
-  TranslationUnitDecl *TU = Context.create<TranslationUnitDecl>(StartLoc);
-  Actions.ActOnTranslationUnit(TU);
+  TranslationUnitDecl *TU = Actions.ActOnTranslationUnitDecl(StartLoc);
   
   // Parse declarations
   while (!Tok.is(TokenKind::eof)) {
