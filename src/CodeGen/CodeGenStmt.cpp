@@ -10,6 +10,7 @@
 #include "blocktype/CodeGen/CodeGenModule.h"
 #include "blocktype/CodeGen/CodeGenTypes.h"
 #include "blocktype/CodeGen/CodeGenConstant.h"
+#include "blocktype/CodeGen/CGDebugInfo.h"
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Decl.h"
@@ -470,6 +471,11 @@ void CodeGenFunction::EmitDeclStmt(DeclStmt *DeclarationStatement) {
       }
 
       setLocalDecl(VariableDecl, Alloca);
+
+      // 生成局部变量调试信息
+      if (CGM.getDebugInfo().isInitialized()) {
+        CGM.getDebugInfo().EmitLocalVarDI(VariableDecl, Alloca);
+      }
 
       // 初始化
       if (Expr *Initializer = VariableDecl->getInit()) {

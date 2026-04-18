@@ -315,6 +315,9 @@ llvm::DIType *CGDebugInfo::GetRecordDIType(const RecordType *RT) {
       llvm::DINode::FlagPublic, nullptr, ElemArray);
   DIB->replaceTemporary(llvm::TempMDNode(FwdDecl), CompleteTy);
 
+  // 更新缓存：指向完整类型而非前向声明
+  RecordDIcache[RD] = CompleteTy;
+
   return CompleteTy;
 }
 
@@ -482,6 +485,8 @@ void CGDebugInfo::EmitParamDI(ParmVarDecl *PVD, llvm::AllocaInst *Alloca,
 
 void CGDebugInfo::setLocation(SourceLocation Loc) {
   if (!Initialized || !Loc.isValid()) return;
+  // 注意：完整的实现需要在 IRBuilder 上设置 CurrentDebugLocation
+  // 但 CGDebugInfo 不直接持有 IRBuilder，需要通过 CodeGenFunction 集成
 }
 
 void CGDebugInfo::setFunctionLocation(llvm::Function *Fn, FunctionDecl *FD) {

@@ -10,6 +10,7 @@
 #include "blocktype/CodeGen/CodeGenModule.h"
 #include "blocktype/CodeGen/CodeGenTypes.h"
 #include "blocktype/CodeGen/CodeGenConstant.h"
+#include "blocktype/CodeGen/CGDebugInfo.h"
 #include "blocktype/AST/ASTNode.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Stmt.h"
@@ -75,6 +76,11 @@ void CodeGenFunction::EmitFunctionBody(FunctionDecl *FunctionDecl,
           CreateAlloca(ParamDecl->getType(), ParamDecl->getName());
       Builder.CreateStore(&Arg, AllocaInst);
       setLocalDecl(ParamDecl, AllocaInst);
+
+      // 生成参数调试信息
+      if (CGM.getDebugInfo().isInitialized()) {
+        CGM.getDebugInfo().EmitParamDI(ParamDecl, AllocaInst, ArgIndex);
+      }
     }
     ++ArgIndex;
   }
@@ -99,6 +105,9 @@ void CodeGenFunction::EmitFunctionBody(FunctionDecl *FunctionDecl,
       Builder.CreateRetVoid();
     }
   }
+
+  // 清除调试信息的函数作用域
+  CGM.getDebugInfo().clearCurrentFnSP();
 }
 
 //===----------------------------------------------------------------------===//
