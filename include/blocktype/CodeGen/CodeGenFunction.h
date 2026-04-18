@@ -233,6 +233,11 @@ private:
   /// 将值转换为 i1 布尔值（用于 if/while/for 条件判断）
   llvm::Value *EmitConversionToBool(llvm::Value *SrcValue, QualType SrcType);
 
+  /// 隐式标量类型转换：将 Src 从 SrcType 转换为 DstType
+  /// 用于函数调用时实参到形参的隐式转换
+  llvm::Value *EmitScalarConversion(llvm::Value *Src, QualType SrcType,
+                                    QualType DstType);
+
   /// 生成条件变量声明（if/switch/while/for 的 CondVar）
   void EmitCondVarDecl(VarDecl *CondVariable);
 

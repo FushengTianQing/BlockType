@@ -599,6 +599,59 @@ llvm::Value *CodeGenFunction::EmitIncDec(UnaryOperator *UnaryOp) {
 // Task 6.2.3 — 函数调用
 //===----------------------------------------------------------------------===//
 
+llvm::Value *
+CodeGenFunction::EmitScalarConversion(llvm::Value *Src, QualType SrcType,
+                                      QualType DstType) {
+  if (!Src || SrcType.isNull() || DstType.isNull()) {
+    return Src;
+  }
+
+  llvm::Type *DstLLVMTy = CGM.getTypes().ConvertType(DstType);
+  if (!DstLLVMTy) {
+    return Src;
+  }
+
+  // 类型相同，无需转换
+  if (Src->getType() == DstLLVMTy) {
+    return Src;
+  }
+
+  // 整数 → 整数
+  if (Src->getType()->isIntegerTy() && DstLLVMTy->isIntegerTy()) {
+    return Builder.CreateIntCast(Src, DstLLVMTy, isSignedType(SrcType),
+                                 "argconv");
+  }
+
+  // 浮点 → 浮点
+  if (Src->getType()->isFloatingPointTy() && DstLLVMTy->isFloatingPointTy()) {
+    return Builder.CreateFPCast(Src, DstLLVMTy, "argconv");
+  }
+
+  // 整数 → 浮点
+  if (Src->getType()->isIntegerTy() && DstLLVMTy->isFloatingPointTy()) {
+    if (isSignedType(SrcType)) {
+      return Builder.CreateSIToFP(Src, DstLLVMTy, "argconv");
+    }
+    return Builder.CreateUIToFP(Src, DstLLVMTy, "argconv");
+  }
+
+  // 浮点 → 整数
+  if (Src->getType()->isFloatingPointTy() && DstLLVMTy->isIntegerTy()) {
+    if (isSignedType(DstType)) {
+      return Builder.CreateFPToSI(Src, DstLLVMTy, "argconv");
+    }
+    return Builder.CreateFPToUI(Src, DstLLVMTy, "argconv");
+  }
+
+  // 指针 → 指针
+  if (Src->getType()->isPointerTy() && DstLLVMTy->isPointerTy()) {
+    return Builder.CreateBitCast(Src, DstLLVMTy, "argconv");
+  }
+
+  // 其他情况：保守返回原值
+  return Src;
+}
+
 llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
   if (!CallExpression) {
     return nullptr;
@@ -632,22 +685,31 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
     if (!MemberDecl->isStatic()) {
       // 从 callee 表达式获取 this
       if (auto *MemberExpression = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
-        llvm::Value *BaseValue = EmitExpr(MemberExpression->getBase());
+        llvm::Value *BaseValue = nullptr;
+        if (MemberExpression->isArrow()) {
+          // ptr->method() → base 已经是指针
+          BaseValue = EmitExpr(MemberExpression->getBase());
+        } else {
+          // obj.method() → base 是对象值，需要取地址得到 this 指针
+          BaseValue = EmitLValue(MemberExpression->getBase());
+        }
         if (BaseValue) {
-          if (!MemberExpression->isArrow()) {
-            // obj.method() → Base 是对象值，需要取地址
-            // 简化：假设 Base 已经是指针
-          }
           Arguments.push_back(BaseValue);
         }
       }
 
       // 虚函数调用：使用 vtable 进行间接调用
       if (MemberDecl->isVirtual() && !Arguments.empty()) {
-        // 收集非 this 参数
+        // 收集非 this 参数（带隐式类型转换）
         llvm::SmallVector<llvm::Value *, 8> NonThisArgs;
-        for (Expr *Argument : CallExpression->getArgs()) {
-          llvm::Value *ArgValue = EmitExpr(Argument);
+        auto Params = MemberDecl->getParams();
+        for (unsigned I = 0; I < CallExpression->getNumArgs(); ++I) {
+          Expr *ArgExpr = CallExpression->getArgs()[I];
+          llvm::Value *ArgValue = EmitExpr(ArgExpr);
+          if (ArgValue && I < Params.size()) {
+            ArgValue = EmitScalarConversion(ArgValue, ArgExpr->getType(),
+                                            Params[I]->getType());
+          }
           if (ArgValue) {
             NonThisArgs.push_back(ArgValue);
           }
@@ -666,8 +728,19 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
     }
   }
 
-  for (Expr *Argument : CallExpression->getArgs()) {
-    llvm::Value *ArgValue = EmitExpr(Argument);
+  // 非虚函数参数（带隐式类型转换）
+  auto Params = CalleeDecl->getParams();
+  bool IsNonStaticMember =
+      llvm::isa<CXXMethodDecl>(CalleeDecl) &&
+      !llvm::cast<CXXMethodDecl>(CalleeDecl)->isStatic();
+  unsigned ParamOffset = IsNonStaticMember ? 1 : 0;
+  for (unsigned I = 0; I < CallExpression->getNumArgs(); ++I) {
+    Expr *ArgExpr = CallExpression->getArgs()[I];
+    llvm::Value *ArgValue = EmitExpr(ArgExpr);
+    if (ArgValue && I < Params.size()) {
+      ArgValue = EmitScalarConversion(ArgValue, ArgExpr->getType(),
+                                      Params[I]->getType());
+    }
     if (ArgValue) {
       Arguments.push_back(ArgValue);
     }

@@ -9,3 +9,61 @@ int call_test() {
 // CHECK: define {{.*}} @add
 // CHECK: define {{.*}} @call_test
 // CHECK: call {{.*}} @add
+
+// Member function call via dot syntax: obj.method()
+class Counter {
+  int val;
+public:
+  int get() { return val; }
+  void set(int v) { val = v; }
+};
+
+int dot_method_call() {
+  Counter c;
+  c.set(42);
+  return c.get();
+}
+// CHECK: define {{.*}} @dot_method_call
+// CHECK: alloca %class.Counter
+// CHECK: call {{.*}} @Counter_set
+// CHECK: call {{.*}} @Counter_get
+
+// Implicit argument conversion: int → long
+long take_long(long x) { return x; }
+int pass_int_to_long() {
+  int a = 10;
+  return (int)take_long(a);
+}
+// CHECK: define {{.*}} @pass_int_to_long
+// CHECK: call {{.*}} @take_long
+// CHECK: %argconv
+
+// Implicit argument conversion: float → double
+double take_double(double x) { return x; }
+float pass_float_to_double() {
+  float f = 1.5;
+  return (float)take_double(f);
+}
+// CHECK: define {{.*}} @pass_float_to_double
+// CHECK: call {{.*}} @take_double
+// CHECK: %argconv
+
+// Implicit argument conversion: int → float
+float take_float(float x) { return x; }
+float pass_int_to_float() {
+  int n = 3;
+  return take_float(n);
+}
+// CHECK: define {{.*}} @pass_int_to_float
+// CHECK: call {{.*}} @take_float
+// CHECK: %argconv
+
+// Implicit argument conversion: short → int (widening)
+int take_int(int x) { return x; }
+short pass_short_to_int() {
+  short s = 5;
+  return (short)take_int(s);
+}
+// CHECK: define {{.*}} @pass_short_to_int
+// CHECK: call {{.*}} @take_int
+// CHECK: %argconv

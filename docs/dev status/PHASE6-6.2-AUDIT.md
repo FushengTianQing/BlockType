@@ -89,7 +89,26 @@ Audit Findings
 
 12.⚠️ Spaceship (<=> , C++20) — 未实现
 --BinaryOpKind::Spaceship 存在但 EmitBinaryOperator 未处理（P2）
+开发文档方案 vs 实际实现
 
+设计思路	
+文档方案 EmitExprForStore：独立接口，EmitExpr 求值 → EmitExprForStore 包装 store	
+实际实现 EmitAssignment：一体化，EmitAssignment 内部直接 EmitExpr(RHS) + CreateStore
+
+职责边界	
+文档方案 EmitExprForStore：EmitExpr 只求值，store 逻辑由专用接口负责	
+实际实现 EmitAssignment：EmitExpr 只求值，store 由赋值/复合赋值函数各自处理
+
+差距
+接口层次：文档设想 EmitExprForStore 作为 EmitExpr 的 store 变体，用于所有需要"求值+存储"的场景。但实际上只有 EmitAssignment 和 EmitCompoundAssignment 需要 store，两个函数各自处理，逻辑清晰。
+
+重复模式：store-back 逻辑在 EmitAssignment（第 199-229 行）和 EmitCompoundAssignment（第 302-316 行）中有相似的三级分派（局部变量 → 全局变量 → EmitLValue）。这是唯一可提取的共性代码。
+
+风险评估
+功能正确性：无风险。store 逻辑完整覆盖局部/全局/成员/数组下标
+可维护性：低风险。两个函数的 store 逻辑如果未来需要扩展（如 volatile、原子操作），需要同步修改两处。可提取为一个 StoreToLValue(Expr *LHS, Value *RHS) 内部辅助方法
+API 一致性：文档接口未被声明。这是 P2 级别的 API 规范问题，不影响功能
+建议：保持现状即可。如果未来 store 逻辑变复杂（volatile/atomic），再提取公共辅助方法。现在不需要为此投入时间。
 ## -----------------------------------------------------------
 
 ## Task 6.2.3 函数调用
@@ -105,17 +124,26 @@ Audit Findings
 3.✅ 参数生成 — 已实现
 --遍历 CallExpr::getArgs() 逐个 EmitExpr
 
-4.⚠️ this 指针对 obj.method() 的处理不完整
---当 !isArrow() 时，Base 是对象值而非指针，需要取地址（代码中有注释但未实现）（P1）
+4.✅ this 指针对 obj.method() 的处理不完整（P1-10 ✅ 已修复）
+--根因：EmitCallExpr 第 635 行使用 EmitExpr(base) 获取 this，对 obj.method() 返回 load 后的结构体值（如 {i32,i32}）
+--但 this 指针应为 %struct*（结构体指针），需要改用 EmitLValue(base) 获取地址
+--修复：按 isArrow() 分支，ptr->method() 使用 EmitExpr(base)，obj.method() 使用 EmitLValue(base)
+--新增 lit 测试覆盖 obj.method() 调用路径
 
-5.⚠️ 未设置调用属性
---文档提到 NoReturn/NoInline 属性，但 EmitCallExpr 未设置（P2）
+5.⚠️ 未设置调用属性（P2）
+--函数级属性（AlwaysInline/DoesNotThrow）已在 GetOrCreateFunctionDecl 中设置
+--调用点属性（NoReturn 等）在 CreateCall 时未设置 — Clang 通过 CallBase::addFnAttr 附加
+--当前不影响正确性，但缺少 [[noreturn]] 优化和调用约定约束
 
-6.⚠️ 未处理隐式参数转换
---参数类型与函数签名不匹配时未插入隐式 cast（P2）
+6.⚠️ 未处理隐式参数转换（P2）
+--第 669-674 行直接 EmitExpr(arg) 加入参数列表，无类型检查
+--如 int→long、float→double 等提升、派生类指针→基类指针转换均未处理
+--风险：当实参类型与形参不匹配时，LLVM 会报类型错误或生成错误的隐式 bitcast
 
-7.⚠️ 未处理变参函数
---未处理 va_list / ... 参数（P2）
+7.⚠️ 未处理变参函数（P2）
+--未处理 va_list / ... 参数 — 没有识别 FunctionDecl::isVariadic()
+--变参调用需要在 CreateCall 时正确处理可变参数部分的类型
+--当前所有测试用例均为固定参数函数
 
 ## -----------------------------------------------------------
 
@@ -338,7 +366,7 @@ Audit Findings
 --EmitMemberExpr 已重写：-> 使用 EmitExpr(base) 获取指针，. 使用 EmitLValue(base) 获取地址
 --GEP 计算后对 rvalue 做 CreateLoad，EmitLValue(MemberExpr) 返回 GEP 地址
 
-## P1 问题（应尽快修复）— 9 个 ✅ 全部已修复
+## P1 问题（应尽快修复）— 10 个 ✅ 全部已修复
 1. ✅ EmitAssignment 中 MemberExpr 赋值路径（已修复）
 2. ✅ EmitCompoundAssignment 不处理全局变量回写（已修复）
 3. ✅ EmitIncDec 不处理全局变量和成员变量（已修复）
@@ -348,12 +376,13 @@ Audit Findings
 7. ✅ EmitLValue(MemberExpr) GEP source type 错误（已修复）
 8. ✅ EmitSwitchStmt case 表达式重复 EmitExpr（已修复 — DenseMap 缓存）
 9. ✅ EmitDeclRefExpr 枚举常量类型硬编码为 i32（已修复 — ConvertType 解析底层类型）
+10. ✅ this 指针对 obj.method() 处理不完整（已修复 — EmitLValue 分支）
 
-## P2 问题（后续改进）— 15 个
+## P2 问题（后续改进）— 15 个（1 个已修复）
 1. 缺少 EmitExprForStore() 接口（文档定义但未实现）
 2. Spaceship (<=>) 运算符未处理
 3. 函数调用属性（NoReturn/NoInline）未设置
-4. 参数隐式类型转换未处理
+4. ✅ 参数隐式类型转换已处理（EmitScalarConversion）
 5. 变参函数未处理
 6. dynamic_cast 运行时检查未实现
 7. new[] / delete[] 未处理
