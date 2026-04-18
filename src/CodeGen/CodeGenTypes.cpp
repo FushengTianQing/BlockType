@@ -313,6 +313,67 @@ llvm::FunctionType *CodeGenTypes::GetFunctionTypeForDecl(FunctionDecl *FD) {
 // 记录类型
 //===----------------------------------------------------------------------===//
 
+bool CodeGenTypes::hasVirtualInHierarchy(CXXRecordDecl *RD) {
+  if (!RD) return false;
+  for (CXXMethodDecl *MD : RD->methods()) {
+    if (MD->isVirtual()) return true;
+  }
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualInHierarchy(BaseRD)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+unsigned CodeGenTypes::collectBaseClassFields(
+    CXXRecordDecl *CXXRD, llvm::SmallVector<llvm::Type *, 16> &FieldTypes) {
+  unsigned Count = 0;
+
+  // 基类自身的 vptr（如果基类有虚函数且无更深的虚基类）
+  bool HasVFunc = false;
+  for (CXXMethodDecl *MD : CXXRD->methods()) {
+    if (MD->isVirtual()) { HasVFunc = true; break; }
+  }
+  bool HasVirtualBase = false;
+  for (const auto &Base : CXXRD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualInHierarchy(BaseRD)) { HasVirtualBase = true; break; }
+      }
+    }
+  }
+  if (HasVFunc && !HasVirtualBase) {
+    FieldTypes.push_back(llvm::PointerType::get(CGM.getLLVMContext(), 0));
+    ++Count;
+  }
+
+  // 递归添加基类的基类字段
+  for (const auto &Base : CXXRD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        Count += collectBaseClassFields(BaseRD, FieldTypes);
+      }
+    }
+  }
+
+  // 添加基类自身字段
+  for (FieldDecl *Field : CXXRD->fields()) {
+    llvm::Type *FT = ConvertType(Field->getType());
+    if (FT) {
+      FieldTypes.push_back(FT);
+      ++Count;
+    }
+  }
+
+  return Count;
+}
+
 llvm::StructType *CodeGenTypes::GetCXXRecordType(CXXRecordDecl *RD) {
   return GetRecordType(RD); // GetRecordType already handles vptr for CXXRecordDecl
 }
@@ -331,22 +392,45 @@ llvm::StructType *CodeGenTypes::GetRecordType(RecordDecl *RD) {
 
   // 收集字段类型
   llvm::SmallVector<llvm::Type *, 16> FieldTypes;
+  unsigned Idx = 0;
 
-  // CXXRecordDecl: 添加 vptr 指针（如果有虚函数）
+  // CXXRecordDecl: 添加 vptr + 基类字段 + 自身字段
   if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RD)) {
-    bool HasVFunc = false;
-    for (CXXMethodDecl *MD : CXXRD->methods()) {
-      if (MD->isVirtual()) { HasVFunc = true; break; }
+    // vptr：当类或其层次结构中有虚函数，且没有直接基类具有虚函数时
+    bool HasVPtr = hasVirtualInHierarchy(CXXRD);
+    bool HasVirtualBase = false;
+    for (const auto &Base : CXXRD->bases()) {
+      QualType BT = Base.getType();
+      if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+        if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+          if (hasVirtualInHierarchy(BaseRD)) { HasVirtualBase = true; break; }
+        }
+      }
     }
-    if (HasVFunc) {
+    if (HasVPtr && !HasVirtualBase) {
       FieldTypes.push_back(llvm::PointerType::get(CGM.getLLVMContext(), 0));
+      ++Idx;
+    }
+
+    // 展平基类字段（递归包含基类的基类）
+    for (const auto &Base : CXXRD->bases()) {
+      QualType BT = Base.getType();
+      if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+        if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+          Idx += collectBaseClassFields(BaseRD, FieldTypes);
+        }
+      }
     }
   }
 
-  // 添加字段
+  // 添加自身字段（并缓存 FieldDecl → GEP 索引映射）
   for (FieldDecl *Field : RD->fields()) {
     llvm::Type *FT = ConvertType(Field->getType());
-    if (FT) FieldTypes.push_back(FT);
+    if (FT) {
+      FieldTypes.push_back(FT);
+      FieldIndexCache[Field] = Idx;
+      ++Idx;
+    }
   }
 
   // 设置结构体内容
@@ -356,28 +440,10 @@ llvm::StructType *CodeGenTypes::GetRecordType(RecordDecl *RD) {
 }
 
 unsigned CodeGenTypes::GetFieldIndex(FieldDecl *FD) {
-  // FieldDecl 没有父记录指针，通过遍历 RecordTypeCache 查找
-  for (auto &[RD, STy] : RecordTypeCache) {
-    unsigned Idx = 0;
-
-    // Skip vptr for CXXRecordDecl with virtual functions
-    if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RD)) {
-      bool HasVFunc = false;
-      for (CXXMethodDecl *MD : CXXRD->methods()) {
-        if (MD->isVirtual()) { HasVFunc = true; break; }
-      }
-      if (HasVFunc) {
-        ++Idx;
-      }
-    }
-
-    for (FieldDecl *F : RD->fields()) {
-      if (F == FD) return Idx;
-      ++Idx;
-    }
-  }
-
-  return 0; // Not found
+  // 直接从缓存获取（在 GetRecordType 中已正确计算）
+  auto It = FieldIndexCache.find(FD);
+  if (It != FieldIndexCache.end()) return It->second;
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//

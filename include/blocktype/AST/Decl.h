@@ -616,6 +616,7 @@ public:
 class CXXCtorInitializer {
   SourceLocation MemberLoc;
   llvm::StringRef MemberName;
+  QualType BaseType; // For base initializers: the base class type
   llvm::SmallVector<Expr *, 4> Args;
   bool IsBaseInitializer;
   bool IsDelegatingInitializer;
@@ -623,12 +624,16 @@ class CXXCtorInitializer {
 public:
   CXXCtorInitializer(SourceLocation Loc, llvm::StringRef Name,
                      llvm::ArrayRef<Expr *> Arguments,
-                     bool IsBase = false, bool IsDelegating = false)
-      : MemberLoc(Loc), MemberName(Name), Args(Arguments.begin(), Arguments.end()),
+                     bool IsBase = false, bool IsDelegating = false,
+                     QualType BaseTy = QualType())
+      : MemberLoc(Loc), MemberName(Name), BaseType(BaseTy),
+        Args(Arguments.begin(), Arguments.end()),
         IsBaseInitializer(IsBase), IsDelegatingInitializer(IsDelegating) {}
 
   SourceLocation getMemberLocation() const { return MemberLoc; }
   llvm::StringRef getMemberName() const { return MemberName; }
+  QualType getBaseType() const { return BaseType; }
+  void setBaseType(QualType T) { BaseType = T; }
   llvm::ArrayRef<Expr *> getArguments() const { return Args; }
   bool isBaseInitializer() const { return IsBaseInitializer; }
   bool isDelegatingInitializer() const { return IsDelegatingInitializer; }

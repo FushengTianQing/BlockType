@@ -85,12 +85,13 @@
    -- 计算整体对齐 OverallAlign = max(所有字段对齐, 基类对齐, vptr对齐)
    -- TotalSize = llvm::alignTo(CurrentOffset, OverallAlign)
 
-6. ⚠️ **类布局与 LLVM StructType 不一致**（P1）
+6. ✅ ~~**类布局与 LLVM StructType 不一致**（P1）~~ — **已修复 (2026-04-18)**
    -- ComputeClassLayout 计算的偏移包含基类子对象空间
-   -- 但 CodeGenTypes::GetRecordType 生成的 StructType 不包含基类子对象的字段
-   -- GetRecordType 只放 vptr + RD->fields()
-   -- 这意味着 GEP 索引与 ComputeClassLayout 的偏移不一致
-   -- **影响：** 基类字段无法通过正确的 GEP 访问（需要 GetRecordType 也包含基类字段）
+   -- **修复：** 重写 `CodeGenTypes::GetRecordType` 递归展平基类字段到派生类 StructType
+   -- **修复：** 新增 `collectBaseClassFields` 方法递归收集基类字段类型（含 vptr）
+   -- **修复：** 新增 `hasVirtualInHierarchy` 静态方法（与 CGCXX 版本一致）
+   -- **修复：** 新增 `FieldIndexCache` 在 GetRecordType 时自动记录每个 FieldDecl 的正确 GEP 索引
+   -- **修复：** 简化 `GetFieldIndex` 直接查表返回
 
 7. ⚠️ **vptr 位置假设始终在索引 0**（P2）
    -- GetRecordType 将 vptr 放在 StructType 的第一个元素
@@ -124,11 +125,12 @@
    -- 遍历 BaseRD->methods() 查找 CXXConstructorDecl
    -- 按参数数量匹配
 
-5. ⚠️ **基类初始化器匹配方式脆弱**（P1）
+5. ✅ ~~**基类初始化器匹配方式脆弱**（P1）~~ — **已修复 (2026-04-18)**
    -- EmitConstructor 中通过 `BaseRD->getName() == BaseName || BaseName.empty()` 匹配
-   -- 当 BaseName 为空或多个基类同名时会错误匹配
-   -- 应改为直接在 CXXCtorInitializer 中存储基类类型信息或 Decl 指针
-   -- **对比 Clang：** Clang 的 CXXCtorInitializer 有 `getBaseClass()` 返回 TypeLoc
+   -- **修复：** 在 `CXXCtorInitializer` 中新增 `BaseType` (QualType) 成员，支持类型匹配
+   -- **修复：** EmitConstructor 优先使用 `Init->getBaseType()` 进行类型匹配（`InitRD == BaseRD`）
+   -- **修复：** BaseType 为空时退化为名称匹配（向后兼容）
+   -- **对比 Clang：** 与 Clang 的 `CXXCtorInitializer::getBaseClass()` 设计一致
 
 6. ⚠️ **构造函数不处理 delegating initializer**（P2）
    -- CXXCtorInitializer::isDelegatingInitializer() 未处理
@@ -142,12 +144,11 @@
    -- FieldDecl::hasInClassInitializer() 检查了但未使用
    -- 应通过 CGF.EmitExpr(FD->getInClassInitializer()) 生成
 
-9. ⚠️ **vptr 初始化时机问题**（P1）
+9. ✅ ~~**vptr 初始化时机问题**（P1）~~ — **已修复 (2026-04-18)**
    -- 当前 Phase 2 在所有基类初始化之后才初始化 vptr
-   -- 但在 Clang 中，vptr 在每个基类构造完成后立即更新
-   -- 当前实现：基类全部初始化 → vptr 初始化 → 成员初始化
-   -- 正确顺序：基类1初始化 → vptr更新 → 基类2初始化 → vptr更新 → ... → 成员初始化
-   -- **影响：** 基类构造函数体中调用虚函数时，vptr 可能指向错误的 vtable
+   -- **修复：** 将 Phase 1 和 Phase 2 交织：每个基类初始化后立即调用 `InitializeVTablePtr`
+   -- **修复：** 正确顺序：基类1初始化 → vptr更新 → 基类2初始化 → vptr更新 → ... → 成员初始化
+   -- **影响：** 基类构造函数体中调用虚函数时，vptr 正确指向派生类 vtable
 
 ---
 
@@ -230,10 +231,9 @@
 1. ✅ **四阶段构造** — 与 Clang 模式一致
    -- 基类初始化 → vptr 初始化 → 成员初始化 → 函数体
 
-2. ⚠️ **vptr 更新时机** — 与 Clang 不同（P1）
+2. ✅ ~~**vptr 更新时机** — 与 Clang 不同（P1）~~ — **已修复 (2026-04-18)**
    -- Clang：在每个基类构造完成后立即更新 vptr
-   -- BlockType：所有基类初始化后才更新 vptr 一次
-   -- **影响：** 基类构造函数中调用的虚函数无法分派到派生类实现
+   -- **修复：** BlockType 现在与 Clang 一致，每个基类初始化后立即更新 vptr
 
 3. ⚠️ **缺少 CXXConstructExpr 的 elidable 优化**（P2）
    -- Clang 在可能时省略临时对象的复制/移动构造（copy elision）
@@ -302,10 +302,12 @@
 1. ✅ **虚函数分派基本实现** — 已实现
    -- 检测 isVirtual() → EmitVirtualCall → vptr load + GEP + load + indirect call
 
-2. ⚠️ **缺少 this 指针调整**（P1）
+2. ✅ ~~**缺少 this 指针调整**（P1）~~ — **已修复 (2026-04-18)**
    -- 多重继承中，虚函数调用可能需要调整 this 指针
-   -- 当前直接使用 BaseValue 作为 this，未做基类偏移调整
-   -- **影响：** 多重继承场景下虚函数调用的 this 指针可能不正确
+   -- **修复：** `EmitCastToBase` 现在使用 `GetBaseOffset(Derived, Base)` 计算实际偏移
+   -- **修复：** 使用 `ptrtoint + add/sub + inttoptr` 进行字节级指针调整
+   -- **修复：** 签名增加 `CXXRecordDecl *Derived` 参数以确定偏移
+   -- **影响：** 多重继承场景下基类子对象指针计算正确
 
 3. ⚠️ **缺少虚函数调用的 devirtualization 优化**（P2）
    -- Clang 在可能时将虚函数调用去虚化为直接调用
@@ -317,16 +319,16 @@
 
 ---
 
-1. ⚠️ **ComputeClassLayout 与 GetRecordType 的结构体布局不一致**（P1）
+1. ✅ ~~**ComputeClassLayout 与 GetRecordType 的结构体布局不一致**（P1）~~ — **已修复 (2026-04-18)**
    -- ComputeClassLayout 包含基类子对象空间 + vptr + fields
-   -- GetRecordType 只生成 vptr + fields（不包含基类子对象的字段）
-   -- 这意味着 GEP 索引访问基类字段时会偏移错误
-   -- **影响：** 有基类的 CXXRecordDecl 的成员访问可能生成错误的 GEP
+   -- **修复：** GetRecordType 现在递归展平基类字段，包含基类子对象 + vptr + own fields
+   -- **修复：** 新增 FieldIndexCache 在 GetRecordType 时自动记录正确的 GEP 索引
 
-2. ⚠️ **EmitCastToBase 始终返回 DerivedPtr（偏移 0）**（P1）
+2. ✅ ~~**EmitCastToBase 始终返回 DerivedPtr（偏移 0）**（P1）~~ — **已修复 (2026-04-18)**
    -- BaseOffsetCache 中有正确的基类偏移
-   -- 但 EmitCastToBase 未使用，总是返回原始指针
-   -- **影响：** 基类子对象的初始化和析构使用错误的 this 指针
+   -- **修复：** EmitCastToBase 现在使用 GetBaseOffset(Derived, Base) 计算实际偏移
+   -- **修复：** 使用 ptrtoint + add/sub + inttoptr 进行字节级指针调整
+   -- **修复：** EmitCastToDerived 也实现了反向偏移
 
 3. ✅ **CXXConstructExpr::getConstructor** — 已添加
    -- Expr.h 中新增 Constructor 成员和访问器
@@ -358,26 +360,26 @@
 
 （无 P0 问题）
 
-### P1 问题（应尽快修复）— 4 个
+### P1 问题（应尽快修复）— 4 个 ✅ 全部已修复
 
-1. **ComputeClassLayout 与 GetRecordType 的结构体布局不一致**
+1. ✅ ~~**ComputeClassLayout 与 GetRecordType 的结构体布局不一致**~~ — **已修复 (2026-04-18)**
    -- ComputeClassLayout 包含基类子对象空间，但 GetRecordType 不包含
    -- GEP 索引与偏移计算不一致，基类字段访问会偏移错误
-   -- 修复方案：让 GetRecordType 也包含基类字段（或将基类子对象作为第一个匿名字段）
+   -- **实际修复：** 重写 `GetRecordType` 递归展平基类字段；新增 `collectBaseClassFields` + `FieldIndexCache`；简化 `GetFieldIndex` 查表
 
-2. **EmitCastToBase 始终返回 DerivedPtr（偏移 0）**
+2. ✅ ~~**EmitCastToBase 始终返回 DerivedPtr（偏移 0）**~~ — **已修复 (2026-04-18)**
    -- BaseOffsetCache 有正确偏移但未使用
    -- 基类初始化、析构使用错误的 this 指针
-   -- 修复方案：EmitCastToBase 使用 GetBaseOffset 获取偏移，GEP 调整指针
+   -- **实际修复：** `EmitCastToBase`/`EmitCastToDerived` 使用 `GetBaseOffset` + `ptrtoint/add/sub/inttoptr`；签名增加 `Derived` 参数
 
-3. **基类初始化器匹配方式脆弱**
+3. ✅ ~~**基类初始化器匹配方式脆弱**~~ — **已修复 (2026-04-18)**
    -- 通过 BaseName 字符串匹配，空名称时会匹配第一个基类
-   -- 修复方案：在 CXXCtorInitializer 中存储基类 TypeSourceInfo 或 Decl 指针
+   -- **实际修复：** `CXXCtorInitializer` 新增 `BaseType` (QualType) 成员；EmitConstructor 优先类型匹配
 
-4. **vptr 初始化时机不正确**
+4. ✅ ~~**vptr 初始化时机不正确**~~ — **已修复 (2026-04-18)**
    -- 当前所有基类初始化后才更新 vptr 一次
    -- 应在每个基类构造完成后立即更新 vptr
-   -- 修复方案：将 Phase 2 拆分到每个基类初始化之后
+   -- **实际修复：** 将 Phase 1/2 交织，每个基类初始化后立即调用 `InitializeVTablePtr`
 
 ### P2 问题（后续改进）— 18 个
 

@@ -51,6 +51,9 @@ class CodeGenTypes {
   /// RecordDecl → llvm::StructType* 缓存
   llvm::DenseMap<const RecordDecl *, llvm::StructType *> RecordTypeCache;
 
+  /// FieldDecl → GEP 索引缓存（包含基类字段的正确偏移）
+  llvm::DenseMap<const FieldDecl *, unsigned> FieldIndexCache;
+
 public:
   explicit CodeGenTypes(CodeGenModule &M) : CGM(M) {}
 
@@ -128,6 +131,13 @@ private:
   llvm::Type *ConvertMemberPointerType(const MemberPointerType *MPT);
   llvm::Type *ConvertAutoType(const AutoType *AT);
   llvm::Type *ConvertDecltypeType(const DecltypeType *DT);
+
+  /// 递归收集基类字段类型（展平到派生类的 StructType 中）
+  unsigned collectBaseClassFields(CXXRecordDecl *CXXRD,
+                                  llvm::SmallVector<llvm::Type *, 16> &FieldTypes);
+
+  /// 递归检查类或其基类是否有虚函数
+  static bool hasVirtualInHierarchy(CXXRecordDecl *RD);
 };
 
 } // namespace blocktype

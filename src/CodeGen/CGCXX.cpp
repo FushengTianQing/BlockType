@@ -218,21 +218,35 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
     ++ArgIdx;
   }
 
-  // === Phase 1: 基类初始化 ===
-  // 先处理初始化列表中的基类初始化
+  bool NeedsVPtr = hasVirtualFunctionsInHierarchy(Class);
+
+  // === Phase 1 + Phase 2 交织: 基类初始化 + 每个基类后更新 vptr ===
   llvm::SmallVector<const CXXRecordDecl *, 4> InitializedBases;
 
+  // 收集初始化列表中的基类信息（按类型匹配）
   for (CXXCtorInitializer *Init : Ctor->initializers()) {
     if (Init->isBaseInitializer()) {
-      llvm::StringRef BaseName = Init->getMemberName();
+      QualType InitBaseType = Init->getBaseType();
       for (const auto &BaseSpec : Class->bases()) {
         QualType BT = BaseSpec.getType();
         if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
           if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-            if (BaseRD->getName() == BaseName || BaseName.empty()) {
+            bool Match = false;
+            // 优先使用类型匹配（P1-3 修复）
+            if (!InitBaseType.isNull()) {
+              if (auto *InitRT = llvm::dyn_cast<RecordType>(InitBaseType.getTypePtr())) {
+                if (auto *InitRD = llvm::dyn_cast<CXXRecordDecl>(InitRT->getDecl())) {
+                  Match = (InitRD == BaseRD);
+                }
+              }
+            } else {
+              // 退化为名称匹配
+              Match = (BaseRD->getName() == Init->getMemberName());
+            }
+            if (Match) {
               InitializedBases.push_back(BaseRD);
 
-              llvm::Value *BasePtr = EmitCastToBase(CGF, This, BaseRD);
+              llvm::Value *BasePtr = EmitCastToBase(CGF, Class, This, BaseRD);
 
               if (!Init->getArguments().empty()) {
                 // 有参数：调用基类构造函数
@@ -264,6 +278,12 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
                 CGF.getBuilder().CreateStore(
                     llvm::Constant::getNullValue(BaseTy), TypedPtr);
               }
+
+              // P1-4 修复：每个基类初始化后立即更新 vptr
+              if (NeedsVPtr) {
+                InitializeVTablePtr(CGF, This, Class);
+              }
+
               break;
             }
           }
@@ -285,20 +305,20 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
           }
         }
         if (!AlreadyInit) {
-          llvm::Value *BasePtr = EmitCastToBase(CGF, This, BaseRD);
+          llvm::Value *BasePtr = EmitCastToBase(CGF, Class, This, BaseRD);
           llvm::StructType *BaseTy = CGM.getTypes().GetRecordType(BaseRD);
           llvm::Value *TypedPtr = CGF.getBuilder().CreateBitCast(
               BasePtr, llvm::PointerType::get(BaseTy, 0), "base.ptr");
           CGF.getBuilder().CreateStore(
               llvm::Constant::getNullValue(BaseTy), TypedPtr);
+
+          // P1-4 修复：每个基类初始化后立即更新 vptr
+          if (NeedsVPtr) {
+            InitializeVTablePtr(CGF, This, Class);
+          }
         }
       }
     }
-  }
-
-  // === Phase 2: vptr 初始化 ===
-  if (hasVirtualFunctionsInHierarchy(Class)) {
-    InitializeVTablePtr(CGF, This, Class);
   }
 
   // === Phase 3: 成员初始化 ===
@@ -666,21 +686,40 @@ llvm::Value *CGCXX::EmitDerivedOffset(CodeGenFunction &CGF,
   return nullptr;
 }
 
-llvm::Value *CGCXX::EmitCastToBase(CodeGenFunction &CGF, llvm::Value *DerivedPtr,
-                                    CXXRecordDecl *Base) {
-  if (!DerivedPtr || !Base) return DerivedPtr;
+llvm::Value *CGCXX::EmitCastToBase(CodeGenFunction &CGF, CXXRecordDecl *Derived,
+                                    llvm::Value *DerivedPtr, CXXRecordDecl *Base) {
+  if (!DerivedPtr || !Base || !Derived) return DerivedPtr;
 
-  // 单继承：偏移为 0，无需调整
-  // 多继承：需要根据 BaseOffsetCache 计算偏移
-  // 简化实现：偏移为 0
-  return DerivedPtr;
+  uint64_t Offset = GetBaseOffset(Derived, Base);
+  if (Offset == 0) return DerivedPtr;
+
+  // 使用 ptrtoint + add + inttoptr 进行字节级指针调整
+  llvm::Value *OffsetVal = llvm::ConstantInt::get(
+      llvm::Type::getInt64Ty(CGM.getLLVMContext()), Offset);
+  llvm::Value *IntPtr = CGF.getBuilder().CreatePtrToInt(
+      DerivedPtr, llvm::Type::getInt64Ty(CGM.getLLVMContext()), "ptr.int");
+  llvm::Value *AdjustedPtr = CGF.getBuilder().CreateAdd(
+      IntPtr, OffsetVal, "base.adj");
+  return CGF.getBuilder().CreateIntToPtr(
+      AdjustedPtr, DerivedPtr->getType(), "base.ptr");
 }
 
-llvm::Value *CGCXX::EmitCastToDerived(CodeGenFunction &CGF,
-                                        llvm::Value *BasePtr,
-                                        CXXRecordDecl *Derived) {
-  if (!BasePtr || !Derived) return BasePtr;
-  return BasePtr;
+llvm::Value *CGCXX::EmitCastToDerived(CodeGenFunction &CGF, CXXRecordDecl *Derived,
+                                        llvm::Value *BasePtr, CXXRecordDecl *Base) {
+  if (!BasePtr || !Derived || !Base) return BasePtr;
+
+  uint64_t Offset = GetBaseOffset(Derived, Base);
+  if (Offset == 0) return BasePtr;
+
+  // 使用 ptrtoint + sub + inttoptr 进行反向指针调整
+  llvm::Value *OffsetVal = llvm::ConstantInt::get(
+      llvm::Type::getInt64Ty(CGM.getLLVMContext()), Offset);
+  llvm::Value *IntPtr = CGF.getBuilder().CreatePtrToInt(
+      BasePtr, llvm::Type::getInt64Ty(CGM.getLLVMContext()), "ptr.int");
+  llvm::Value *AdjustedPtr = CGF.getBuilder().CreateSub(
+      IntPtr, OffsetVal, "derived.adj");
+  return CGF.getBuilder().CreateIntToPtr(
+      AdjustedPtr, BasePtr->getType(), "derived.ptr");
 }
 
 //===----------------------------------------------------------------------===//
@@ -699,7 +738,7 @@ void CGCXX::EmitBaseInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
   auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
   if (!BaseRD) return;
 
-  llvm::Value *BasePtr = EmitCastToBase(CGF, This, BaseRD);
+  llvm::Value *BasePtr = EmitCastToBase(CGF, Class, This, BaseRD);
 
   if (Init) {
     if (auto *ConstructExpr = llvm::dyn_cast<CXXConstructExpr>(Init)) {
@@ -844,7 +883,7 @@ void CGCXX::EmitDestructorBody(CodeGenFunction &CGF, CXXRecordDecl *Class,
             if (auto *Dtor = llvm::dyn_cast<CXXDestructorDecl>(MD)) {
               llvm::Function *DtorFn = CGM.GetOrCreateFunctionDecl(Dtor);
               if (DtorFn) {
-                llvm::Value *BasePtr = EmitCastToBase(CGF, This, BaseCXX);
+                llvm::Value *BasePtr = EmitCastToBase(CGF, Class, This, BaseCXX);
                 CGF.getBuilder().CreateCall(DtorFn, {BasePtr}, "base.dtor");
               }
               break;

@@ -128,12 +128,12 @@ public:
                                   CXXRecordDecl *Derived);
 
   /// 将派生类指针调整为基类子对象指针。
-  llvm::Value *EmitCastToBase(CodeGenFunction &CGF, llvm::Value *DerivedPtr,
-                               CXXRecordDecl *Base);
+  llvm::Value *EmitCastToBase(CodeGenFunction &CGF, CXXRecordDecl *Derived,
+                               llvm::Value *DerivedPtr, CXXRecordDecl *Base);
 
   /// 将基类指针调整为派生类指针。
-  llvm::Value *EmitCastToDerived(CodeGenFunction &CGF, llvm::Value *BasePtr,
-                                  CXXRecordDecl *Derived);
+  llvm::Value *EmitCastToDerived(CodeGenFunction &CGF, CXXRecordDecl *Derived,
+                                  llvm::Value *BasePtr, CXXRecordDecl *Base);
 
   //===------------------------------------------------------------------===//
   // 成员初始化
