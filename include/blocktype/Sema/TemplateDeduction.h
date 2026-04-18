@@ -138,6 +138,16 @@ public:
   /// @return true if P1 is more specialized than P2
   bool isMoreSpecialized(TemplateDecl *P1, TemplateDecl *P2);
 
+  /// Determine if partial specialization PS1 is more specialized than PS2.
+  /// Uses template argument deduction on the template args of each
+  /// partial specialization against the other's parameters.
+  /// Per C++ [temp.class.spec.match]: the most specialized partial
+  /// specialization is selected.
+  /// @return true if PS1 is more specialized than PS2
+  bool isMoreSpecializedPartialSpec(
+      ClassTemplatePartialSpecializationDecl *PS1,
+      ClassTemplatePartialSpecializationDecl *PS2);
+
 private:
   // Recursive deduction for various type combinations
   TemplateDeductionResult

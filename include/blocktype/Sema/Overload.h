@@ -20,6 +20,11 @@
 #include "llvm/ADT/SmallVector.h"
 #include <utility>
 
+// Forward declare — used only for constraint-based tie-breaking.
+namespace detail {
+class ConstraintTieBreaker;
+}
+
 namespace blocktype {
 
 class LookupResult;
@@ -27,6 +32,10 @@ class LookupResult;
 /// OverloadCandidate - A single candidate in overload resolution.
 class OverloadCandidate {
   FunctionDecl *Function;
+
+  /// If this candidate came from a function template, track the template.
+  /// Used for constraint-based partial ordering tie-breaking.
+  FunctionTemplateDecl *Template = nullptr;
 
   /// Computed conversion rank for each argument.
   llvm::SmallVector<ConversionRank, 4> ArgRanks;
@@ -41,6 +50,8 @@ public:
   explicit OverloadCandidate(FunctionDecl *F) : Function(F) {}
 
   FunctionDecl *getFunction() const { return Function; }
+  FunctionTemplateDecl *getTemplate() const { return Template; }
+  void setTemplate(FunctionTemplateDecl *T) { Template = T; }
   bool isViable() const { return Viable; }
   void setViable(bool V) { Viable = V; }
 
@@ -78,11 +89,23 @@ class OverloadCandidateSet {
   SourceLocation CallLoc;
   llvm::SmallVector<OverloadCandidate, 16> Candidates;
 
+  /// Constraint checker for tie-breaking via constraint partial ordering.
+  class ConstraintSatisfaction *ConstraintChecker = nullptr;
+
 public:
   explicit OverloadCandidateSet(SourceLocation Loc) : CallLoc(Loc) {}
 
+  /// Set the constraint checker for constraint-based tie-breaking.
+  void setConstraintChecker(ConstraintSatisfaction *Checker) {
+    ConstraintChecker = Checker;
+  }
+
   /// Add a candidate function.
   OverloadCandidate &addCandidate(FunctionDecl *F);
+
+  /// Add a candidate function that came from a function template.
+  OverloadCandidate &addTemplateCandidate(FunctionDecl *F,
+                                           FunctionTemplateDecl *T);
 
   /// Add all functions from a LookupResult.
   void addCandidates(const LookupResult &R);

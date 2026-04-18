@@ -522,6 +522,92 @@ bool TemplateDeduction::isMoreSpecialized(TemplateDecl *P1,
   return P2_deduce_from_P1 && !P1_deduce_from_P2;
 }
 
+bool TemplateDeduction::isMoreSpecializedPartialSpec(
+    ClassTemplatePartialSpecializationDecl *PS1,
+    ClassTemplatePartialSpecializationDecl *PS2) {
+  if (!PS1 || !PS2)
+    return false;
+  if (PS1 == PS2)
+    return false;
+
+  // Get the template parameter lists for each partial specialization.
+  auto *P1Params = PS1->getTemplateParameterList();
+  auto *P2Params = PS2->getTemplateParameterList();
+  if (!P1Params || !P2Params)
+    return false;
+
+  // Get template arguments from each partial specialization.
+  auto Args1 = PS1->getTemplateArgs();
+  auto Args2 = PS2->getTemplateArgs();
+
+  // If they have different numbers of args, neither can be more specialized
+  // (they specialize the primary template differently).
+  if (Args1.size() != Args2.size())
+    return false;
+  if (Args1.empty())
+    return false;
+
+  // Per C++ [temp.class.spec.match] and [temp.deduct.partial]:
+  // PS1 is more specialized than PS2 if:
+  //   - Deduction of PS2's args from PS1's synthetic pattern SUCCEEDS, AND
+  //   - Deduction of PS1's args from PS2's synthetic pattern FAILS
+  //
+  // We use the template arguments of each partial specialization as the
+  // "pattern" and try to deduce them against synthetic args generated
+  // from the other's parameters.
+
+  // Direction 1: Can PS2's args be deduced from PS1's synthesized args?
+  unsigned UniqueID1 = 0;
+  TemplateDeductionInfo Info12;
+  bool PS2_deduce_from_PS1 = true;
+  for (unsigned I = 0; I < Args1.size(); ++I) {
+    const TemplateArgument &Arg1 = Args1[I];
+    // Only compare type arguments (the most common case)
+    if (!Arg1.isType())
+      continue;
+
+    QualType P1SynthType = transformForPartialOrdering(
+        Arg1.getAsType(), P1Params->getParams(), UniqueID1);
+
+    // If PS2 has a type arg at this position, try deduction
+    if (I < Args2.size() && Args2[I].isType()) {
+      QualType P2ArgType = Args2[I].getAsType();
+      TemplateDeductionResult R =
+          DeduceTemplateArguments(P2ArgType, P1SynthType, Info12);
+      if (R != TemplateDeductionResult::Success) {
+        PS2_deduce_from_PS1 = false;
+        break;
+      }
+    }
+  }
+
+  // Direction 2: Can PS1's args be deduced from PS2's synthesized args?
+  unsigned UniqueID2 = 0;
+  TemplateDeductionInfo Info21;
+  bool PS1_deduce_from_PS2 = true;
+  for (unsigned I = 0; I < Args2.size(); ++I) {
+    const TemplateArgument &Arg2 = Args2[I];
+    if (!Arg2.isType())
+      continue;
+
+    QualType P2SynthType = transformForPartialOrdering(
+        Arg2.getAsType(), P2Params->getParams(), UniqueID2);
+
+    if (I < Args1.size() && Args1[I].isType()) {
+      QualType P1ArgType = Args1[I].getAsType();
+      TemplateDeductionResult R =
+          DeduceTemplateArguments(P1ArgType, P2SynthType, Info21);
+      if (R != TemplateDeductionResult::Success) {
+        PS1_deduce_from_PS2 = false;
+        break;
+      }
+    }
+  }
+
+  // PS1 is more specialized if PS2 can deduce from PS1 but not vice versa
+  return PS2_deduce_from_PS1 && !PS1_deduce_from_PS2;
+}
+
 QualType TemplateDeduction::generateDeducedType(NamedDecl *Param,
                                                   unsigned UniqueID) {
   // Generate a unique synthetic type for partial ordering.

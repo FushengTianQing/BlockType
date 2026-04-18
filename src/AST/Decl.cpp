@@ -847,6 +847,49 @@ void ClassTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
   }
 }
 
+ClassTemplateSpecializationDecl *
+ClassTemplateDecl::findSpecialization(
+    llvm::ArrayRef<TemplateArgument> Args) const {
+  for (auto *Spec : Specializations) {
+    auto SpecArgs = Spec->getTemplateArgs();
+    if (SpecArgs.size() != Args.size())
+      continue;
+    bool Match = true;
+    for (unsigned I = 0; I < Args.size(); ++I) {
+      if (SpecArgs[I].getKind() != Args[I].getKind()) {
+        Match = false;
+        break;
+      }
+      if (SpecArgs[I].isType() && Args[I].isType()) {
+        if (SpecArgs[I].getAsType() != Args[I].getAsType()) {
+          Match = false;
+          break;
+        }
+      } else if (SpecArgs[I].isIntegral() && Args[I].isIntegral()) {
+        if (SpecArgs[I].getAsIntegral() != Args[I].getAsIntegral()) {
+          Match = false;
+          break;
+        }
+      }
+    }
+    if (Match)
+      return Spec;
+  }
+  return nullptr;
+}
+
+llvm::SmallVector<ClassTemplatePartialSpecializationDecl *, 4>
+ClassTemplateDecl::getPartialSpecializations() const {
+  llvm::SmallVector<ClassTemplatePartialSpecializationDecl *, 4> Result;
+  for (auto *Spec : Specializations) {
+    if (Spec->getKind() ==
+        NodeKind::ClassTemplatePartialSpecializationDeclKind)
+      Result.push_back(
+          static_cast<ClassTemplatePartialSpecializationDecl *>(Spec));
+  }
+  return Result;
+}
+
 void VarTemplateDecl::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
   OS << "VarTemplateDecl " << getName() << "\n";

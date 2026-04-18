@@ -417,6 +417,15 @@ public:
   DeclResult ActOnVarTemplatePartialSpecialization(
       VarTemplatePartialSpecializationDecl *PartialSpec);
 
+  /// Find the best matching partial specialization for the given arguments.
+  /// Per C++ [temp.class.spec.match]: selects the most specialized partial
+  /// specialization whose args match. Returns nullptr if no partial
+  /// specialization matches, or if the match is ambiguous.
+  ClassTemplatePartialSpecializationDecl *
+  FindBestMatchingPartialSpecialization(
+      ClassTemplateDecl *Primary,
+      llvm::ArrayRef<TemplateArgument> Args);
+
   /// Deduce template arguments and instantiate a function template.
   /// Used by ActOnCallExpr when the callee is a function template.
   /// @param FTD       The function template declaration

@@ -344,6 +344,147 @@ std::optional<bool> ConstraintSatisfaction::SubstituteAndEvaluate(
 }
 
 //===----------------------------------------------------------------------===//
+// Constraint Partial Ordering (C++20 [temp.constr.order])
+//===----------------------------------------------------------------------===//
+
+/// Collect all atomic constraints from a constraint expression tree.
+/// Per C++ [temp.constr.atomic]: an atomic constraint is a leaf expression
+/// that is not a logical AND or OR. We normalize && and || into a set
+/// of leaf expressions.
+static void collectAtomicConstraints(
+    Expr *E, llvm::SmallVectorImpl<Expr *> &Atoms) {
+  if (!E)
+    return;
+
+  // BinaryOperator && → decompose both sides (conjunction)
+  if (auto *BO = llvm::dyn_cast<BinaryOperator>(E)) {
+    if (BO->getOpcode() == BinaryOpKind::LAnd) {
+      collectAtomicConstraints(BO->getLHS(), Atoms);
+      collectAtomicConstraints(BO->getRHS(), Atoms);
+      return;
+    }
+    // || is an atomic constraint (we don't decompose disjunctions for
+    // subsumption — C++ says A || B subsumes C only if both A and B
+    // individually subsume C, but the standard treats || as atomic)
+  }
+
+  // UnaryOperator ! → decompose operand and wrap
+  // For subsumption, we treat !C as an atomic constraint
+  // (negation changes meaning, can't decompose further)
+
+  // Anything else is an atomic constraint
+  Atoms.push_back(E);
+}
+
+/// Check if two atomic constraint expressions are "identical" for the
+/// purpose of subsumption. Per C++ [temp.constr.order]:
+///   Two atomic constraints are identical if they are formed from the
+///   same expression (after substitution).
+///   For our purposes, we do a structural comparison:
+///   - Same expression kind
+///   - Same operands (for binary/unary)
+///   - Same referenced declaration (for DeclRefExpr)
+static bool areAtomicConstraintsIdentical(Expr *A, Expr *B) {
+  if (!A || !B)
+    return false;
+
+  // Same pointer → identical
+  if (A == B)
+    return true;
+
+  // BinaryOperator: same operator + recursive check
+  auto *BO_A = llvm::dyn_cast<BinaryOperator>(A);
+  auto *BO_B = llvm::dyn_cast<BinaryOperator>(B);
+  if (BO_A && BO_B) {
+    if (BO_A->getOpcode() != BO_B->getOpcode())
+      return false;
+    return areAtomicConstraintsIdentical(BO_A->getLHS(), BO_B->getLHS()) &&
+           areAtomicConstraintsIdentical(BO_A->getRHS(), BO_B->getRHS());
+  }
+
+  // UnaryOperator: same operator + recursive check
+  auto *UO_A = llvm::dyn_cast<UnaryOperator>(A);
+  auto *UO_B = llvm::dyn_cast<UnaryOperator>(B);
+  if (UO_A && UO_B) {
+    if (UO_A->getOpcode() != UO_B->getOpcode())
+      return false;
+    return areAtomicConstraintsIdentical(UO_A->getSubExpr(), UO_B->getSubExpr());
+  }
+
+  // DeclRefExpr: same referenced declaration
+  auto *DRE_A = llvm::dyn_cast<DeclRefExpr>(A);
+  auto *DRE_B = llvm::dyn_cast<DeclRefExpr>(B);
+  if (DRE_A && DRE_B) {
+    return DRE_A->getDecl() == DRE_B->getDecl();
+  }
+
+  // RequiresExpr: pointer comparison (same expression)
+  if (llvm::isa<RequiresExpr>(A) && llvm::isa<RequiresExpr>(B))
+    return A == B;
+
+  // For other expression types, use pointer comparison
+  return false;
+}
+
+/// Check if constraint C1 subsumes constraint C2.
+/// Per C++ [temp.constr.order]: C1 subsumes C2 if every atomic constraint
+/// in C2's normalized form appears in C1's normalized form.
+static bool constraintSubsumes(Expr *C1, Expr *C2) {
+  llvm::SmallVector<Expr *, 8> Atoms1, Atoms2;
+  collectAtomicConstraints(C1, Atoms1);
+  collectAtomicConstraints(C2, Atoms2);
+
+  // C1 subsumes C2 if every atom in C2 appears in C1
+  // (C1's atom set is a superset of C2's)
+  for (Expr *Atom2 : Atoms2) {
+    bool Found = false;
+    for (Expr *Atom1 : Atoms1) {
+      if (areAtomicConstraintsIdentical(Atom1, Atom2)) {
+        Found = true;
+        break;
+      }
+    }
+    if (!Found)
+      return false;
+  }
+  return true;
+}
+
+int ConstraintSatisfaction::CompareConstraints(Expr *C1, Expr *C2) {
+  if (!C1 && !C2)
+    return 0;
+  if (!C1)
+    return 1;  // No constraint is less constrained
+  if (!C2)
+    return -1; // Having a constraint is more constrained
+
+  bool C1_subsumes_C2 = constraintSubsumes(C1, C2);
+  bool C2_subsumes_C1 = constraintSubsumes(C2, C1);
+
+  if (C1_subsumes_C2 && !C2_subsumes_C1)
+    return -1; // C1 is more constrained
+  if (C2_subsumes_C1 && !C1_subsumes_C2)
+    return 1;  // C2 is more constrained
+  return 0;    // Equivalent or incomparable
+}
+
+int ConstraintSatisfaction::CompareFunctionTemplateConstraints(
+    FunctionTemplateDecl *T1, FunctionTemplateDecl *T2) {
+  if (!T1 || !T2)
+    return 0;
+
+  Expr *RC1 = T1->hasRequiresClause() ? T1->getRequiresClause() : nullptr;
+  Expr *RC2 = T2->hasRequiresClause() ? T2->getRequiresClause() : nullptr;
+
+  return CompareConstraints(RC1, RC2);
+}
+
+bool ConstraintSatisfaction::IsMoreConstrained(
+    FunctionTemplateDecl *T1, FunctionTemplateDecl *T2) {
+  return CompareFunctionTemplateConstraints(T1, T2) < 0;
+}
+
+//===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
 

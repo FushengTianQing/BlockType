@@ -31,6 +31,7 @@ class CXXMethodDecl; // Forward declaration
 class CXXRecordDecl; // Forward declaration
 class AccessSpecDecl; // Forward declaration
 class ClassTemplateSpecializationDecl; // Forward declaration
+class ClassTemplatePartialSpecializationDecl; // Forward declaration
 class VarTemplateSpecializationDecl; // Forward declaration
 
 //===----------------------------------------------------------------------===//
@@ -1518,6 +1519,16 @@ public:
   llvm::ArrayRef<ClassTemplateSpecializationDecl *> getSpecializations() const {
     return Specializations;
   }
+
+  /// Find an existing specialization that exactly matches the given arguments.
+  /// Defined out-of-line in Decl.cpp.
+  ClassTemplateSpecializationDecl *
+  findSpecialization(llvm::ArrayRef<TemplateArgument> Args) const;
+
+  /// Get all partial specializations.
+  /// Defined out-of-line in Decl.cpp.
+  llvm::SmallVector<ClassTemplatePartialSpecializationDecl *, 4>
+  getPartialSpecializations() const;
 
   NodeKind getKind() const override { return NodeKind::ClassTemplateDeclKind; }
 

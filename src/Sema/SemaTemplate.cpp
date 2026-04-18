@@ -528,6 +528,94 @@ DeclResult Sema::ActOnVarTemplatePartialSpecialization(
 }
 
 //===----------------------------------------------------------------------===//
+// Partial Specialization Selection
+//===----------------------------------------------------------------------===//
+
+ClassTemplatePartialSpecializationDecl *
+Sema::FindBestMatchingPartialSpecialization(
+    ClassTemplateDecl *Primary, llvm::ArrayRef<TemplateArgument> Args) {
+  if (!Primary)
+    return nullptr;
+
+  auto PartialSpecs = Primary->getPartialSpecializations();
+  if (PartialSpecs.empty())
+    return nullptr;
+
+  // Collect all partial specializations whose template args match the
+  // provided arguments. Per C++ [temp.class.spec.match]:
+  //   A partial specialization matches if its template argument list
+  //   can be deduced from the provided arguments.
+  llvm::SmallVector<ClassTemplatePartialSpecializationDecl *, 4> Matches;
+
+  for (auto *PS : PartialSpecs) {
+    auto PSArgs = PS->getTemplateArgs();
+
+    // Basic size check: partial spec args must match primary param count
+    if (PSArgs.size() != Args.size() && PSArgs.size() != 0)
+      continue;
+
+    // Check if this partial specialization's arguments match the given args.
+    // For a simple implementation, we check if the args are compatible types.
+    bool Compatible = true;
+    if (PSArgs.size() == Args.size()) {
+      for (unsigned I = 0; I < Args.size(); ++I) {
+        if (!PSArgs[I].isType() || !Args[I].isType())
+          continue;
+        // If the partial spec arg is a concrete type (not dependent),
+        // it must match exactly. If it's dependent (contains template params),
+        // it can match via deduction.
+        QualType PSArgType = PSArgs[I].getAsType();
+        QualType ArgType = Args[I].getAsType();
+
+        // If partial spec arg is dependent, it matches any type at this position
+        if (PSArgType->isDependentType())
+          continue;
+
+        // Non-dependent args must match exactly
+        if (PSArgType.getCanonicalType() != ArgType.getCanonicalType()) {
+          Compatible = false;
+          break;
+        }
+      }
+    }
+    if (Compatible)
+      Matches.push_back(PS);
+  }
+
+  if (Matches.empty())
+    return nullptr;
+  if (Matches.size() == 1)
+    return Matches[0];
+
+  // Multiple matches: use partial ordering to find the most specialized.
+  // Per C++ [temp.class.spec.match]: the most specialized partial
+  // specialization is selected.
+  ClassTemplatePartialSpecializationDecl *Best = Matches[0];
+  bool Ambiguous = false;
+
+  for (unsigned I = 1; I < Matches.size(); ++I) {
+    bool BestIsMore = Deduction->isMoreSpecializedPartialSpec(Best, Matches[I]);
+    bool CurIsMore = Deduction->isMoreSpecializedPartialSpec(Matches[I], Best);
+
+    if (CurIsMore && !BestIsMore) {
+      Best = Matches[I];
+      Ambiguous = false;
+    } else if (BestIsMore && !CurIsMore) {
+      // Best remains
+      Ambiguous = false;
+    } else {
+      // Neither is more specialized → ambiguous
+      Ambiguous = true;
+    }
+  }
+
+  if (Ambiguous)
+    return nullptr; // Caller should diagnose ambiguity
+
+  return Best;
+}
+
+//===----------------------------------------------------------------------===//
 // Function Template Deduction + Instantiation
 //===----------------------------------------------------------------------===//
 

@@ -84,6 +84,33 @@ public:
   bool EvaluateRequiresExprWithArgs(RequiresExpr *RE,
                                     const TemplateArgumentList &Args);
 
+  //===--------------------------------------------------------------------===//
+  // Constraint Partial Ordering (C++20 [temp.constr.order])
+  //===--------------------------------------------------------------------===//
+
+  /// Compare two constraints to determine which is more constrained.
+  /// Per C++ [temp.constr.order]: a constraint A subsumes constraint B if
+  /// A's atomic constraint set is a superset of B's atomic constraint set
+  /// (i.e., every atomic constraint in B appears in A).
+  ///
+  /// @return -1 if C1 is more constrained (subsumes C2),
+  ///          1 if C2 is more constrained (subsumes C1),
+  ///          0 if neither subsumes the other (ambiguous/equivalent)
+  int CompareConstraints(Expr *C1, Expr *C2);
+
+  /// Compare two function templates by their constraint expressions.
+  /// Uses requires-clause subsumption per C++ [temp.constr.order].
+  /// @return -1 if T1 is more constrained, 1 if T2 is, 0 if equivalent
+  int CompareFunctionTemplateConstraints(FunctionTemplateDecl *T1,
+                                          FunctionTemplateDecl *T2);
+
+  /// Determine which of two constrained function templates is more specialized.
+  /// Per C++ [over.match.best]: a template with more constrained constraints
+  /// is preferred.
+  /// @return true if T1 is more constrained than T2
+  bool IsMoreConstrained(FunctionTemplateDecl *T1,
+                          FunctionTemplateDecl *T2);
+
 private:
   //===--------------------------------------------------------------------===//
   // Internal helpers

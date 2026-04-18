@@ -16,6 +16,7 @@
 
 #include "blocktype/Sema/Overload.h"
 #include "blocktype/Sema/Lookup.h"
+#include "blocktype/Sema/ConstraintSatisfaction.h"
 
 #include "llvm/Support/Casting.h"
 
@@ -177,6 +178,17 @@ int OverloadCandidate::compare(const OverloadCandidate &Other) const {
   if (NumParams > OtherNumParams)
     return 1;
 
+  // Tie-breaker: more constrained function template is preferred
+  // per C++ [over.match.best]/c.1.1 and [temp.constr.order].
+  if (Template && Other.Template && Template != Other.Template) {
+    // Both are function templates with different constraints.
+    // We need a ConstraintSatisfaction to compare — but we don't have
+    // access to it here. The constraint-based tie-break is done in resolve()
+    // after initial comparison. Return 0 (indistinguishable) here so that
+    // resolve() can apply constraint-based disambiguation.
+    return 0;
+  }
+
   return 0; // Indistinguishable
 }
 
@@ -186,6 +198,18 @@ int OverloadCandidate::compare(const OverloadCandidate &Other) const {
 
 OverloadCandidate &OverloadCandidateSet::addCandidate(FunctionDecl *F) {
   Candidates.emplace_back(F);
+  return Candidates.back();
+}
+
+//===----------------------------------------------------------------------===//
+// OverloadCandidateSet — addTemplateCandidate
+//===----------------------------------------------------------------------===//
+
+OverloadCandidate &
+OverloadCandidateSet::addTemplateCandidate(FunctionDecl *F,
+                                             FunctionTemplateDecl *T) {
+  Candidates.emplace_back(F);
+  Candidates.back().setTemplate(T);
   return Candidates.back();
 }
 
@@ -279,6 +303,29 @@ OverloadCandidateSet::resolve(llvm::ArrayRef<Expr *> Args) {
 
   if (Ambiguous)
     return {OverloadResult::Ambiguous, nullptr};
+
+  // If Best tied with another candidate, attempt constraint-based tie-break.
+  // Per C++ [over.match.best]: a more constrained template is preferred.
+  if (ConstraintChecker && Best->getTemplate()) {
+    for (auto *C : Viable) {
+      if (C == Best)
+        continue;
+      if (Best->compare(*C) == 0 && C->getTemplate()) {
+        // Both have templates and are indistinguishable by conversion rank.
+        // Check constraint partial ordering.
+        int Cmp = ConstraintChecker->CompareFunctionTemplateConstraints(
+            Best->getTemplate(), C->getTemplate());
+        if (Cmp > 0) {
+          // C is more constrained — it becomes the new best
+          Best = C;
+        } else if (Cmp == 0) {
+          // Constraints are equivalent — still ambiguous
+          return {OverloadResult::Ambiguous, nullptr};
+        }
+        // Cmp < 0: Best is more constrained — keep Best
+      }
+    }
+  }
 
   FunctionDecl *FD = Best->getFunction();
 
