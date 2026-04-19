@@ -19,6 +19,7 @@
 
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Expr.h"
+#include "blocktype/AST/ExprVisitor.h"  // For ExprVisitor
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "llvm/ADT/DenseMap.h"
 

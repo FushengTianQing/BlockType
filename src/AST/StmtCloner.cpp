@@ -11,6 +11,26 @@
 
 namespace blocktype {
 
+/// ExprCloner - Internal visitor that clones expressions with type substitution.
+class ExprCloner : public ExprVisitor<ExprCloner> {
+  StmtCloner &Parent;
+
+public:
+  explicit ExprCloner(StmtCloner &P) : Parent(P) {}
+
+  /// Clone a DeclRefExpr, looking up cloned Decl if available.
+  Expr *VisitDeclRefExpr(DeclRefExpr *DRE) {
+    // Look up cloned Decl
+    if (auto *ClonedDecl = Parent.lookupClonedDecl(DRE->getDecl())) {
+      // TODO: Create new DeclRefExpr with ClonedDecl
+      // For now, return original
+    }
+    return DRE;
+  }
+
+  // Use default implementations for other expressions (they recurse automatically)
+};
+
 Stmt *StmtCloner::Clone(Stmt *OriginalStmt) {
   if (!OriginalStmt) {
     return nullptr;
@@ -57,10 +77,9 @@ Expr *StmtCloner::CloneExpr(Expr *OriginalExpr) {
     return nullptr;
   }
 
-  // TODO: Implement expression cloning with type substitution
-  // This requires ExprVisitor similar to TypeVisitor
-  // For now, return original (placeholder)
-  return OriginalExpr;
+  // Use ExprCloner visitor to recursively clone the expression
+  ExprCloner Cloner(*this);
+  return Cloner.Visit(OriginalExpr);
 }
 
 Stmt *StmtCloner::CloneCompoundStmt(CompoundStmt *CS) {
@@ -85,22 +104,61 @@ Stmt *StmtCloner::CloneDeclStmt(DeclStmt *DS) {
 
 Stmt *StmtCloner::CloneReturnStmt(ReturnStmt *RS) {
   Expr *ClonedExpr = CloneExpr(RS->getRetValue());
-  // TODO: Create new ReturnStmt with cloned expression
-  return RS; // Placeholder
+  
+  if (ClonedExpr == RS->getRetValue()) {
+    return RS; // No change
+  }
+  
+  // TODO: Create new ReturnStmt with ClonedExpr
+  // For now, return original
+  return RS;
 }
 
 Stmt *StmtCloner::CloneIfStmt(IfStmt *IS) {
-  // TODO: Clone condition and branches
+  Expr *ClonedCond = CloneExpr(IS->getCond());
+  Stmt *ClonedThen = Clone(IS->getThen());
+  Stmt *ClonedElse = IS->getElse() ? Clone(IS->getElse()) : nullptr;
+  
+  bool Changed = (ClonedCond != IS->getCond()) ||
+                 (ClonedThen != IS->getThen()) ||
+                 (ClonedElse != IS->getElse());
+  
+  if (!Changed) {
+    return IS; // No change
+  }
+  
+  // TODO: Create new IfStmt with cloned components
   return IS; // Placeholder
 }
 
 Stmt *StmtCloner::CloneWhileStmt(WhileStmt *WS) {
-  // TODO: Clone condition and body
+  Expr *ClonedCond = CloneExpr(WS->getCond());
+  Stmt *ClonedBody = Clone(WS->getBody());
+  
+  if (ClonedCond == WS->getCond() && ClonedBody == WS->getBody()) {
+    return WS; // No change
+  }
+  
+  // TODO: Create new WhileStmt
   return WS; // Placeholder
 }
 
 Stmt *StmtCloner::CloneForStmt(ForStmt *FS) {
-  // TODO: Clone init, condition, increment, and body
+  Stmt *ClonedInit = FS->getInit() ? Clone(FS->getInit()) : nullptr;
+  Expr *ClonedCond = FS->getCond() ? CloneExpr(FS->getCond()) : nullptr;
+  Expr *ClonedInc = FS->getInc() ? CloneExpr(FS->getInc()) : nullptr;
+  Stmt *ClonedBody = Clone(FS->getBody());
+  
+  bool Changed = (ClonedInit != FS->getInit()) ||
+                 (ClonedCond != FS->getCond()) ||
+                 (ClonedInc != FS->getInc()) ||
+                 (ClonedBody != FS->getBody());
+  
+  if (!Changed) {
+    return FS; // No change
+  }
+  
+  // TODO: Create new ForStmt
   return FS; // Placeholder
 }
 
