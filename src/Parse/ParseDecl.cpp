@@ -36,6 +36,21 @@ namespace blocktype {
 Stmt *Parser::parseDeclarationStatement() {
   pushContext(ParsingContext::Declaration);
   
+  // P7.4.3: Check for structured binding before parsing as regular declaration
+  // Look ahead: if we see 'auto [', it's a structured binding
+  if (Tok.is(TokenKind::kw_auto)) {
+    Token NextTok = peekToken();
+    if (NextTok.is(TokenKind::l_square)) {
+      // This is a structured binding
+      consumeToken(); // consume 'auto'
+      SourceLocation AutoLoc = Tok.getLocation();
+      bool IsReference = false;
+      Stmt *SBDecl = parseStructuredBindingDeclaration(AutoLoc, IsReference);
+      popContext();
+      return SBDecl;  // Return DeclStmt directly
+    }
+  }
+  
   Decl *D = parseDeclaration();
   
   popContext();
@@ -285,9 +300,9 @@ Decl *Parser::parseDeclaration(
   // After parsing 'auto', check if next token is '['
   if (Tok.is(TokenKind::l_square)) {
     // This is a structured binding declaration
-    SourceLocation AutoLoc = Tok.getLocation();  // Use current location
-    bool IsReference = false;  // TODO: Support auto& and auto&&
-    return parseStructuredBindingDeclaration(AutoLoc, IsReference);
+    // Note: Structured bindings should be handled in parseDeclarationStatement,
+    // not here. Return nullptr to indicate this is not a regular declaration.
+    return nullptr;
   }
 
   // Parse declarator (name + pointer/reference/array/function chunks)
@@ -1656,7 +1671,7 @@ end_attributes:
 ///         auto& [name1, name2, ...] = initializer;
 ///
 /// Returns a DeclStmt containing multiple BindingDecls.
-Decl *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
+Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
                                                  bool IsReference) {
   // Expect '['
   if (!Tok.is(TokenKind::l_square)) {
@@ -1719,11 +1734,11 @@ Decl *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
     return nullptr;
   }
   
-  // Wrap all bindings in DeclStmt and return the statement
+  // Wrap all bindings in DeclStmt and return
   llvm::SmallVector<Decl *, 4> BindingDecls(Result.getDecls().begin(), 
                                              Result.getDecls().end());
   Stmt *DeclStmt = Actions.ActOnDeclStmtFromDecls(BindingDecls).get();
-  return llvm::cast<Decl>(DeclStmt);  // Cast back to Decl for consistency
+  return DeclStmt;  // Return as Stmt* (will be used directly in parseDeclarationStatement)
 }
 
 //===----------------------------------------------------------------------===//

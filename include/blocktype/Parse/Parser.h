@@ -438,7 +438,7 @@ public:
 
   /// Parses a structured binding declaration: auto [x, y] = expr;
   /// P7.4.3: Structured binding (C++17/C++26)
-  Decl *parseStructuredBindingDeclaration(SourceLocation AutoLoc,
+  Stmt *parseStructuredBindingDeclaration(SourceLocation AutoLoc,
                                            bool IsReference);
 
   /// Builds a FunctionDecl from a parsed Declarator.
