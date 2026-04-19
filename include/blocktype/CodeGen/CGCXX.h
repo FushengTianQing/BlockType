@@ -28,6 +28,8 @@ class AllocaInst;
 
 namespace blocktype {
 
+class CXXMemberCallExpr; // forward-decl (AST/Expr.h)
+
 /// ArrayCookie — new[]/delete[] 数组分配的 cookie 布局常量。
 /// 布局: [count(size_t)][elem0][elem1]...[elemN-1]
 /// new[] 返回 ptr + CookieSize，delete[] 从 ptr - CookieSize 读取 count。
@@ -279,6 +281,41 @@ public:
   /// 生成所有基类和成员的析构代码（用于析构函数）。
   void EmitDestructorBody(CodeGenFunction &CGF, CXXRecordDecl *Class,
                            llvm::Value *This);
+
+  //===------------------------------------------------------------------===//
+  // P7.1.1: Deducing this (P0847R7)
+  //===------------------------------------------------------------------===//
+
+  /// Generate code for a member call with explicit object parameter.
+  ///
+  /// When the callee has an explicit object parameter, the object is passed
+  /// as the first argument (not via implicit this pointer).
+  ///
+  /// @param CGF       Current codegen function
+  /// @param E         Member call expression
+  /// @param ObjectArg The object argument value
+  /// @param CallArgs  [in/out] Arguments to prepend the object to
+  void EmitExplicitObjectParameterCall(CodeGenFunction &CGF,
+                                        CXXMemberCallExpr *E,
+                                        llvm::Value *ObjectArg,
+                                        llvm::SmallVectorImpl<llvm::Value *> &CallArgs);
+
+  //===------------------------------------------------------------------===//
+  // P7.1.3: Static operator (P1169R4, P2589R1)
+  //===------------------------------------------------------------------===//
+
+  /// Generate code for a static operator call.
+  ///
+  /// Static operators are called without a this pointer.
+  /// The function is looked up and called as a static method.
+  ///
+  /// @param CGF   Current codegen function
+  /// @param MD    Method declaration (must be static operator)
+  /// @param Args  Call arguments
+  /// @return      Call result value
+  llvm::Value *EmitStaticOperatorCall(CodeGenFunction &CGF,
+                                        CXXMethodDecl *MD,
+                                        llvm::ArrayRef<llvm::Value *> Args);
 };
 
 } // namespace blocktype

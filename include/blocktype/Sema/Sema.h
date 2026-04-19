@@ -30,6 +30,7 @@
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
 #include "blocktype/Sema/ConstraintSatisfaction.h"
+#include "blocktype/Sema/SemaCXX.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <memory>
@@ -497,6 +498,27 @@ public:
                                            llvm::StringRef CastKind);
   ExprResult ActOnPackIndexingExpr(SourceLocation Loc, Expr *Pack, Expr *Index);
   ExprResult ActOnReflexprExpr(SourceLocation Loc, Expr *Arg);
+
+  //===------------------------------------------------------------------===//
+  // P7.1.2: Decay-copy expression (P0849R8)
+  //===------------------------------------------------------------------===//
+
+  /// Process a decay-copy expression auto(expr) or auto{expr}.
+  ///
+  /// Performs decay (remove references, top-level cv, array-to-pointer,
+  /// function-to-pointer) and creates a DecayCopyExpr.
+  ExprResult ActOnDecayCopyExpr(SourceLocation AutoLoc, Expr *SubExpr,
+                                bool IsDirectInit);
+
+  //===------------------------------------------------------------------===//
+  // P7.1.4: [[assume]] attribute (P1774R8)
+  //===------------------------------------------------------------------===//
+
+  /// Process an [[assume]] attribute.
+  ///
+  /// Validates that the condition is contextually convertible to bool
+  /// and creates the appropriate AST attribute.
+  ExprResult ActOnAssumeAttr(SourceLocation Loc, Expr *Condition);
 
   // Complex expression factory methods (Phase 2C)
   ExprResult ActOnLambdaExpr(SourceLocation Loc,

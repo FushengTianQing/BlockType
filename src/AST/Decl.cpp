@@ -1064,4 +1064,35 @@ void VarTemplatePartialSpecializationDecl::dump(raw_ostream &OS, unsigned Indent
   VarTemplateSpecializationDecl::dump(OS, Indent);
 }
 
+//===----------------------------------------------------------------------===//
+// P7.1.1: FunctionDecl::getThisType
+//===----------------------------------------------------------------------===//
+
+QualType FunctionDecl::getThisType(ASTContext &Ctx) const {
+  // If this function has an explicit object parameter (deducing this),
+  // the effective "this type" is the type of the explicit parameter.
+  if (hasExplicitObjectParam()) {
+    ParmVarDecl *ExplicitParam = getExplicitObjectParam();
+    if (ExplicitParam)
+      return ExplicitParam->getType();
+  }
+
+  // For regular member functions, construct the traditional this pointer type.
+  // This requires knowing the parent class, which is stored in CXXMethodDecl.
+  // For a FunctionDecl that is not a CXXMethodDecl, return null.
+  return QualType();
+}
+
+//===----------------------------------------------------------------------===//
+// P7.1.3: CXXMethodDecl static operator methods
+//===----------------------------------------------------------------------===//
+
+bool CXXMethodDecl::isStaticCallOperator() const {
+  return isStaticOperator() && getName() == "operator()";
+}
+
+bool CXXMethodDecl::isStaticSubscriptOperator() const {
+  return isStaticOperator() && getName() == "operator[]";
+}
+
 } // namespace blocktype

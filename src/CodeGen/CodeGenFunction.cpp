@@ -246,6 +246,10 @@ llvm::Value *CodeGenFunction::EmitExpr(Expr *Expression) {
   case ASTNode::NodeKind::CXXThrowExprKind:
     return EmitCXXThrowExpr(llvm::cast<CXXThrowExpr>(Expression));
 
+  // P7.1.2: Decay-copy expression (P0849R8)
+  case ASTNode::NodeKind::DecayCopyExprKind:
+    return EmitDecayCopyExpr(llvm::cast<DecayCopyExpr>(Expression));
+
   // 类型转换
   case ASTNode::NodeKind::CXXStaticCastExprKind:
   case ASTNode::NodeKind::CXXDynamicCastExprKind:
@@ -281,6 +285,16 @@ void CodeGenFunction::EmitStmt(Stmt *Statement) {
       auto *DILoc = CGM.getDebugInfo().getSourceLocation(Loc);
       if (DILoc) {
         Builder.SetCurrentDebugLocation(DILoc);
+      }
+    }
+  }
+
+  // P7.1.4: Check for [[assume]] attribute on any statement.
+  // When a statement has [[assume(expr)]], emit llvm.assume before the statement.
+  if (auto *Attrs = Statement->getAttrs()) {
+    for (auto *Attr : Attrs->getAttributes()) {
+      if (Attr->getAttributeName() == "assume") {
+        EmitAssumeAttr(Attr->getArgumentExpr());
       }
     }
   }

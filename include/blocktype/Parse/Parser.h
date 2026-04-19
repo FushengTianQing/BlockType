@@ -688,6 +688,9 @@ public:
   /// Parses a C++ reinterpret_cast expression.
   Expr *parseCXXReinterpretCastExpr();
 
+  /// Parses a decay-copy expression auto(x) / auto{x} (P0849R8).
+  Expr *parseDecayCopyExpr(SourceLocation AutoLoc);
+
 private:
   //===--------------------------------------------------------------------===//
   // Internal helpers

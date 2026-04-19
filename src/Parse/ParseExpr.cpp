@@ -662,6 +662,20 @@ Expr *Parser::parsePrimaryExpression() {
   case TokenKind::kw_reinterpret_cast:
     return parseCXXReinterpretCastExpr();
 
+  // P7.1.2: Decay-copy expression auto(x) / auto{x} (P0849R8)
+  case TokenKind::kw_auto: {
+    SourceLocation AutoLoc = Tok.getLocation();
+    // Peek ahead: auto( or auto{ → decay-copy expression
+    Token Next = PP.peekToken(0);
+    if (Next.is(TokenKind::l_paren) || Next.is(TokenKind::l_brace)) {
+      return parseDecayCopyExpr(AutoLoc);
+    }
+    // Otherwise, 'auto' in expression context is an error
+    emitError(DiagID::err_expected_expression);
+    consumeToken();
+    return nullptr;
+  }
+
   default:
     // Emit error for unexpected token
     emitError(DiagID::err_expected_expression);

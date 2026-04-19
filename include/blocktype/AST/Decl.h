@@ -157,6 +157,10 @@ class FunctionDecl : public ValueDecl {
   Expr *NoexceptExpr; // noexcept(expression)
   class AttributeListDecl *Attrs = nullptr; // [[noreturn]], [[nodiscard]] etc.
 
+  // P7.1.1: Deducing this (P0847R7) - Explicit object parameter
+  ParmVarDecl *ExplicitObjectParam = nullptr;
+  bool HasExplicitObjectParam = false;
+
 public:
   FunctionDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
                llvm::ArrayRef<ParmVarDecl *> Params, Stmt *Body = nullptr,
@@ -195,6 +199,28 @@ public:
   /// Check if this function has a specific attribute by name.
   bool hasAttr(llvm::StringRef Name) const;
 
+  //===------------------------------------------------------------------===//
+  // P7.1.1: Deducing this (P0847R7) - Explicit object parameter support
+  //===------------------------------------------------------------------===//
+
+  /// Get the explicit object parameter, if any.
+  /// Returns nullptr if this function does not have an explicit object parameter.
+  ParmVarDecl *getExplicitObjectParam() const { return ExplicitObjectParam; }
+
+  /// Set the explicit object parameter for deducing this.
+  void setExplicitObjectParam(ParmVarDecl *P) {
+    ExplicitObjectParam = P;
+    HasExplicitObjectParam = (P != nullptr);
+  }
+
+  /// Whether this function has an explicit object parameter (deducing this).
+  bool hasExplicitObjectParam() const { return HasExplicitObjectParam; }
+
+  /// Get the effective 'this' type, considering deducing this.
+  /// If hasExplicitObjectParam(), returns the parameter type.
+  /// Otherwise, returns the traditional this pointer type.
+  QualType getThisType(ASTContext &Ctx) const;
+
   NodeKind getKind() const override { return NodeKind::FunctionDeclKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
@@ -211,6 +237,7 @@ public:
 /// ParmVarDecl - Parameter variable declaration.
 class ParmVarDecl : public VarDecl {
   unsigned Index;
+  bool IsExplicitObjectParam = false; // P7.1.1: deducing this
 
 public:
   ParmVarDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
@@ -219,6 +246,10 @@ public:
 
   unsigned getFunctionScopeIndex() const { return Index; }
   Expr *getDefaultArg() const { return getInit(); }
+
+  // P7.1.1: Explicit object parameter (deducing this)
+  bool isExplicitObjectParam() const { return IsExplicitObjectParam; }
+  void setExplicitObjectParam(bool V = true) { IsExplicitObjectParam = V; }
 
   NodeKind getKind() const override { return NodeKind::ParmVarDeclKind; }
 
@@ -575,6 +606,7 @@ private:
   bool IsFinal;
   bool IsDefaulted;
   bool IsDeleted;
+  bool IsStaticOperator = false;  // P7.1.3: static operator() / static operator[]
   RefQualifierKind RefQualifier;
   AccessSpecifier Access;
 
@@ -609,6 +641,20 @@ public:
   bool isDeleted() const { return IsDeleted; }
   RefQualifierKind getRefQualifier() const { return RefQualifier; }
   bool hasRefQualifier() const { return RefQualifier != RQ_None; }
+
+  //===------------------------------------------------------------------===//
+  // P7.1.3: Static operator (P1169R4, P2589R1)
+  //===------------------------------------------------------------------===//
+
+  /// Whether this is a static operator() or static operator[].
+  bool isStaticOperator() const { return IsStaticOperator; }
+  void setStaticOperator(bool V) { IsStaticOperator = V; }
+
+  /// Whether this is specifically a static call operator().
+  bool isStaticCallOperator() const;
+
+  /// Whether this is specifically a static subscript operator[].
+  bool isStaticSubscriptOperator() const;
   
   AccessSpecifier getAccess() const { return Access; }
   void setAccess(AccessSpecifier A) { Access = A; }

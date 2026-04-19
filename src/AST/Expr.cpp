@@ -702,4 +702,18 @@ bool Expr::isTypeDependent() const {
   return ExprTy && ExprTy->isDependentType();
 }
 
+//===----------------------------------------------------------------------===//
+// P7.1.2: DecayCopyExpr dump
+//===----------------------------------------------------------------------===//
+
+void DecayCopyExpr::dump(raw_ostream &OS, unsigned Indent) const {
+  printIndent(OS, Indent);
+  OS << "DecayCopyExpr " << (IsDirectInit ? "auto{...}" : "auto(...)");
+  if (!getType().isNull())
+    OS << " type='" << getType().getTypePtr() << "'";
+  OS << "\n";
+  if (SubExpr)
+    SubExpr->dump(OS, Indent + 1);
+}
+
 } // namespace blocktype

@@ -779,7 +779,9 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
 
   // 成员函数：添加 this 指针
   if (auto *MemberDecl = llvm::dyn_cast<CXXMethodDecl>(CalleeDecl)) {
-    if (!MemberDecl->isStatic()) {
+    // P7.1.1: Deducing this — 有显式对象参数的方法不添加隐式 this。
+    // 对象作为第一个显式参数传递（在后面的参数循环中处理）。
+    if (!MemberDecl->isStatic() && !MemberDecl->hasExplicitObjectParam()) {
       // 从 callee 表达式获取 this
       if (auto *MemberExpression = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
         llvm::Value *BaseValue = nullptr;
@@ -846,9 +848,9 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
 
   // 非虚函数参数（带隐式类型转换 + 变参 default argument promotion）
   auto Params = CalleeDecl->getParams();
-  bool IsNonStaticMember =
-      llvm::isa<CXXMethodDecl>(CalleeDecl) &&
-      !llvm::cast<CXXMethodDecl>(CalleeDecl)->isStatic();
+  auto *CalleeAsMD = llvm::dyn_cast<CXXMethodDecl>(CalleeDecl);
+  bool IsNonStaticMember = CalleeAsMD && !CalleeAsMD->isStatic()
+                           && !CalleeAsMD->hasExplicitObjectParam();
   unsigned ParamOffset = IsNonStaticMember ? 1 : 0;
   bool IsVarArg = CalleeDecl->isVariadic();
 
@@ -866,6 +868,44 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
     }
     SRetAlloca = CreateAlloca(RetQT, "sret.call");
     Arguments.insert(Arguments.begin(), SRetAlloca);
+  }
+
+  // P7.1.1: Deducing this — 有显式对象参数时，对象作为第一个显式参数传递。
+  if (CalleeAsMD && CalleeAsMD->hasExplicitObjectParam()) {
+    if (auto *ME = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
+      llvm::Value *ObjValue = nullptr;
+      ParmVarDecl *ExplicitParam = CalleeAsMD->getExplicitObjectParam();
+      QualType ParamType = ExplicitParam ? ExplicitParam->getType() : QualType();
+
+      // 根据参数类型决定如何传递对象：
+      // - 引用类型：传地址（lvalue）
+      // - 值类型：传值（rvalue）
+      bool PassByReference = !ParamType.isNull() && ParamType.isReferenceType();
+
+      if (ME->isArrow()) {
+        // ptr->method() — base 已经是指针
+        ObjValue = EmitExpr(ME->getBase());
+        // 对于引用参数，指针可以直接使用
+        // 对于值参数，需要 load
+        if (ObjValue && !PassByReference) {
+          llvm::Type *PointeeTy = CGM.getTypes().ConvertType(
+              QualType(llvm::cast<PointerType>(ME->getBase()->getType().getTypePtr())
+                           ->getPointeeType(),
+                       Qualifier::None));
+          if (PointeeTy)
+            ObjValue = Builder.CreateLoad(PointeeTy, ObjValue, "obj.val");
+        }
+      } else {
+        // obj.method() — base 是对象
+        if (PassByReference) {
+          ObjValue = EmitLValue(ME->getBase());
+        } else {
+          ObjValue = EmitExpr(ME->getBase());
+        }
+      }
+      if (ObjValue)
+        Arguments.push_back(ObjValue);
+    }
   }
 
   for (unsigned I = 0; I < CallExpression->getNumArgs(); ++I) {
@@ -1874,4 +1914,70 @@ llvm::Value *CodeGenFunction::EmitCXXThrowExpr(CXXThrowExpr *ThrowExpression) {
   Builder.SetInsertPoint(AfterThrow);
 
   return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// P7.1.2: Decay-copy expression (P0849R8)
+//===----------------------------------------------------------------------===//
+
+llvm::Value *CodeGenFunction::EmitDecayCopyExpr(DecayCopyExpr *DCE) {
+  if (!DCE)
+    return nullptr;
+
+  Expr *SubExpr = DCE->getSubExpr();
+  if (!SubExpr)
+    return nullptr;
+
+  // Evaluate the subexpression — the decay (removing references, cv, etc.)
+  // is purely a type-level operation. At the IR level, we just emit the
+  // subexpression and optionally perform type conversions.
+  llvm::Value *SubValue = EmitExpr(SubExpr);
+  if (!SubValue)
+    return nullptr;
+
+  // If the subexpression type differs from the result type (e.g., reference
+  // stripping, array-to-pointer decay), apply the conversion.
+  QualType SubTy = SubExpr->getType();
+  QualType ResultTy = DCE->getType();
+
+  if (!SubTy.isNull() && !ResultTy.isNull() && SubTy != ResultTy) {
+    SubValue = EmitScalarConversion(SubValue, SubTy, ResultTy);
+  }
+
+  // For class types, create a temporary and copy-construct into it.
+  // For scalar types, the value itself is the prvalue result.
+  if (!ResultTy.isNull() && ResultTy->isRecordType()) {
+    // Create a temporary alloca for the decay-copy result
+    llvm::AllocaInst *TempAlloca = CreateAlloca(ResultTy, "decaycopy.tmp");
+    Builder.CreateStore(SubValue, TempAlloca);
+    // Return the loaded value (prvalue)
+    llvm::Type *LLVMResultTy = CGM.getTypes().ConvertType(ResultTy);
+    return Builder.CreateLoad(LLVMResultTy, TempAlloca, "decaycopy.val");
+  }
+
+  return SubValue;
+}
+
+//===----------------------------------------------------------------------===//
+// P7.1.4: [[assume]] attribute (P1774R8)
+//===----------------------------------------------------------------------===//
+
+void CodeGenFunction::EmitAssumeAttr(Expr *Condition) {
+  if (!Condition)
+    return;
+
+  llvm::Value *CondVal = EmitExpr(Condition);
+  if (!CondVal)
+    return;
+
+  // Convert to i1 if needed
+  llvm::Type *BoolTy = llvm::Type::getInt1Ty(CGM.getLLVMContext());
+  if (CondVal->getType() != BoolTy) {
+    CondVal = Builder.CreateIsNotNull(CondVal, "assume.bool");
+  }
+
+  // Emit llvm.assume intrinsic
+  llvm::Function *AssumeIntrinsic = llvm::Intrinsic::getDeclaration(
+      CGM.getModule(), llvm::Intrinsic::assume);
+  Builder.CreateCall(AssumeIntrinsic, {CondVal});
 }

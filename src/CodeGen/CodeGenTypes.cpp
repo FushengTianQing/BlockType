@@ -321,8 +321,9 @@ const FunctionABITy *CodeGenTypes::GetFunctionABI(FunctionDecl *FD) {
       }
 
       // 非静态成员函数需要添加 this 指针作为第一个参数
+      // P7.1.1: 除非有显式对象参数 (deducing this) — 此时对象通过显式参数传递
       if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(FD)) {
-        if (!MD->isStatic()) {
+        if (!MD->isStatic() && !MD->hasExplicitObjectParam()) {
           llvm::Type *ThisTy = nullptr;
           if (MD->getParent()) {
             llvm::StructType *ClassTy = GetRecordType(MD->getParent());

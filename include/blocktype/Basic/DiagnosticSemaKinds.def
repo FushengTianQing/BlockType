@@ -179,6 +179,59 @@ DIAG(err_spec_partial_ambiguous, Error, \
   "%0 的偏特化存在歧义")
 
 //===----------------------------------------------------------------------===//
+// P7.1.1: Deducing this diagnostics (P0847R7)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_explicit_object_param_static, Error, \
+  "explicit object parameter cannot be used in a static member function", \
+  "显式对象参数不能用于静态成员函数")
+DIAG(err_explicit_object_param_virtual, Error, \
+  "explicit object parameter cannot be used with a virtual function", \
+  "显式对象参数不能与虚函数同时使用")
+DIAG(err_explicit_object_param_default_arg, Error, \
+  "explicit object parameter cannot have a default argument", \
+  "显式对象参数不能有默认参数")
+DIAG(err_explicit_object_param_type, Error, \
+  "explicit object parameter type must be a reference or value of class type", \
+  "显式对象参数类型必须是类类型的引用或值")
+DIAG(warn_explicit_object_param_unused, Warning, \
+  "explicit object parameter '%0' is unused", \
+  "显式对象参数 '%0' 未使用")
+
+//===----------------------------------------------------------------------===//
+// P7.1.2: Decay-copy diagnostics (P0849R8)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_decay_copy_non_copyable, Error, \
+  "cannot decay-copy expression of non-copyable type '%0'", \
+  "无法 decay-copy 不可复制类型 '%0' 的表达式")
+DIAG(warn_decay_copy_redundant, Warning, \
+  "decay-copy is redundant for prvalue of type '%0'", \
+  "对于类型为 '%0' 的纯右值，decay-copy 是冗余的")
+
+//===----------------------------------------------------------------------===//
+// P7.1.3: Static operator diagnostics (P1169R4, P2589R1)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_static_operator_not_method, Error, \
+  "static operator can only be declared as a member function", \
+  "static operator 只能声明为成员函数")
+DIAG(err_static_operator_this, Error, \
+  "static operator cannot use 'this' pointer", \
+  "static operator 不能使用 'this' 指针")
+
+//===----------------------------------------------------------------------===//
+// P7.1.4: [[assume]] attribute diagnostics (P1774R8)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_assume_attr_not_bool, Error, \
+  "[[assume]] attribute argument must be convertible to bool", \
+  "[[assume]] 属性参数必须可转换为 bool")
+DIAG(warn_assume_attr_side_effects, Warning, \
+  "[[assume]] attribute argument has side effects", \
+  "[[assume]] 属性参数有副作用")
+
+//===----------------------------------------------------------------------===//
 // Warnings
 //===----------------------------------------------------------------------===//
 

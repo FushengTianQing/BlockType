@@ -322,8 +322,20 @@ Decl *Parser::parseDeclaration(
 ///
 /// parameter-declaration ::= decl-specifier-seq declarator?
 ///                         | decl-specifier-seq declarator '=' assignment-expression
+///                         | 'this' decl-specifier-seq declarator   [P7.1.1 deducing this]
 ///
 ParmVarDecl *Parser::parseParameterDeclaration(unsigned Index) {
+  // P7.1.1: Detect explicit object parameter (deducing this).
+  // Syntax: this Type&& name — `this` appears before the type specifier.
+  bool IsExplicitObjParam = false;
+  if (Index == 0 && Tok.is(TokenKind::kw_this)) {
+    // Peek ahead: if the next token looks like a type specifier or declarator,
+    // then this is an explicit object parameter.
+    // In practice, `this` followed by any type-specifier token means deducing this.
+    IsExplicitObjParam = true;
+    consumeToken(); // consume 'this'
+  }
+
   // Parse type specifier
   DeclSpec DS;
   parseDeclSpecifierSeq(DS);
@@ -342,15 +354,30 @@ ParmVarDecl *Parser::parseParameterDeclaration(unsigned Index) {
   llvm::StringRef Name = D.hasName() ? D.getName().getIdentifier() : llvm::StringRef();
   SourceLocation NameLoc = D.getNameLoc();
 
-  // Parse default argument
+  // Explicit object parameter cannot have a default argument (P0847R7).
+  if (IsExplicitObjParam && Tok.is(TokenKind::equal)) {
+    emitError(DiagID::err_explicit_object_param_default_arg);
+    // Still consume to avoid cascading errors.
+    consumeToken();
+    parseExpression();
+  }
+
+  // Parse default argument (only for non-explicit-object parameters)
   Expr *DefaultArg = nullptr;
-  if (Tok.is(TokenKind::equal)) {
+  if (!IsExplicitObjParam && Tok.is(TokenKind::equal)) {
     consumeToken();
     DefaultArg = parseExpression();
   }
 
   // Create ParmVarDecl with the correct index
-  return llvm::cast<ParmVarDecl>(Actions.ActOnParmVarDecl(NameLoc, Name, Type, Index, DefaultArg).get());
+  auto *PVD = llvm::cast<ParmVarDecl>(
+      Actions.ActOnParmVarDecl(NameLoc, Name, Type, Index, DefaultArg).get());
+
+  // P7.1.1: Mark as explicit object parameter
+  if (IsExplicitObjParam && PVD)
+    PVD->setExplicitObjectParam(true);
+
+  return PVD;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1663,6 +1690,15 @@ FunctionDecl *Parser::buildFunctionDecl(Declarator &D) {
 
   bool IsInline = DS.IsInline;
   bool IsConstexpr = DS.IsConstexpr;
+
+  // P7.1.1: Extract explicit object parameter if present.
+  // For free functions, explicit object parameter is not valid — but we still
+  // remove it from Params to avoid cascading errors (diagnostic already emitted).
+  if (!Params.empty() && Params.front()->isExplicitObjectParam()) {
+    // Explicit object param on a free function — will be diagnosed by SemaCXX.
+    // For now just remove it from params and store it.
+    Params.erase(Params.begin());
+  }
 
   llvm::errs() << "DEBUG: buildFunctionDecl - Calling ActOnFunctionDeclFull\n";
   auto Result = Actions.ActOnFunctionDeclFull(NameLoc, Name, T, Params, Body,

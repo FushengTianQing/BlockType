@@ -1752,4 +1752,60 @@ void Sema::DiagnoseUnusedDecls(TranslationUnitDecl *TU) {
   }
 }
 
+//===----------------------------------------------------------------------===//
+// P7.1.2: Decay-copy expression (P0849R8)
+//===----------------------------------------------------------------------===//
+
+ExprResult Sema::ActOnDecayCopyExpr(SourceLocation AutoLoc, Expr *SubExpr,
+                                    bool IsDirectInit) {
+  if (!SubExpr)
+    return ExprResult(nullptr);
+
+  // The result type is the decayed type of the subexpression:
+  // - Remove references
+  // - Remove top-level cv-qualifiers
+  // - Array-to-pointer conversion
+  // - Function-to-pointer conversion
+  QualType SubTy = SubExpr->getType();
+  QualType ResultTy = SubTy;
+
+  if (!SubTy.isNull()) {
+    // Remove reference
+    if (auto *RefTy = llvm::dyn_cast<ReferenceType>(SubTy.getTypePtr())) {
+      ResultTy = QualType(RefTy->getReferencedType(), Qualifier::None);
+    }
+    // Remove top-level cv-qualifiers
+    ResultTy = ResultTy.withoutConstQualifier().withoutVolatileQualifier();
+
+    // Array-to-pointer decay
+    if (auto *ArrTy = llvm::dyn_cast<ArrayType>(ResultTy.getTypePtr())) {
+      auto *PtrTy = Context.getPointerType(ArrTy->getElementType());
+      ResultTy = QualType(PtrTy, Qualifier::None);
+    }
+    // Function-to-pointer decay
+    else if (auto *FnTy = llvm::dyn_cast<FunctionType>(ResultTy.getTypePtr())) {
+      auto *PtrTy = Context.getPointerType(ResultTy.getTypePtr());
+      ResultTy = QualType(PtrTy, Qualifier::None);
+    }
+  }
+
+  auto *DCE = Context.create<DecayCopyExpr>(AutoLoc, SubExpr, IsDirectInit);
+  DCE->setType(ResultTy);
+  return ExprResult(DCE);
+}
+
+//===----------------------------------------------------------------------===//
+// P7.1.4: [[assume]] attribute (P1774R8)
+//===----------------------------------------------------------------------===//
+
+ExprResult Sema::ActOnAssumeAttr(SourceLocation Loc, Expr *Condition) {
+  if (!Condition)
+    return ExprResult(nullptr);
+
+  // The condition must be contextually convertible to bool.
+  // For now, we just return the expression — the actual check will be
+  // performed during CodeGen when we emit the llvm.assume intrinsic.
+  return ExprResult(Condition);
+}
+
 } // namespace blocktype

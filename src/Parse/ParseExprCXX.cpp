@@ -783,4 +783,50 @@ Expr *Parser::parseReflexprExpr() {
   return Actions.ActOnReflexprExpr(ReflexprLoc, Arg).get();
 }
 
+//===----------------------------------------------------------------------===//
+// P7.1.2: Decay-copy expression parsing (P0849R8)
+//===----------------------------------------------------------------------===//
+
+Expr *Parser::parseDecayCopyExpr(SourceLocation AutoLoc) {
+  // Syntax: auto( expression ) or auto{ expression }
+  assert(Tok.is(TokenKind::kw_auto) && "Expected 'auto'");
+  consumeToken(); // consume 'auto'
+
+  bool IsDirectInit = false;
+  if (Tok.is(TokenKind::l_paren)) {
+    IsDirectInit = true;
+    consumeToken(); // consume '('
+  } else if (Tok.is(TokenKind::l_brace)) {
+    IsDirectInit = false;
+    consumeToken(); // consume '{'
+  } else {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+
+  // Parse the sub-expression
+  Expr *SubExpr = parseExpression();
+  if (!SubExpr) {
+    emitError(DiagID::err_expected_expression);
+    return nullptr;
+  }
+
+  // Consume closing delimiter
+  if (IsDirectInit) {
+    if (!Tok.is(TokenKind::r_paren)) {
+      emitError(DiagID::err_expected_rparen);
+      return nullptr;
+    }
+    consumeToken(); // consume ')'
+  } else {
+    if (!Tok.is(TokenKind::r_brace)) {
+      emitError(DiagID::err_expected_rbrace);
+      return nullptr;
+    }
+    consumeToken(); // consume '}'
+  }
+
+  return Actions.ActOnDecayCopyExpr(AutoLoc, SubExpr, IsDirectInit).get();
+}
+
 } // namespace blocktype

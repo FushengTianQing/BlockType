@@ -2,6 +2,7 @@
 
 add_executable(ast-tests
   ASTTest.cpp
+  Stage71Test.cpp
 )
 
 target_link_libraries(ast-tests

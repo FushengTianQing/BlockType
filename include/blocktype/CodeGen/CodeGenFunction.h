@@ -260,6 +260,19 @@ private:
   llvm::Value *EmitCXXThrowExpr(CXXThrowExpr *TE);
 
   //===------------------------------------------------------------------===//
+  // P7.1: C++23 expression generation
+  //===------------------------------------------------------------------===//
+
+  /// Generate code for a decay-copy expression (P0849R8).
+  /// Creates a temporary by evaluating the subexpression and performing
+  /// materialization.
+  llvm::Value *EmitDecayCopyExpr(DecayCopyExpr *DCE);
+
+  /// Generate code for an [[assume]] attribute (P1774R8).
+  /// Emits llvm.assume intrinsic if the condition is evaluatable.
+  void EmitAssumeAttr(Expr *Condition);
+
+  //===------------------------------------------------------------------===//
   // 二元运算辅助
   //===------------------------------------------------------------------===//
 

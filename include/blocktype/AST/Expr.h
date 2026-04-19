@@ -1538,6 +1538,40 @@ public:
 // Error Recovery
 //===----------------------------------------------------------------------===//
 
+/// DecayCopyExpr - Decay-copy expression auto(expr) or auto{expr} (P0849R8).
+///
+/// Represents a C++23 decay-copy expression that performs decay on the
+/// subexpression (removing references, top-level cv-qualifiers, converting
+/// arrays/functions to pointers) and creates a temporary prvalue.
+///
+/// Example:
+///   auto x = auto(expr);   // copy-initialization from decay-copy
+///   auto y = auto{expr};   // direct-initialization from decay-copy
+class DecayCopyExpr : public Expr {
+  Expr *SubExpr;
+  bool IsDirectInit;  // true = auto{expr}, false = auto(expr)
+
+public:
+  DecayCopyExpr(SourceLocation Loc, Expr *Sub, bool DirectInit)
+      : Expr(Loc, QualType(), ExprValueKind::VK_PRValue),
+        SubExpr(Sub), IsDirectInit(DirectInit) {}
+
+  Expr *getSubExpr() const { return SubExpr; }
+  bool isDirectInit() const { return IsDirectInit; }
+
+  NodeKind getKind() const override { return NodeKind::DecayCopyExprKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  bool isTypeDependent() const override {
+    return SubExpr && SubExpr->isTypeDependent();
+  }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::DecayCopyExprKind;
+  }
+};
+
 /// RecoveryExpr - Error recovery expression.
 class RecoveryExpr : public Expr {
 public:

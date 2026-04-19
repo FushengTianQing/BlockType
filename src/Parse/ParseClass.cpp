@@ -428,6 +428,120 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
 
   QualType Type = DS.Type;
 
+  // P7.1.3: Check for operator overloading (static operator(), static operator[])
+  // Syntax: static operator()(...) or static operator[](...)
+  // Also handles non-static: operator()(...) or operator[](...)
+  bool IsStaticOp = (DS.SC == StorageClass::Static);
+  if (Tok.is(TokenKind::kw_operator)) {
+    SourceLocation OpLoc = Tok.getLocation();
+    consumeToken(); // consume 'operator'
+
+    // Determine which operator
+    llvm::StringRef OperatorName;
+    if (Tok.is(TokenKind::l_paren)) {
+      // operator() — consume both parens
+      consumeToken(); // consume '('
+      if (!Tok.is(TokenKind::r_paren)) {
+        emitError(DiagID::err_expected_rparen);
+        return nullptr;
+      }
+      consumeToken(); // consume ')'
+      OperatorName = "operator()";
+    } else if (Tok.is(TokenKind::l_square)) {
+      // operator[] — consume both brackets
+      consumeToken(); // consume '['
+      if (!Tok.is(TokenKind::r_square)) {
+        emitError(DiagID::err_expected);
+        return nullptr;
+      }
+      consumeToken(); // consume ']'
+      OperatorName = "operator[]";
+    } else {
+      emitError(DiagID::err_expected);
+      return nullptr;
+    }
+
+    // Parse parameter list
+    llvm::SmallVector<ParmVarDecl *, 8> Params;
+    unsigned ParamIndex = 0;
+
+    if (!Tok.is(TokenKind::l_paren)) {
+      emitError(DiagID::err_expected_lparen);
+      return nullptr;
+    }
+    consumeToken(); // consume '('
+
+    if (!Tok.is(TokenKind::r_paren)) {
+      do {
+        ParmVarDecl *Param = parseParameterDeclaration(ParamIndex);
+        if (!Param) {
+          emitError(DiagID::err_expected_type);
+          skipUntil({TokenKind::r_paren, TokenKind::semicolon});
+          break;
+        }
+        Params.push_back(Param);
+        ++ParamIndex;
+
+        if (Tok.is(TokenKind::comma)) {
+          consumeToken();
+        } else {
+          break;
+        }
+      } while (true);
+    }
+
+    if (!Tok.is(TokenKind::r_paren)) {
+      emitError(DiagID::err_expected_rparen);
+      return nullptr;
+    }
+    consumeToken(); // consume ')'
+
+    // Parse trailing return type (-> type)
+    if (Tok.is(TokenKind::arrow)) {
+      consumeToken();
+      QualType TrailingReturnType = parseType();
+      if (!TrailingReturnType.isNull())
+        Type = TrailingReturnType;
+    }
+
+    // Parse function body
+    Stmt *Body = nullptr;
+    bool IsDefaulted = false;
+    bool IsDeleted = false;
+
+    if (Tok.is(TokenKind::l_brace)) {
+      Body = parseCompoundStatement();
+    } else if (Tok.is(TokenKind::equal)) {
+      consumeToken();
+      if (Tok.is(TokenKind::kw_default)) {
+        IsDefaulted = true;
+        consumeToken();
+      } else if (Tok.is(TokenKind::kw_delete)) {
+        IsDeleted = true;
+        consumeToken();
+      }
+    }
+
+    if (Tok.is(TokenKind::semicolon))
+      consumeToken();
+
+    // Create CXXMethodDecl
+    AccessSpecifier Access =
+        static_cast<AccessSpecifier>(Class->getCurrentAccess());
+
+    CXXMethodDecl *Method = llvm::cast<CXXMethodDecl>(
+        Actions.ActOnCXXMethodDeclFactory(OpLoc, OperatorName, Type, Params,
+            Class, Body, IsStaticOp, false, false, false, false,
+            false, false, IsDefaulted, IsDeleted,
+            CXXMethodDecl::RQ_None, false, false, nullptr, Access).get());
+
+    // P7.1.3: Mark as static operator if static
+    if (Method && IsStaticOp)
+      Method->setStaticOperator(true);
+
+    return Method;
+  }
+
   // Parse member name
   if (!Tok.is(TokenKind::identifier)) {
     emitError(DiagID::err_expected_identifier);
@@ -601,12 +715,31 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
     // Create CXXMethodDecl via Sema
     AccessSpecifier Access =
         static_cast<AccessSpecifier>(Class->getCurrentAccess());
+
+    // P7.1.1: Extract explicit object parameter (deducing this).
+    // The explicit object parameter is the first parameter marked with `this`.
+    // It is removed from the normal parameter list and stored separately.
+    ParmVarDecl *ExplicitObjParam = nullptr;
+    if (!Params.empty() && Params.front()->isExplicitObjectParam()) {
+      ExplicitObjParam = Params.front();
+      Params.erase(Params.begin());
+      // Deducing this is incompatible with static/virtual/const/volatile qualifiers
+      if (IsStatic)
+        emitError(DiagID::err_explicit_object_param_static);
+      if (IsVirtual)
+        emitError(DiagID::err_explicit_object_param_virtual);
+    }
+
     CXXMethodDecl *Method = llvm::cast<CXXMethodDecl>(
         Actions.ActOnCXXMethodDeclFactory(NameLoc, Name, Type, Params, Class, Body,
             IsStatic, IsConst, IsVolatile, IsVirtual, IsPureVirtual,
             IsOverride, IsFinal, IsDefaulted, IsDeleted,
             RefQual, HasNoexceptSpec, NoexceptValue, NoexceptExpr,
             Access).get());
+
+    // P7.1.1: Set explicit object parameter on the method
+    if (Method && ExplicitObjParam)
+      Method->setExplicitObjectParam(ExplicitObjParam);
 
     // Method is registered in Scope+SymbolTable by ActOnCXXMethodDeclFactory
 

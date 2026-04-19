@@ -90,6 +90,9 @@ EXPR(CoawaitExpr, Expr)
 EXPR(CXXDependentScopeMemberExpr, Expr)
 EXPR(DependentScopeDeclRefExpr, Expr)
 
+// C++23 Decay-copy (P0849R8)
+EXPR(DecayCopyExpr, Expr)
+
 // Error recovery
 EXPR(RecoveryExpr, Expr)
 
