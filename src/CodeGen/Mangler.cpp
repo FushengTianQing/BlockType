@@ -419,13 +419,30 @@ void Mangler::mangleCtorName(const CXXConstructorDecl *Ctor,
 }
 
 void Mangler::mangleDtorName(const CXXDestructorDecl *Dtor,
-                              std::string &Out) {
+                              std::string &Out,
+                              DtorVariant Variant) {
   // Destructor ::= D0  (deleting destructor)
   //            ::= D1  (complete object destructor)
   //            ::= D2  (base object destructor)
-  // 使用 D1（完整对象析构函数）作为默认
-  Out += "D1";
+  switch (Variant) {
+  case DtorVariant::Deleting: Out += "D0"; break;
+  case DtorVariant::Complete: Out += "D1"; break;
+  }
   Out += 'E';
   // 析构函数通常无参数
   mangleFunctionParamTypes(Dtor->getParams(), Out);
+}
+
+std::string Mangler::getMangledDtorName(const CXXRecordDecl *RD,
+                                         DtorVariant Variant) {
+  if (!RD) return "_ZN5dummyD0Ev";
+  std::string Name = "_ZN";
+  mangleNestedName(RD, Name);
+  switch (Variant) {
+  case DtorVariant::Deleting: Name += "D0"; break;
+  case DtorVariant::Complete: Name += "D1"; break;
+  }
+  Name += 'E';
+  Name += 'v'; // 析构函数无参数
+  return Name;
 }

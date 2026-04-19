@@ -181,23 +181,36 @@
    -- EmitVTables 在函数体生成前调用
    -- 确保函数体中可以引用 vtable 全局变量
 
-7. ⚠️ **VTable 布局顺序与文档不同**（P2）
+7. ✅ ~~**VTable 布局顺序与文档不同**（P2）~~ — **已修复 (2026-04-19)**
    -- 文档提示："首先是 RTTI 指针 → offset-to-top → 虚函数指针"
    -- 实际实现："offset-to-top → RTTI → 虚函数指针"
    -- 与 Itanium C++ ABI 实际一致（offset-to-top 在前），文档描述有误
+   -- **结论：** 实现正确，文档描述有误，无需代码修改
 
-8. ⚠️ **覆盖检测仅用名称+参数数量匹配**（P2）
-   -- Clang 使用 Sema 提供的 override 信息（CXXMethodDecl::getOverriddenMethods）
-   -- 当前仅按方法名+参数数量匹配，可能误匹配重载函数
-   -- 未考虑 const/ volatile 限定符、ref-qualifier
+8. ✅ ~~**覆盖检测仅用名称+参数数量匹配**（P2）~~ — **已修复 (2026-04-19)**
+   -- 新增 `isMethodOverride()` 辅助方法，综合匹配：名称 + 参数数量 + const/volatile 限定符 + ref-qualifier
+   -- 新增 `findOverride()` 在类方法中查找覆盖方法
+   -- 新增 `isMethodInAnyBase()` 和 `methodMatchesInHierarchy()` 递归检测方法是否覆盖基类方法
+   -- 替换了所有原来仅用 `getName() == MD->getName() && getNumParams() == MD->getNumParams()` 的匹配
+   -- **影响：** 带有 const/非 const 重载的虚函数不再被错误匹配
 
-9. ⚠️ **虚析构函数未特殊处理**（P2）
-   -- 虚析构函数在 vtable 中应有特殊条目（deleting dtor + complete dtor）
-   -- 当前实现将析构函数当作普通虚函数处理
+9. ✅ ~~**虚析构函数未特殊处理**（P2）~~ — **已修复 (2026-04-19)**
+   -- 虚析构函数在 vtable 中占 2 个条目：D1 (complete destructor) + D0 (deleting destructor)
+   -- 新增 `vtableEntryCount()` 方法区分普通虚函数（1 条目）和虚析构函数（2 条目）
+   -- 新增 `EmitDeletingDestructor()` 生成 D0 包装函数（调用 D1 + operator delete）
+   -- Mangler 新增 `DtorVariant` 枚举（D0/D1）和 `getMangledDtorName()` 方法
+   -- **影响：** `delete ptr` 虚析构函数调用正确释放内存
 
-10. ⚠️ **多重继承 vtable 未实现**（P2）
-    -- 当前只有主 vtable（offset-to-top = 0）
-    -- 多重继承需要多个 vtable（每个基类一个），offset-to-top 非零
+10. ✅ ~~**多重继承 vtable 未实现**（P2）~~ — **已修复 (2026-04-19)**
+    -- `EmitVTable` 生成完整的 vtable 组（主组 + 次要基类组），每个组有独立的 offset-to-top + RTTI
+    -- 非主基类组的 offset-to-top 为负的基类偏移量（Itanium ABI 约定）
+    -- `GetVTableType` 正确计算包含所有组的 vtable 大小
+    -- `GetVTableIndex` 返回相对于方法声明类的 vtable 组的索引
+    -- `EmitVirtualCall` 新增 `StaticType` 参数，MI 场景下加载正确的 vptr
+    -- `InitializeVTablePtr` 初始化所有 vptr（主 vptr + 次要基类 vptr）
+    -- `EmitCallExpr` 从 MemberExpr 基表达式提取静态类型传给 EmitVirtualCall
+    -- 新增辅助方法：`getPrimaryBase`、`getBaseFieldCount`、`getBaseVPtrStructIndex`、`getPrimaryVPtrIndex`、`findOwningBaseForMethod`、`computeIndexInBaseGroup`、`computeVTableGroupOffset`
+    -- **影响：** 多重继承场景下虚函数调用使用正确的 vptr 和 vtable 索引
 
 ---
 
@@ -250,9 +263,10 @@
 1. ✅ **三阶段析构顺序** — 与 Clang 一致
    -- 函数体 → 成员析构（逆序）→ 基类析构（逆序）
 
-2. ⚠️ **缺少 Dtor deletion 标志**（P2）
-   -- Clang 区分 complete destructor 和 deleting destructor
-   -- BlockType 只生成一个版本
+2. ✅ ~~**缺少 Dtor deletion 标志**（P2）~~ — **已修复 (2026-04-19)**
+   -- **修复：** 区分 D1 (complete destructor) 和 D0 (deleting destructor)
+   -- **修复：** `EmitDeletingDestructor()` 生成 D0 包装函数（调用 D1 + operator delete）
+   -- **修复：** 虚析构函数在 vtable 中占 2 个条目（D1 + D0）
 
 3. ⚠️ **缺少基类虚析构函数调用时的 vptr 恢复**（P2）
    -- Clang 在基类析构前将 vptr 恢复为基类的 vtable
@@ -265,8 +279,9 @@
 1. ✅ **基本 vtable 结构** — 与 Itanium ABI 一致
    -- [offset-to-top] [RTTI] [virtual function pointers]
 
-2. ✅ **覆盖检测** — 基本功能已实现
-   -- 查找同名同参数数量的派生类虚函数
+2. ✅ ~~**覆盖检测** — 基本功能已实现~~ — **增强 (2026-04-19)**
+   -- **增强：** 综合匹配名称 + 参数数量 + const/volatile 限定符 + ref-qualifier
+   -- **增强：** 新增 `isMethodOverride()` / `findOverride()` / `isMethodInAnyBase()` 等辅助方法
 
 3. ⚠️ **缺少 thunk 生成**（P2）
    -- 多重继承中，覆盖的虚函数需要 this 指针调整的 thunk
@@ -381,19 +396,19 @@
    -- 应在每个基类构造完成后立即更新 vptr
    -- **实际修复：** 将 Phase 1/2 交织，每个基类初始化后立即调用 `InitializeVTablePtr`
 
-### P2 问题（后续改进）— 18 个
+### P2 问题（后续改进）— 18 个（其中 7 个已修复）
 
 1. 接口签名与文档不一致（CGF 参数）
-2. 多重继承 vtable 未实现
+2. ✅ ~~多重继承 vtable 未实现~~ — **已修复 (2026-04-19)**
 3. 虚继承未实现
 4. 缺少 Empty Base Optimization (EBO)
 5. 缺少 thunk 生成
 6. 缺少 VTT (Virtual Table Table)
-7. 虚析构函数未特殊处理（deleting/complete dtor）
-8. 覆盖检测仅用名称+参数数量匹配
-9. 缺少 delegating initializer 支持
-10. 成员初始化只取第一个参数
-11. 默认成员初始化未使用 in-class initializer
+7. ✅ ~~虚析构函数未特殊处理（deleting/complete dtor）~~ — **已修复 (2026-04-19)**
+8. ✅ ~~覆盖检测仅用名称+参数数量匹配~~ — **已修复 (2026-04-19)**
+9. ✅ ~~缺少 delegating initializer 支持~~ — **已修复 (2026-04-18)**
+10. ✅ ~~成员初始化只取第一个参数~~ — **已修复 (2026-04-18)**
+11. ✅ ~~默认成员初始化未使用 in-class initializer~~ — **已修复 (2026-04-18)**
 12. 缺少 RVO (Return Value Optimization)
 13. 缺少 copy elision
 14. 缺少 constant initialization
@@ -404,5 +419,5 @@
 
 ### P3 问题（观察项）— 2 个
 
-1. VTable 布局顺序与文档描述不同（实际与 ABI 一致）
+1. ✅ ~~VTable 布局顺序与文档描述不同（实际与 ABI 一致）~~ — **确认正确 (2026-04-19)**
 2. EmitBaseOffset / EmitDerivedOffset 方法返回 nullptr 未使用

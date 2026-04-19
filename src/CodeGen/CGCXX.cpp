@@ -54,6 +54,354 @@ bool CGCXX::hasVirtualFunctionsInHierarchy(CXXRecordDecl *RD) {
 }
 
 //===----------------------------------------------------------------------===//
+// 覆盖检测辅助方法（Issue 8）
+//===----------------------------------------------------------------------===//
+
+bool CGCXX::isMethodOverride(const CXXMethodDecl *DerivedMD,
+                              const CXXMethodDecl *BaseMD) const {
+  if (!DerivedMD || !BaseMD) return false;
+  if (!DerivedMD->isVirtual() || !BaseMD->isVirtual()) return false;
+  if (DerivedMD->getName() != BaseMD->getName()) return false;
+  if (DerivedMD->getNumParams() != BaseMD->getNumParams()) return false;
+  // cv 限定符必须匹配
+  if (DerivedMD->isConst() != BaseMD->isConst()) return false;
+  if (DerivedMD->isVolatile() != BaseMD->isVolatile()) return false;
+  // ref-qualifier 必须匹配
+  if (DerivedMD->getRefQualifier() != BaseMD->getRefQualifier()) return false;
+  return true;
+}
+
+CXXMethodDecl *CGCXX::findOverride(CXXRecordDecl *RD, CXXMethodDecl *BaseMD) {
+  for (CXXMethodDecl *MD : RD->methods()) {
+    if (isMethodOverride(MD, BaseMD)) return MD;
+  }
+  return nullptr;
+}
+
+bool CGCXX::methodMatchesInHierarchy(CXXMethodDecl *MD,
+                                      CXXRecordDecl *BaseRD) {
+  if (!MD || !BaseRD) return false;
+  // 先检查 BaseRD 自身的方法
+  for (CXXMethodDecl *BMD : BaseRD->methods()) {
+    if (isMethodOverride(MD, BMD)) return true;
+  }
+  // 递归检查 BaseRD 的基类
+  for (const auto &Base : BaseRD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (methodMatchesInHierarchy(MD, BaseCXX)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool CGCXX::isMethodInAnyBase(CXXMethodDecl *MD, CXXRecordDecl *RD) {
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (methodMatchesInHierarchy(MD, BaseRD)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// 虚析构函数辅助（Issue 9）
+//===----------------------------------------------------------------------===//
+
+bool CGCXX::isVirtualDestructor(CXXMethodDecl *MD) {
+  return MD && MD->isVirtual() && llvm::isa<CXXDestructorDecl>(MD);
+}
+
+unsigned CGCXX::vtableEntryCount(CXXMethodDecl *MD) {
+  // 虚析构函数在 vtable 中占 2 个条目：D1 (complete) + D0 (deleting)
+  return isVirtualDestructor(MD) ? 2 : 1;
+}
+
+llvm::Function *CGCXX::EmitDeletingDestructor(CXXRecordDecl *RD) {
+  if (!RD) return nullptr;
+  auto It = DeletingDtorCache.find(RD);
+  if (It != DeletingDtorCache.end()) return It->second;
+
+  // 查找 D1 析构函数
+  llvm::Function *D1Fn = GetDestructor(RD);
+  if (!D1Fn) {
+    // 类没有显式析构函数 — D0 不需要
+    return nullptr;
+  }
+
+  // 生成 D0 mangled name
+  std::string D0Name = CGM.getMangler().getMangledDtorName(RD, DtorVariant::Deleting);
+  auto *D0Fn = CGM.getModule()->getFunction(D0Name);
+  if (D0Fn) {
+    DeletingDtorCache[RD] = D0Fn;
+    return D0Fn;
+  }
+
+  auto &Ctx = CGM.getLLVMContext();
+  auto *VoidTy = llvm::Type::getVoidTy(Ctx);
+  auto *PtrTy = llvm::PointerType::get(Ctx, 0);
+  auto *SizeTy = llvm::Type::getInt64Ty(Ctx);
+
+  auto *FnTy = llvm::FunctionType::get(VoidTy, {PtrTy}, false);
+  D0Fn = llvm::Function::Create(FnTy, llvm::GlobalValue::ExternalLinkage,
+                                 D0Name, CGM.getModule());
+
+  // 生成 D0 函数体：call D1(this) + call operator delete(this, sizeof(Class))
+  auto *Entry = llvm::BasicBlock::Create(Ctx, "entry", D0Fn);
+  llvm::IRBuilder<> Builder(Entry);
+  llvm::Value *This = &*D0Fn->arg_begin();
+
+  // 1. 调用 D1 (complete destructor)
+  Builder.CreateCall(D1Fn, {This});
+
+  // 2. 调用 operator delete(this, sizeof(Class))
+  uint64_t ClassSize = GetClassSize(RD);
+  auto *OpDeleteTy = llvm::FunctionType::get(VoidTy, {PtrTy, SizeTy}, false);
+  llvm::FunctionCallee OpDelete =
+      CGM.getModule()->getOrInsertFunction("_ZdlPvm", OpDeleteTy);
+  Builder.CreateCall(OpDelete,
+                     {This, llvm::ConstantInt::get(SizeTy, ClassSize)});
+
+  Builder.CreateRetVoid();
+
+  DeletingDtorCache[RD] = D0Fn;
+  return D0Fn;
+}
+
+//===----------------------------------------------------------------------===//
+// 多重继承 vtable 辅助（Issue 10）
+//===----------------------------------------------------------------------===//
+
+CXXRecordDecl *CGCXX::getPrimaryBase(CXXRecordDecl *RD) {
+  if (!RD) return nullptr;
+  // 主基类 = 第一个具有虚函数的直接基类
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BaseRD)) return BaseRD;
+      }
+    }
+  }
+  return nullptr;
+}
+
+unsigned CGCXX::getBaseFieldCount(CXXRecordDecl *RD) {
+  if (!RD) return 0;
+  unsigned Count = 0;
+
+  // 基类自身的 vptr
+  bool HasVFunc = hasVirtualFunctions(RD);
+  bool HasVirtualBase = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BaseRD)) {
+          HasVirtualBase = true;
+          break;
+        }
+      }
+    }
+  }
+  if (HasVFunc && !HasVirtualBase) ++Count; // vptr
+
+  // 递归基类字段
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        Count += getBaseFieldCount(BaseRD);
+      }
+    }
+  }
+
+  // 自身字段
+  Count += RD->fields().size();
+  return Count;
+}
+
+unsigned CGCXX::getBaseVPtrStructIndex(CXXRecordDecl *Derived,
+                                        CXXRecordDecl *Base) {
+  auto Key = std::pair<const CXXRecordDecl *, const CXXRecordDecl *>(
+      Derived, Base);
+  auto It = BaseVPtrIndexCache.find(Key);
+  if (It != BaseVPtrIndexCache.end()) return It->second;
+
+  // 计算主 vptr 是否在 Derived 层面
+  bool OwnVPtr = hasVirtualFunctionsInHierarchy(Derived);
+  bool HasVirtualBase = false;
+  for (const auto &B : Derived->bases()) {
+    QualType BT = B.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BRD)) {
+          HasVirtualBase = true;
+          break;
+        }
+      }
+    }
+  }
+
+  unsigned Idx = 0;
+  if (OwnVPtr && !HasVirtualBase) ++Idx; // 跳过自身 vptr
+
+  // 遍历基类，找到 Base 的位置
+  for (const auto &B : Derived->bases()) {
+    QualType BT = B.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BRD) continue;
+
+    if (hasVirtualFunctionsInHierarchy(BRD)) {
+      // collectBaseClassFields(BRD) 的第一个元素是 BRD 的 vptr
+      unsigned Result = Idx;
+      BaseVPtrIndexCache[Key] = Result;
+      if (BRD == Base) return Result;
+    }
+    Idx += getBaseFieldCount(BRD);
+  }
+
+  BaseVPtrIndexCache[Key] = 0;
+  return 0;
+}
+
+unsigned CGCXX::getPrimaryVPtrIndex(CXXRecordDecl *RD) {
+  if (!RD) return 0;
+  // 如果有自身 vptr → index 0
+  bool OwnVPtr = hasVirtualFunctionsInHierarchy(RD);
+  bool HasVirtualBase = false;
+  for (const auto &B : RD->bases()) {
+    QualType BT = B.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BRD)) { HasVirtualBase = true; break; }
+      }
+    }
+  }
+  if (OwnVPtr && !HasVirtualBase) return 0; // 自身 vptr
+
+  // 主基类的 vptr 也在 index 0
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  if (Primary) return getBaseVPtrStructIndex(RD, Primary);
+  return 0;
+}
+
+CXXRecordDecl *CGCXX::findOwningBaseForMethod(CXXRecordDecl *RD,
+                                                CXXMethodDecl *MD) {
+  if (!RD || !MD) return nullptr;
+  // 遍历 RD 的直接基类，看 MD 是否覆盖了某个基类的方法
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (methodMatchesInHierarchy(MD, BaseRD)) return BaseRD;
+      }
+    }
+  }
+  return nullptr; // MD 是 RD 自身新增的虚函数
+}
+
+unsigned CGCXX::computeIndexInBaseGroup(CXXMethodDecl *MD,
+                                         CXXRecordDecl *BaseRD) {
+  unsigned Idx = 2; // 跳过 offset-to-top + RTTI
+
+  // 递归基类的基类的虚函数
+  for (const auto &Base : BaseRD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BBD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        for (CXXMethodDecl *BMD : BBD->methods()) {
+          if (!BMD->isVirtual()) continue;
+          if (MD->getName() == BMD->getName()) return Idx;
+          Idx += vtableEntryCount(BMD);
+        }
+      }
+    }
+  }
+
+  // BaseRD 自身的虚函数
+  for (CXXMethodDecl *BMD : BaseRD->methods()) {
+    if (!BMD->isVirtual()) continue;
+    if (MD->getName() == BMD->getName()) return Idx;
+    Idx += vtableEntryCount(BMD);
+  }
+
+  return 2;
+}
+
+unsigned CGCXX::computeVTableGroupOffset(CXXRecordDecl *RD,
+                                          CXXRecordDecl *Base) {
+  auto Key = std::pair<const CXXRecordDecl *, const CXXRecordDecl *>(
+      RD, Base);
+  auto It = VTableGroupOffsetCache.find(Key);
+  if (It != VTableGroupOffsetCache.end()) return It->second;
+
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+
+  // 如果 Base 就是主基类（或 Base 为 nullptr 表示主组），偏移 = 0
+  if (Base == Primary || Base == nullptr) {
+    VTableGroupOffsetCache[Key] = 0;
+    return 0;
+  }
+
+  // 主组大小 = 2(ott+RTTI) + 主基类虚函数条目 + 自身新增虚函数条目
+  unsigned Offset = 2; // ott + RTTI
+  if (Primary) {
+    for (CXXMethodDecl *MD : Primary->methods()) {
+      if (MD->isVirtual()) {
+        // 检查是否有覆盖
+        CXXMethodDecl *Ov = findOverride(RD, MD);
+        (void)Ov; // 覆盖不影响条目数量
+        Offset += vtableEntryCount(MD);
+      }
+    }
+  }
+  // 自身新增的虚函数也在主组
+  for (CXXMethodDecl *MD : RD->methods()) {
+    if (!MD->isVirtual()) continue;
+    if (!isMethodInAnyBase(MD, RD)) {
+      Offset += vtableEntryCount(MD);
+    }
+  }
+
+  // 遍历后续基类，计算到 Base 之前的组大小
+  bool PastPrimary = false;
+  for (const auto &B : RD->bases()) {
+    QualType BT = B.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BRD) continue;
+
+    if (!hasVirtualFunctionsInHierarchy(BRD)) continue;
+
+    if (BRD == Primary) { PastPrimary = true; continue; }
+    if (!PastPrimary) continue;
+
+    if (BRD == Base) {
+      VTableGroupOffsetCache[Key] = Offset;
+      return Offset;
+    }
+
+    // 累加这个基类的组大小
+    Offset += 2; // ott + RTTI
+    for (CXXMethodDecl *MD : BRD->methods()) {
+      if (MD->isVirtual()) Offset += vtableEntryCount(MD);
+    }
+  }
+
+  VTableGroupOffsetCache[Key] = Offset;
+  return Offset;
+}
+
+//===----------------------------------------------------------------------===//
 // 类布局
 //===----------------------------------------------------------------------===//
 
@@ -223,6 +571,38 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
 
   bool NeedsVPtr = hasVirtualFunctionsInHierarchy(Class);
 
+  // === Phase 0.5: 检查委托构造函数 ===
+  // 委托构造函数（ctor() : other_ctor() {}）将整个初始化委托给另一个构造函数，
+  // 因此不需要基类/成员初始化——被委托的构造函数会处理一切。
+  bool IsDelegating = false;
+  for (CXXCtorInitializer *Init : Ctor->initializers()) {
+    if (Init->isDelegatingInitializer()) {
+      IsDelegating = true;
+      // 查找匹配的被委托构造函数（同类、按参数数量匹配）
+      unsigned NumArgs = Init->getArguments().size();
+      for (CXXMethodDecl *MD : Class->methods()) {
+        if (auto *DelegatedCtor = llvm::dyn_cast<CXXConstructorDecl>(MD)) {
+          if (DelegatedCtor != Ctor && DelegatedCtor->getNumParams() == NumArgs) {
+            llvm::Function *DelegatedFn = CGM.GetOrCreateFunctionDecl(DelegatedCtor);
+            if (DelegatedFn) {
+              llvm::SmallVector<llvm::Value *, 4> Args;
+              Args.push_back(This);
+              for (Expr *Arg : Init->getArguments()) {
+                llvm::Value *ArgVal = CGF.EmitExpr(Arg);
+                if (ArgVal) Args.push_back(ArgVal);
+              }
+              CGF.getBuilder().CreateCall(DelegatedFn, Args, "delegated.ctor");
+              break;
+            }
+          }
+        }
+      }
+      break; // 委托构造函数只能有一个委托初始化器
+    }
+  }
+
+  // 委托构造函数跳过基类/成员初始化（被委托的构造函数已处理）
+  if (!IsDelegating) {
   // === Phase 1 + Phase 2 交织: 基类初始化 + 每个基类后更新 vptr ===
   llvm::SmallVector<const CXXRecordDecl *, 4> InitializedBases;
 
@@ -338,15 +718,13 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
         }
       }
       if (Field) {
-        EmitMemberInitializer(CGF, Class, This, Field,
-                              Init->getArguments().empty()
-                                  ? nullptr
-                                  : Init->getArguments()[0]);
+        EmitMemberInitializer(CGF, Class, This, Field, Init->getArguments());
       }
     }
   }
 
   // 默认初始化未出现在初始化列表中的成员
+  // 优先使用 in-class initializer（如 int x = 42;），否则零初始化
   for (FieldDecl *FD : Class->fields()) {
     bool AlreadyInit = false;
     for (auto N : InitializedMembers) {
@@ -356,15 +734,24 @@ void CGCXX::EmitConstructor(CXXConstructorDecl *Ctor, llvm::Function *Fn) {
       }
     }
     if (!AlreadyInit) {
-      llvm::StructType *StructTy = CGM.getTypes().GetRecordType(Class);
-      unsigned FieldIdx = CGM.getTypes().GetFieldIndex(FD);
-      llvm::Value *FieldPtr = CGF.getBuilder().CreateStructGEP(
-          StructTy, This, FieldIdx, FD->getName());
-      llvm::Type *FieldLLVMTy = CGM.getTypes().ConvertType(FD->getType());
-      CGF.getBuilder().CreateStore(
-          llvm::Constant::getNullValue(FieldLLVMTy), FieldPtr);
+      if (FD->hasInClassInitializer()) {
+        // 使用 in-class initializer 初始化成员
+        llvm::SmallVector<Expr *, 1> InClassArgs;
+        InClassArgs.push_back(FD->getInClassInitializer());
+        EmitMemberInitializer(CGF, Class, This, FD, InClassArgs);
+      } else {
+        // 零初始化
+        llvm::StructType *StructTy = CGM.getTypes().GetRecordType(Class);
+        unsigned FieldIdx = CGM.getTypes().GetFieldIndex(FD);
+        llvm::Value *FieldPtr = CGF.getBuilder().CreateStructGEP(
+            StructTy, This, FieldIdx, FD->getName());
+        llvm::Type *FieldLLVMTy = CGM.getTypes().ConvertType(FD->getType());
+        CGF.getBuilder().CreateStore(
+            llvm::Constant::getNullValue(FieldLLVMTy), FieldPtr);
+      }
     }
   }
+  } // !IsDelegating
 
   // === Phase 4: 构造函数体 ===
   if (Stmt *Body = Ctor->getBody()) {
@@ -446,91 +833,111 @@ llvm::GlobalVariable *CGCXX::EmitVTable(CXXRecordDecl *RD) {
   auto It = VTables.find(RD);
   if (It != VTables.end()) return It->second;
 
-  // VTable 布局：
-  // [offset-to-top] [RTTI pointer] [base class vfuncs...] [own new vfuncs...]
+  llvm::SmallVector<llvm::Constant *, 32> VTableEntries;
+  auto *PtrTy = llvm::PointerType::get(CGM.getLLVMContext(), 0);
 
-  llvm::SmallVector<llvm::Constant *, 16> VTableEntries;
+  // === 辅助 lambda：添加一个虚函数条目（含 D0/D1 处理） ===
+  auto addVfnEntry = [&](CXXMethodDecl *MD, CXXRecordDecl *OverridingClass) {
+    // 检查派生类是否覆盖
+    CXXMethodDecl *Effective = MD;
+    if (OverridingClass) {
+      CXXMethodDecl *Ov = findOverride(OverridingClass, MD);
+      if (Ov) Effective = Ov;
+    }
 
+    // D1 (complete destructor)
+    llvm::Function *Fn = CGM.GetOrCreateFunctionDecl(Effective);
+    VTableEntries.push_back(
+        Fn ? llvm::cast<llvm::Constant>(Fn)
+           : llvm::ConstantPointerNull::get(PtrTy));
+
+    // D0 (deleting destructor) — 仅虚析构函数
+    if (isVirtualDestructor(MD)) {
+      llvm::Function *D0Fn = EmitDeletingDestructor(
+          OverridingClass ? OverridingClass : Effective->getParent());
+      VTableEntries.push_back(
+          D0Fn ? llvm::cast<llvm::Constant>(D0Fn)
+                : llvm::ConstantPointerNull::get(PtrTy));
+    }
+  };
+
+  // === Group 0: 主 vtable 组 ===
   // offset-to-top (0 for primary vtable)
   VTableEntries.push_back(llvm::ConstantExpr::getIntToPtr(
       llvm::ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()), 0),
-      llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+      PtrTy));
 
-  // RTTI 指针：指向 typeinfo 全局变量
+  // RTTI 指针
   llvm::GlobalVariable *TypeInfo = EmitTypeInfo(RD);
   if (TypeInfo) {
-    VTableEntries.push_back(llvm::ConstantExpr::getBitCast(
-        TypeInfo, llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+    VTableEntries.push_back(
+        llvm::ConstantExpr::getBitCast(TypeInfo, PtrTy));
   } else {
-    VTableEntries.push_back(llvm::ConstantPointerNull::get(
-        llvm::PointerType::get(CGM.getLLVMContext(), 0)));
+    VTableEntries.push_back(llvm::ConstantPointerNull::get(PtrTy));
   }
 
-  // 收集基类的虚函数（检查覆盖）
-  for (const auto &Base : RD->bases()) {
-    QualType BaseType = Base.getType();
-    if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        for (CXXMethodDecl *MD : BaseCXX->methods()) {
-          if (!MD->isVirtual()) continue;
-          // 检查派生类是否覆盖
-          CXXMethodDecl *Overridden = nullptr;
-          for (CXXMethodDecl *DerivedMD : RD->methods()) {
-            if (DerivedMD->isVirtual() &&
-                DerivedMD->getName() == MD->getName() &&
-                DerivedMD->getNumParams() == MD->getNumParams()) {
-              Overridden = DerivedMD;
-              break;
-            }
-          }
-          if (Overridden) {
-            llvm::Function *Fn = CGM.GetOrCreateFunctionDecl(Overridden);
-            VTableEntries.push_back(
-                Fn ? llvm::cast<llvm::Constant>(Fn)
-                   : llvm::ConstantPointerNull::get(
-                         llvm::PointerType::get(CGM.getLLVMContext(), 0)));
-          } else {
-            llvm::Function *Fn = CGM.GetOrCreateFunctionDecl(MD);
-            VTableEntries.push_back(
-                Fn ? llvm::cast<llvm::Constant>(Fn)
-                   : llvm::ConstantPointerNull::get(
-                         llvm::PointerType::get(CGM.getLLVMContext(), 0)));
-          }
-        }
-      }
+  // 主基类的虚函数（含覆盖检测）
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  if (Primary) {
+    for (CXXMethodDecl *MD : Primary->methods()) {
+      if (!MD->isVirtual()) continue;
+      addVfnEntry(MD, RD);
     }
   }
 
-  // 自身新增的虚函数（不在基类中的）
+  // 自身新增的虚函数（不在任何基类中的）
   for (CXXMethodDecl *MD : RD->methods()) {
     if (!MD->isVirtual()) continue;
-    bool AlreadyInVTable = false;
-    for (const auto &Base : RD->bases()) {
-      QualType BaseType = Base.getType();
-      if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-        if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-          for (CXXMethodDecl *BaseMD : BaseCXX->methods()) {
-            if (BaseMD->isVirtual() && BaseMD->getName() == MD->getName()) {
-              AlreadyInVTable = true;
-              break;
-            }
-          }
-        }
-      }
-      if (AlreadyInVTable) break;
+    if (isMethodInAnyBase(MD, RD)) continue;
+    // 自身新增的方法，如果自身是虚析构函数也需要 D0
+    if (isVirtualDestructor(MD)) {
+      addVfnEntry(MD, nullptr);
+    } else {
+      llvm::Function *Fn = CGM.GetOrCreateFunctionDecl(MD);
+      VTableEntries.push_back(
+          Fn ? llvm::cast<llvm::Constant>(Fn)
+             : llvm::ConstantPointerNull::get(PtrTy));
     }
-    if (AlreadyInVTable) continue;
-
-    llvm::Function *Fn = CGM.GetOrCreateFunctionDecl(MD);
-    VTableEntries.push_back(
-        Fn ? llvm::cast<llvm::Constant>(Fn)
-           : llvm::ConstantPointerNull::get(
-                 llvm::PointerType::get(CGM.getLLVMContext(), 0)));
   }
 
-  auto *VTableTy = llvm::ArrayType::get(
-      llvm::PointerType::get(CGM.getLLVMContext(), 0), VTableEntries.size());
+  // === 次要 vtable 组：其他有虚函数的基类 ===
+  bool PastPrimary = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BaseRD) continue;
+    if (!hasVirtualFunctionsInHierarchy(BaseRD)) continue;
 
+    if (BaseRD == Primary) { PastPrimary = true; continue; }
+    if (!PastPrimary && Primary) continue;
+
+    // 计算此基类在 Derived 中的偏移量（用于 offset-to-top，取负值）
+    int64_t BaseOffset = -static_cast<int64_t>(GetBaseOffset(RD, BaseRD));
+    VTableEntries.push_back(llvm::ConstantExpr::getIntToPtr(
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()),
+                               BaseOffset, true),
+        PtrTy));
+
+    // RTTI 指针
+    if (TypeInfo) {
+      VTableEntries.push_back(
+          llvm::ConstantExpr::getBitCast(TypeInfo, PtrTy));
+    } else {
+      VTableEntries.push_back(llvm::ConstantPointerNull::get(PtrTy));
+    }
+
+    // 此基类的虚函数（含覆盖检测）
+    for (CXXMethodDecl *MD : BaseRD->methods()) {
+      if (!MD->isVirtual()) continue;
+      addVfnEntry(MD, RD);
+    }
+  }
+
+  // 创建 VTable 全局变量
+  auto *VTableTy =
+      llvm::ArrayType::get(PtrTy, VTableEntries.size());
   auto *VTableInit = llvm::ConstantArray::get(VTableTy, VTableEntries);
 
   auto *GV = new llvm::GlobalVariable(
@@ -538,41 +945,62 @@ llvm::GlobalVariable *CGCXX::EmitVTable(CXXRecordDecl *RD) {
       VTableInit, CGM.getMangler().getVTableName(RD));
 
   VTables[RD] = GV;
+
+  // 预计算并缓存组偏移
+  computeVTableGroupOffset(RD, Primary);
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BaseRD) continue;
+    if (hasVirtualFunctionsInHierarchy(BaseRD)) {
+      computeVTableGroupOffset(RD, BaseRD);
+    }
+  }
+
   return GV;
 }
 
 llvm::ArrayType *CGCXX::GetVTableType(CXXRecordDecl *RD) {
   if (!RD) return nullptr;
-  unsigned NumEntries = 2; // offset-to-top + RTTI
+  unsigned NumEntries = 0;
 
-  for (const auto &Base : RD->bases()) {
-    QualType BaseType = Base.getType();
-    if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        for (CXXMethodDecl *MD : BaseCXX->methods()) {
-          if (MD->isVirtual()) ++NumEntries;
-        }
-      }
+  // === Group 0: 主 vtable 组 ===
+  NumEntries += 2; // offset-to-top + RTTI
+
+  // 主基类的虚函数
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  if (Primary) {
+    for (CXXMethodDecl *MD : Primary->methods()) {
+      if (MD->isVirtual()) NumEntries += vtableEntryCount(MD);
     }
   }
+
+  // 自身新增的虚函数
   for (CXXMethodDecl *MD : RD->methods()) {
     if (!MD->isVirtual()) continue;
-    bool InBase = false;
-    for (const auto &Base : RD->bases()) {
-      QualType BaseType = Base.getType();
-      if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-        if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-          for (CXXMethodDecl *BaseMD : BaseCXX->methods()) {
-            if (BaseMD->isVirtual() && BaseMD->getName() == MD->getName()) {
-              InBase = true;
-              break;
-            }
-          }
-        }
-      }
-      if (InBase) break;
+    if (isMethodInAnyBase(MD, RD)) continue;
+    NumEntries += vtableEntryCount(MD);
+  }
+
+  // === 次要 vtable 组 ===
+  bool PastPrimary = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BaseRD) continue;
+    if (!hasVirtualFunctionsInHierarchy(BaseRD)) continue;
+
+    if (BaseRD == Primary) { PastPrimary = true; continue; }
+    if (!PastPrimary && Primary) continue;
+
+    NumEntries += 2; // offset-to-top + RTTI
+    for (CXXMethodDecl *MD : BaseRD->methods()) {
+      if (MD->isVirtual()) NumEntries += vtableEntryCount(MD);
     }
-    if (!InBase) ++NumEntries;
   }
 
   return llvm::ArrayType::get(llvm::PointerType::get(CGM.getLLVMContext(), 0),
@@ -580,47 +1008,41 @@ llvm::ArrayType *CGCXX::GetVTableType(CXXRecordDecl *RD) {
 }
 
 unsigned CGCXX::GetVTableIndex(CXXMethodDecl *MD) {
-  if (!MD) return 0;
+  if (!MD) return 2;
   CXXRecordDecl *RD = MD->getParent();
-  if (!RD) return 0;
+  if (!RD) return 2;
+
+  // 返回 MD 在 RD 的 vtable 组中的相对索引（从 ott+RTTI 后开始 = 偏移 2）
+  // Itanium ABI：一个方法在其声明类的 vtable 中的位置在所有派生类中保持不变
 
   unsigned Idx = 2; // 跳过 offset-to-top + RTTI
 
-  // 先数基类虚函数
-  for (const auto &Base : RD->bases()) {
-    QualType BaseType = Base.getType();
-    if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        for (CXXMethodDecl *BaseMD : BaseCXX->methods()) {
-          if (!BaseMD->isVirtual()) continue;
-          if (MD->getName() == BaseMD->getName()) return Idx;
-          ++Idx;
-        }
-      }
+  // 先数主基类的虚函数（如果 MD 覆盖了主基类的方法，返回其位置）
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  if (Primary) {
+    for (CXXMethodDecl *PMD : Primary->methods()) {
+      if (!PMD->isVirtual()) continue;
+      if (isMethodOverride(MD, PMD)) return Idx;
+      Idx += vtableEntryCount(PMD);
     }
   }
 
-  // 自身虚函数
+  // RD 自身新增的虚函数（跳过覆盖主基类的——它们已在上面处理）
   for (CXXMethodDecl *M : RD->methods()) {
     if (!M->isVirtual()) continue;
-    bool InBase = false;
-    for (const auto &Base : RD->bases()) {
-      QualType BaseType = Base.getType();
-      if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-        if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-          for (CXXMethodDecl *BaseMD : BaseCXX->methods()) {
-            if (BaseMD->isVirtual() && BaseMD->getName() == M->getName()) {
-              InBase = true;
-              break;
-            }
-          }
+    // 跳过覆盖主基类的方法（已占据主基类位置，不重复计数）
+    if (Primary) {
+      bool OverridesPrimary = false;
+      for (CXXMethodDecl *PMD : Primary->methods()) {
+        if (PMD->isVirtual() && isMethodOverride(M, PMD)) {
+          OverridesPrimary = true;
+          break;
         }
       }
-      if (InBase) break;
+      if (OverridesPrimary) continue;
     }
-    if (InBase) continue;
     if (M == MD) return Idx;
-    ++Idx;
+    Idx += vtableEntryCount(M);
   }
 
   return 2;
@@ -629,52 +1051,75 @@ unsigned CGCXX::GetVTableIndex(CXXMethodDecl *MD) {
 int CGCXX::GetVPtrIndex(CXXRecordDecl *RD) {
   if (!RD) return -1;
 
-  // 只有自身有虚函数且没有带虚函数的基类时，才有自己的 vptr
   bool HasVPtr = hasVirtualFunctionsInHierarchy(RD);
   if (!HasVPtr) return -1;
 
-  bool HasVirtualBase = false;
-  for (const auto &Base : RD->bases()) {
-    QualType BT = Base.getType();
-    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
-      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        if (hasVirtualFunctionsInHierarchy(BaseRD)) {
-          HasVirtualBase = true;
-          break;
-        }
-      }
-    }
-  }
+  // 主基类的 vptr 也在 index 0（共享）
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  if (Primary) return 0;
 
-  if (HasVirtualBase) return -1; // vptr 在基类中
-
-  // vptr 始终在索引 0（Itanium ABI 约定，与 GetRecordType 一致）
+  // 没有带虚函数的基类 — 自身 vptr 在索引 0
   return 0;
 }
 
 llvm::Value *CGCXX::EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
                                       llvm::Value *This,
-                                      llvm::ArrayRef<llvm::Value *> Args) {
+                                      llvm::ArrayRef<llvm::Value *> Args,
+                                      CXXRecordDecl *StaticType) {
   if (!MD || !This) return nullptr;
   CXXRecordDecl *RD = MD->getParent();
   if (!RD) return nullptr;
 
-  // 1. 从对象头部加载 vptr（使用 GetVPtrIndex 获取索引）
-  int VPtrIdx = GetVPtrIndex(RD);
-  // 如果派生类的 vptr 在基类中，需要回退到使用基类的 vptr
-  if (VPtrIdx < 0) {
-    // vptr 在层次结构中的某个基类里，回退到索引 0（主基类的 vptr）
-    VPtrIdx = 0;
+  // StaticType = this 指针指向的对象的静态类型（用于 MI 场景确定 vptr 位置）
+  // 如果未提供，退化为 MD 的声明类
+  CXXRecordDecl *VtblRD = StaticType ? StaticType : RD;
+
+  // === 确定加载哪个 vptr ===
+  // 方法在其声明类 RD 的 vtable 组中有固定位置
+  // 在 StaticType 的对象中，需要找到 RD 对应的 vptr
+  unsigned VPtrIdx = 0; // 默认：主 vptr（覆盖主基类或在主组中）
+
+  if (StaticType && StaticType != RD) {
+    // 多重继承场景：方法声明在非 StaticType 的类中
+    // 检查 RD 是否是 StaticType 的非主基类
+    CXXRecordDecl *Primary = getPrimaryBase(StaticType);
+    if (Primary && RD == Primary) {
+      // RD 就是 StaticType 的主基类 → 主 vptr (index 0)
+      VPtrIdx = 0;
+    } else if (RD != StaticType) {
+      // RD 是 StaticType 的非主基类（或更深层的基类）
+      // 需要找到 RD 在 StaticType 中的 vptr 位置
+      // 先检查 RD 是否是直接非主基类
+      bool FoundAsDirectBase = false;
+      bool PastPrimary = false;
+      for (const auto &Base : StaticType->bases()) {
+        QualType BT = Base.getType();
+        auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+        if (!RT) continue;
+        auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+        if (!BaseRD) continue;
+        if (BaseRD == Primary) { PastPrimary = true; continue; }
+        if (BaseRD == RD && hasVirtualFunctionsInHierarchy(RD)) {
+          VPtrIdx = getBaseVPtrStructIndex(StaticType, RD);
+          FoundAsDirectBase = true;
+          break;
+        }
+      }
+      // 如果不是直接非主基类（可能是主基类的方法或更深层的方法）
+      // 默认使用主 vptr
+      if (!FoundAsDirectBase) VPtrIdx = 0;
+    }
   }
 
-  llvm::StructType *ClassTy = CGM.getTypes().GetRecordType(RD);
+  // 1. 加载 vptr
+  llvm::StructType *ClassTy = CGM.getTypes().GetRecordType(VtblRD);
   llvm::Value *VTablePtrAddr = CGF.getBuilder().CreateStructGEP(
       ClassTy, This, VPtrIdx, "vtable.ptr");
   llvm::Value *VTable = CGF.getBuilder().CreateLoad(
       llvm::PointerType::get(CGM.getLLVMContext(), 0), VTablePtrAddr,
       "vtable");
 
-  // 2. 计算索引
+  // 2. 获取 vtable 索引（相对于 vptr 所指向的组起始位置）
   unsigned VTableIdx = GetVTableIndex(MD);
 
   // 3. GEP 获取函数指针
@@ -708,7 +1153,7 @@ void CGCXX::InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
   if (!This || !RD) return;
 
   int VPtrIdx = GetVPtrIndex(RD);
-  if (VPtrIdx < 0) return; // 此类不需要自己的 vptr
+  if (VPtrIdx < 0) return; // 此类不需要 vptr（没有虚函数）
 
   llvm::GlobalVariable *VTable = EmitVTable(RD);
   if (!VTable) return;
@@ -716,18 +1161,51 @@ void CGCXX::InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
   llvm::StructType *ClassTy = CGM.getTypes().GetRecordType(RD);
   if (!ClassTy || ClassTy->getNumElements() == 0) return;
 
-  // vptr 使用 GetVPtrIndex 获取索引（与 GetRecordType 布局一致）
-  llvm::Value *VTablePtrAddr = CGF.getBuilder().CreateStructGEP(
-      ClassTy, This, VPtrIdx, "vtable.ptr");
+  auto &Ctx = CGM.getLLVMContext();
+  auto *Zero64 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(Ctx), 0);
+  auto *Zero32 = llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 0);
 
-  // vtable 全局变量的地址
+  // === 主 vptr：存储 vtable 主组的地址（vtable[0][0]） ===
+  unsigned VPtrUnsigned = static_cast<unsigned>(VPtrIdx);
+  llvm::Value *VTablePtrAddr = CGF.getBuilder().CreateStructGEP(
+      ClassTy, This, VPtrUnsigned, "vtable.ptr");
+
   llvm::Value *VTableAddr = CGF.getBuilder().CreateInBoundsGEP(
-      VTable->getValueType(), VTable,
-      {llvm::ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()), 0),
-       llvm::ConstantInt::get(llvm::Type::getInt32Ty(CGM.getLLVMContext()), 0)},
-      "vtable.addr");
+      VTable->getValueType(), VTable, {Zero64, Zero32}, "vtable.addr");
 
   CGF.getBuilder().CreateStore(VTableAddr, VTablePtrAddr);
+
+  // === 多重继承：初始化次要 vptr ===
+  // 遍历有虚函数的非主基类，在每个基类子对象位置存储对应的 vtable 组地址
+  CXXRecordDecl *Primary = getPrimaryBase(RD);
+  bool PastPrimary = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr());
+    if (!RT) continue;
+    auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+    if (!BaseRD) continue;
+    if (!hasVirtualFunctionsInHierarchy(BaseRD)) continue;
+
+    if (BaseRD == Primary) { PastPrimary = true; continue; }
+    if (!PastPrimary && Primary) continue;
+
+    // 此基类需要独立的 vptr
+    unsigned BaseVPtrIdx = getBaseVPtrStructIndex(RD, BaseRD);
+    llvm::Value *BaseVTablePtrAddr = CGF.getBuilder().CreateStructGEP(
+        ClassTy, This, BaseVPtrIdx, BaseRD->getName().str() + ".vtable.ptr");
+
+    // 计算 vtable 组偏移
+    unsigned GroupOffset = computeVTableGroupOffset(RD, BaseRD);
+    auto *GroupOffset32 =
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), GroupOffset);
+
+    llvm::Value *GroupAddr = CGF.getBuilder().CreateInBoundsGEP(
+        VTable->getValueType(), VTable, {Zero64, GroupOffset32},
+        BaseRD->getName().str() + ".vtable.group");
+
+    CGF.getBuilder().CreateStore(GroupAddr, BaseVTablePtrAddr);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -1233,7 +1711,7 @@ void CGCXX::EmitBaseInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
 
 void CGCXX::EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
                                     llvm::Value *This, FieldDecl *Field,
-                                    Expr *Init) {
+                                    llvm::ArrayRef<Expr *> Args) {
   if (!Class || !This || !Field) return;
 
   llvm::StructType *StructTy = CGM.getTypes().GetRecordType(Class);
@@ -1243,24 +1721,62 @@ void CGCXX::EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
   llvm::Value *FieldPtr = CGF.getBuilder().CreateStructGEP(
       StructTy, This, FieldIdx, Field->getName());
 
-  if (Init) {
-    if (auto *ConstructExpr = llvm::dyn_cast<CXXConstructExpr>(Init)) {
-      llvm::SmallVector<llvm::Value *, 4> Args;
-      Args.push_back(FieldPtr);
-      for (Expr *Arg : ConstructExpr->getArgs()) {
-        llvm::Value *ArgVal = CGF.EmitExpr(Arg);
-        if (ArgVal) Args.push_back(ArgVal);
+  if (!Args.empty()) {
+    // 多参数或单参数初始化：优先检测是否为类类型成员的构造函数调用
+    if (Args.size() == 1) {
+      if (auto *ConstructExpr = llvm::dyn_cast<CXXConstructExpr>(Args[0])) {
+        // 单个 CXXConstructExpr 参数 → 调用成员的构造函数
+        llvm::SmallVector<llvm::Value *, 4> CallArgs;
+        CallArgs.push_back(FieldPtr);
+        for (Expr *Arg : ConstructExpr->getArgs()) {
+          llvm::Value *ArgVal = CGF.EmitExpr(Arg);
+          if (ArgVal) CallArgs.push_back(ArgVal);
+        }
+        if (auto *FRT =
+                llvm::dyn_cast<RecordType>(Field->getType().getTypePtr())) {
+          if (auto *FieldCXX =
+                  llvm::dyn_cast<CXXRecordDecl>(FRT->getDecl())) {
+            for (CXXMethodDecl *MD : FieldCXX->methods()) {
+              if (auto *Ctor = llvm::dyn_cast<CXXConstructorDecl>(MD)) {
+                if (Ctor->getNumParams() == ConstructExpr->getArgs().size()) {
+                  llvm::Function *CtorFn = CGM.GetOrCreateFunctionDecl(Ctor);
+                  if (CtorFn) {
+                    CGF.getBuilder().CreateCall(CtorFn, CallArgs, "field.ctor");
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
       }
+    }
+
+    // 多参数初始化：如果成员是类类型，尝试查找匹配的构造函数
+    if (Args.size() > 1 || (Args.size() == 1 && llvm::isa<CXXConstructExpr>(Args[0]))) {
       if (auto *FRT =
               llvm::dyn_cast<RecordType>(Field->getType().getTypePtr())) {
         if (auto *FieldCXX =
                 llvm::dyn_cast<CXXRecordDecl>(FRT->getDecl())) {
+          // 如果唯一的参数是 CXXConstructExpr，使用其内部参数计数
+          unsigned EffectiveArgCount = Args.size();
+          if (Args.size() == 1) {
+            if (auto *CE = llvm::dyn_cast<CXXConstructExpr>(Args[0])) {
+              EffectiveArgCount = CE->getArgs().size();
+            }
+          }
           for (CXXMethodDecl *MD : FieldCXX->methods()) {
             if (auto *Ctor = llvm::dyn_cast<CXXConstructorDecl>(MD)) {
-              if (Ctor->getNumParams() == ConstructExpr->getArgs().size()) {
+              if (Ctor->getNumParams() == EffectiveArgCount) {
                 llvm::Function *CtorFn = CGM.GetOrCreateFunctionDecl(Ctor);
                 if (CtorFn) {
-                  CGF.getBuilder().CreateCall(CtorFn, Args, "field.ctor");
+                  llvm::SmallVector<llvm::Value *, 4> CallArgs;
+                  CallArgs.push_back(FieldPtr);
+                  for (Expr *Arg : Args) {
+                    llvm::Value *ArgVal = CGF.EmitExpr(Arg);
+                    if (ArgVal) CallArgs.push_back(ArgVal);
+                  }
+                  CGF.getBuilder().CreateCall(CtorFn, CallArgs, "field.ctor");
                   return;
                 }
               }
@@ -1270,7 +1786,8 @@ void CGCXX::EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
       }
     }
 
-    llvm::Value *InitVal = CGF.EmitExpr(Init);
+    // 单个表达式初始化：求值 + 类型转换 + store
+    llvm::Value *InitVal = CGF.EmitExpr(Args[0]);
     if (InitVal && FieldLLVMTy) {
       if (InitVal->getType() != FieldLLVMTy) {
         if (InitVal->getType()->isIntegerTy() && FieldLLVMTy->isIntegerTy()) {
@@ -1289,6 +1806,7 @@ void CGCXX::EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
       CGF.getBuilder().CreateStore(InitVal, FieldPtr);
     }
   } else {
+    // 无参数：零初始化
     if (FieldLLVMTy) {
       CGF.getBuilder().CreateStore(
           llvm::Constant::getNullValue(FieldLLVMTy), FieldPtr);

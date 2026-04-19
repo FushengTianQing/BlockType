@@ -22,6 +22,12 @@
 
 namespace blocktype {
 
+/// DtorVariant — 析构函数的 Itanium ABI 变体。
+enum class DtorVariant {
+  Complete,  ///< D1: complete object destructor
+  Deleting   ///< D0: deleting destructor (calls operator delete after D1)
+};
+
 class CodeGenModule;
 class FunctionDecl;
 class CXXMethodDecl;
@@ -68,6 +74,10 @@ public:
 
   /// 获取 VTable typeinfo name（如 _ZTS3Foo）。
   std::string getTypeinfoName(const CXXRecordDecl *RD);
+
+  /// 生成指定类的析构函数变体的完整 mangled name。
+  /// 用于编译器生成的 D0 (deleting destructor) 包装函数。
+  std::string getMangledDtorName(const CXXRecordDecl *RD, DtorVariant Variant);
 
   //===------------------------------------------------------------------===//
   // Type mangling
@@ -132,7 +142,9 @@ private:
   void mangleCtorName(const CXXConstructorDecl *Ctor, std::string &Out);
 
   /// 编码析构函数名称。
-  void mangleDtorName(const CXXDestructorDecl *Dtor, std::string &Out);
+  /// \param Variant 选择 D0 (deleting) 或 D1 (complete) 变体，默认 D1
+  void mangleDtorName(const CXXDestructorDecl *Dtor, std::string &Out,
+                      DtorVariant Variant = DtorVariant::Complete);
 };
 
 } // namespace blocktype

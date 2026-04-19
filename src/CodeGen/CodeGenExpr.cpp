@@ -815,11 +815,27 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
           }
         }
 
+        // 获取静态类型（用于多重继承场景确定正确的 vptr 位置）
+        CXXRecordDecl *StaticType = nullptr;
+        if (auto *ME = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
+          QualType BaseType = ME->getBase()->getType();
+          // 去掉指针/引用层
+          if (auto *PtrTy = llvm::dyn_cast<PointerType>(BaseType.getTypePtr())) {
+            BaseType = PtrTy->getPointeeType();
+          } else if (auto *RefTy =
+                         llvm::dyn_cast<ReferenceType>(BaseType.getTypePtr())) {
+            BaseType = RefTy->getReferencedType();
+          }
+          if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
+            StaticType = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl());
+          }
+        }
+
         // 使用 CGCXX::EmitVirtualCall 生成虚函数调用
         llvm::Value *ThisPtr = Arguments[0];
         llvm::Value *VirtualCallResult =
             CGM.getCXX().EmitVirtualCall(*this, MemberDecl, ThisPtr,
-                                          NonThisArgs);
+                                          NonThisArgs, StaticType);
         if (VirtualCallResult) {
           return VirtualCallResult;
         }

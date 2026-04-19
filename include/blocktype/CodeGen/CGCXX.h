@@ -69,6 +69,19 @@ class CGCXX {
                  uint64_t>
       BaseOffsetCache;
 
+  /// 基类 vptr 结构体索引缓存：(Derived, Base) → vptr 在 Derived 的 LLVM StructType 中的字段索引
+  llvm::DenseMap<std::pair<const CXXRecordDecl *, const CXXRecordDecl *>,
+                 unsigned>
+      BaseVPtrIndexCache;
+
+  /// VTable 组偏移缓存：(RD, Base) → Base 的 vtable 组在 RD 的 vtable 全局变量中的起始偏移（条目数）
+  llvm::DenseMap<std::pair<const CXXRecordDecl *, const CXXRecordDecl *>,
+                 unsigned>
+      VTableGroupOffsetCache;
+
+  /// D0 (deleting destructor) 缓存：CXXRecordDecl → llvm::Function
+  llvm::DenseMap<const CXXRecordDecl *, llvm::Function *> DeletingDtorCache;
+
   /// 检查 CXXRecordDecl 是否有虚函数（包括继承的）
   static bool hasVirtualFunctions(CXXRecordDecl *RD);
 
@@ -77,6 +90,56 @@ class CGCXX {
 
   /// 获取 RTTI 类的 vtable 名称（libcxxabi 外部符号）
   static std::string getRTTIClassVTableName(CXXRecordDecl *RD);
+
+  /// === Issue 8: 增强的覆盖检测辅助方法 ===
+
+  /// 检查 DerivedMD 是否覆盖 BaseMD（综合匹配：名称、参数数量、const/volatile 限定符、ref-qualifier）。
+  bool isMethodOverride(const CXXMethodDecl *DerivedMD,
+                        const CXXMethodDecl *BaseMD) const;
+
+  /// 在 RD 的方法中查找覆盖 BaseMD 的方法。返回 nullptr 如果未找到。
+  CXXMethodDecl *findOverride(CXXRecordDecl *RD, CXXMethodDecl *BaseMD);
+
+  /// 检查 MD 是否与层级结构中某个基类的虚函数匹配（递归搜索）。
+  bool methodMatchesInHierarchy(CXXMethodDecl *MD, CXXRecordDecl *BaseRD);
+
+  /// 检查 MD 是否已经在某个基类的 vtable 中（即它覆盖了基类的方法）。
+  bool isMethodInAnyBase(CXXMethodDecl *MD, CXXRecordDecl *RD);
+
+  /// === Issue 9: 虚析构函数辅助 ===
+
+  /// 检查方法是否为虚析构函数。
+  static bool isVirtualDestructor(CXXMethodDecl *MD);
+
+  /// 获取虚函数在 vtable 中的条目数量（虚析构函数占 2 个条目：D1+D0，其他占 1 个）。
+  static unsigned vtableEntryCount(CXXMethodDecl *MD);
+
+  /// 生成 D0 (deleting destructor) 包装函数。
+  llvm::Function *EmitDeletingDestructor(CXXRecordDecl *RD);
+
+  /// === Issue 10: 多重继承 vtable 辅助 ===
+
+  /// 获取第一个具有虚函数的直接基类（主基类），返回 nullptr 如果没有。
+  CXXRecordDecl *getPrimaryBase(CXXRecordDecl *RD);
+
+  /// 计算基类展平后在 LLVM StructType 中占用的字段数量。
+  unsigned getBaseFieldCount(CXXRecordDecl *RD);
+
+  /// 计算基类 Base 在 Derived 的 LLVM StructType 中的 vptr 字段索引。
+  unsigned getBaseVPtrStructIndex(CXXRecordDecl *Derived, CXXRecordDecl *Base);
+
+  /// 获取主 vptr 在类结构体中的索引（考虑 MI 情况下主基类的 vptr）。
+  unsigned getPrimaryVPtrIndex(CXXRecordDecl *RD);
+
+  /// 确定方法 MD 在类 RD 的 vtable 中属于哪个基类的组。
+  /// 返回 nullptr 表示 MD 是 RD 自身新增的虚函数（属于主组）。
+  CXXRecordDecl *findOwningBaseForMethod(CXXRecordDecl *RD, CXXMethodDecl *MD);
+
+  /// 计算方法在指定基类组中的 vtable 索引（从 ott+RTTI 后开始计数）。
+  unsigned computeIndexInBaseGroup(CXXMethodDecl *MD, CXXRecordDecl *BaseRD);
+
+  /// 计算基类 Base 在类 RD 的 vtable 中的组偏移（绝对条目偏移）。
+  unsigned computeVTableGroupOffset(CXXRecordDecl *RD, CXXRecordDecl *Base);
 
 public:
   explicit CGCXX(CodeGenModule &M) : CGM(M) {}
@@ -134,9 +197,11 @@ public:
   int GetVPtrIndex(CXXRecordDecl *RD);
 
   /// 生成虚函数调用（vptr load → GEP → load → indirect call）。
+  /// \param StaticType 静态类型的 CXXRecordDecl（用于 MI 场景确定正确的 vptr），可为 nullptr
   llvm::Value *EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
                                 llvm::Value *This,
-                                llvm::ArrayRef<llvm::Value *> Args);
+                                llvm::ArrayRef<llvm::Value *> Args,
+                                CXXRecordDecl *StaticType = nullptr);
 
   /// 初始化对象的 vptr 指针（在构造函数中调用）。
   void InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
@@ -194,8 +259,10 @@ public:
                             Expr *Init);
 
   /// 生成成员初始化器。
+  /// \param Args 初始化参数列表（可为空，表示默认初始化）
   void EmitMemberInitializer(CodeGenFunction &CGF, CXXRecordDecl *Class,
-                              llvm::Value *This, FieldDecl *Field, Expr *Init);
+                              llvm::Value *This, FieldDecl *Field,
+                              llvm::ArrayRef<Expr *> Args);
 
   /// 生成所有基类和成员的析构代码（用于析构函数）。
   void EmitDestructorBody(CodeGenFunction &CGF, CXXRecordDecl *Class,
