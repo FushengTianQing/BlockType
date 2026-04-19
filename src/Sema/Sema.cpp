@@ -1936,6 +1936,21 @@ void Sema::AttachContractsToFunction(FunctionDecl *FD,
       SCXX.CheckContractPlacement(CA, FD);
   }
 
+  // P1-1: Detect contract mode override.
+  if (auto *ExistingAttrs = FD->getAttrs()) {
+    for (auto *ExistingCA : ExistingAttrs->getContracts()) {
+      for (auto *D : Contracts) {
+        auto *NewCA = llvm::dyn_cast<ContractAttr>(D);
+        if (!NewCA) continue;
+        if (ExistingCA->getContractMode() != NewCA->getContractMode()) {
+          Diags.report(NewCA->getLocation(), DiagID::warn_contract_mode_override,
+                       getContractModeName(NewCA->getContractMode()),
+                       getContractModeName(ExistingCA->getContractMode()));
+        }
+      }
+    }
+  }
+
   // Store contracts in the function's attribute list.
   // Create or reuse the function's Attrs.
   auto *AttrList = FD->getAttrs();
@@ -1949,6 +1964,8 @@ void Sema::AttachContractsToFunction(FunctionDecl *FD,
   for (auto *D : Contracts) {
     auto *CA = llvm::dyn_cast<ContractAttr>(D);
     if (!CA) continue;
+    // Store ContractAttr directly for CodeGen access.
+    AttrList->addContract(CA);
     // Create an AttributeDecl with the contract kind name and condition.
     auto *AD = Context.create<AttributeDecl>(
         CA->getLocation(), getContractKindName(CA->getContractKind()).str(),

@@ -1530,21 +1530,34 @@ public:
 // AttributeListDecl - List of attribute specifiers (C++11)
 //===----------------------------------------------------------------------===//
 
+// Forward declaration for ContractAttr (defined in Attr.h)
+class ContractAttr;
+
 /// AttributeListDecl - List of attribute specifiers.
 /// Example: [[nodiscard, deprecated("reason")]]
 class AttributeListDecl : public Decl {
   llvm::SmallVector<AttributeDecl *, 4> Attrs;
+  /// P7.3.1: Contract attributes stored with full semantic info.
+  llvm::SmallVector<ContractAttr *, 2> Contracts;
 
 public:
   AttributeListDecl(SourceLocation Loc) : Decl(Loc) {}
 
   void addAttribute(AttributeDecl *Attr) { Attrs.push_back(Attr); }
 
+  /// Add a contract attribute with full semantic info.
+  void addContract(ContractAttr *CA) { Contracts.push_back(CA); }
+
   llvm::ArrayRef<AttributeDecl *> getAttributes() const { return Attrs; }
+
+  /// Get contract attributes for CodeGen.
+  llvm::ArrayRef<ContractAttr *> getContracts() const { return Contracts; }
+
+  bool hasContracts() const { return !Contracts.empty(); }
 
   size_t size() const { return Attrs.size(); }
 
-  bool empty() const { return Attrs.empty(); }
+  bool empty() const { return Attrs.empty() && Contracts.empty(); }
 
   NodeKind getKind() const override { return NodeKind::AttributeListDeclKind; }
 

@@ -13,6 +13,7 @@
 #include "blocktype/CodeGen/CodeGenConstant.h"
 #include "blocktype/CodeGen/CGDebugInfo.h"
 #include "blocktype/AST/ASTNode.h"
+#include "blocktype/AST/Attr.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Decl.h"
@@ -126,6 +127,31 @@ void CodeGenFunction::EmitFunctionBody(FunctionDecl *FunctionDecl,
     analyzeNRVOCandidates(FunctionDecl->getBody(), ReturnType);
   }
 
+  // P7.3.1: Emit pre/post contract checks.
+  // Precondition checks run at function entry, before the body.
+  if (auto *FnAttrs = FunctionDecl->getAttrs()) {
+    for (auto *CA : FnAttrs->getContracts()) {
+      if (CA && CA->isPrecondition()) {
+        EmitContractCheck(CA);
+      }
+    }
+  }
+
+  // P1-3: For postconditions with 'result', bind the result VarDecl to the
+  // return value alloca so the condition can reference it.
+  if (ReturnValue) {
+    if (auto *FnAttrs = FunctionDecl->getAttrs()) {
+      for (auto *CA : FnAttrs->getContracts()) {
+        if (CA && CA->isPostcondition()) {
+          if (auto *RD = CA->getResultDecl()) {
+            if (auto *VD = llvm::dyn_cast<VarDecl>(RD))
+              setLocalDecl(VD, ReturnValue);
+          }
+        }
+      }
+    }
+  }
+
   // 生成函数体
   if (Stmt *Body = FunctionDecl->getBody()) {
     EmitStmt(Body);
@@ -137,6 +163,17 @@ void CodeGenFunction::EmitFunctionBody(FunctionDecl *FunctionDecl,
       Builder.CreateBr(ReturnBlock);
     }
     Builder.SetInsertPoint(ReturnBlock);
+
+    // P7.3.1: Emit postcondition checks at function exit, before the return.
+    // At this point ReturnValue contains the function's return value.
+    if (auto *FnAttrs = FunctionDecl->getAttrs()) {
+      for (auto *CA : FnAttrs->getContracts()) {
+        if (CA && CA->isPostcondition()) {
+          EmitContractCheck(CA);
+        }
+      }
+    }
+
     if (FnNeedsSRet) {
       // sret 模式：返回 void（结果已写入 sret 指针指向的内存）
       Builder.CreateRetVoid();
@@ -299,6 +336,12 @@ void CodeGenFunction::EmitStmt(Stmt *Statement) {
     for (auto *Attr : Attrs->getAttributes()) {
       if (Attr->getAttributeName() == "assume") {
         EmitAssumeAttr(Attr->getArgumentExpr());
+      }
+    }
+    // P7.3.1: Check for [[assert:]] contract attributes on statements.
+    for (auto *CA : Attrs->getContracts()) {
+      if (CA && CA->isAssertion()) {
+        EmitContractCheck(CA);
       }
     }
   }

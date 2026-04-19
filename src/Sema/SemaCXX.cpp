@@ -206,9 +206,88 @@ void SemaCXX::checkBodyForThisUse(Stmt *Body, SourceLocation Loc) {
 // Contracts (P2900R14)
 //===----------------------------------------------------------------------===//
 
+/// Recursively check an expression for CXXThisExpr usage.
+static bool exprContainsThis(Expr *E) {
+  if (!E) return false;
+  if (llvm::isa<CXXThisExpr>(E)) return true;
+
+  // Recurse into sub-expressions.
+  if (auto *BO = llvm::dyn_cast<BinaryOperator>(E))
+    return exprContainsThis(BO->getLHS()) || exprContainsThis(BO->getRHS());
+  if (auto *UO = llvm::dyn_cast<UnaryOperator>(E))
+    return exprContainsThis(UO->getSubExpr());
+  if (auto *CE = llvm::dyn_cast<CallExpr>(E)) {
+    if (exprContainsThis(CE->getCallee())) return true;
+    for (auto *A : CE->getArgs())
+      if (exprContainsThis(A)) return true;
+    return false;
+  }
+  if (auto *ME = llvm::dyn_cast<MemberExpr>(E))
+    return exprContainsThis(ME->getBase());
+  if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(E))
+    return false; // DeclRefExpr doesn't contain this
+  if (auto *CO = llvm::dyn_cast<ConditionalOperator>(E))
+    return exprContainsThis(CO->getCond()) ||
+           exprContainsThis(CO->getTrueExpr()) ||
+           exprContainsThis(CO->getFalseExpr());
+
+  return false;
+}
+
+/// Check if an expression has potential side effects (assignment, inc/dec, call).
+static bool exprHasSideEffects(Expr *E) {
+  if (!E) return false;
+
+  // Assignment operators are side effects.
+  if (auto *BO = llvm::dyn_cast<BinaryOperator>(E)) {
+    switch (BO->getOpcode()) {
+    case BinaryOpKind::Assign:
+    case BinaryOpKind::MulAssign:
+    case BinaryOpKind::DivAssign:
+    case BinaryOpKind::RemAssign:
+    case BinaryOpKind::AddAssign:
+    case BinaryOpKind::SubAssign:
+    case BinaryOpKind::ShlAssign:
+    case BinaryOpKind::ShrAssign:
+    case BinaryOpKind::AndAssign:
+    case BinaryOpKind::OrAssign:
+    case BinaryOpKind::XorAssign:
+      return true;
+    default:
+      break;
+    }
+    return exprHasSideEffects(BO->getLHS()) || exprHasSideEffects(BO->getRHS());
+  }
+
+  // Increment/decrement are side effects.
+  if (auto *UO = llvm::dyn_cast<UnaryOperator>(E)) {
+    switch (UO->getOpcode()) {
+    case UnaryOpKind::PreInc:
+    case UnaryOpKind::PreDec:
+    case UnaryOpKind::PostInc:
+    case UnaryOpKind::PostDec:
+      return true;
+    default:
+      break;
+    }
+    return exprHasSideEffects(UO->getSubExpr());
+  }
+
+  // Function calls are side effects (conservative).
+  if (llvm::isa<CallExpr>(E))
+    return true;
+
+  return false;
+}
+
 bool SemaCXX::CheckContractCondition(Expr *Cond, SourceLocation Loc) {
   if (!Cond)
     return false;
+
+  // P1-1: Warn about potential side effects in contract conditions.
+  if (exprHasSideEffects(Cond)) {
+    S.Diag(Loc, DiagID::warn_contract_condition_side_effects);
+  }
 
   QualType CondTy = Cond->getType();
   if (!CondTy.isNull()) {
@@ -246,9 +325,20 @@ bool SemaCXX::CheckContractPlacement(ContractAttr *CA, Decl *Ctx) {
                                   : DiagID::err_contract_post_not_on_function);
       return false;
     }
+    // P1-1: Check postcondition for 'this' usage.
+    if (CA->isPostcondition() && exprContainsThis(CA->getCondition())) {
+      S.Diag(CA->getLocation(), DiagID::err_contract_post_this);
+      return false;
+    }
     break;
   }
   case ContractKind::Assert:
+    // P1-1: Assert contracts must NOT appear on function declarations.
+    // They should only appear as statement attributes within blocks.
+    if (llvm::isa<FunctionDecl>(Ctx)) {
+      S.Diag(CA->getLocation(), DiagID::err_contract_assert_not_in_block);
+      return false;
+    }
     break;
   }
 
@@ -257,11 +347,37 @@ bool SemaCXX::CheckContractPlacement(ContractAttr *CA, Decl *Ctx) {
 
 ContractAttr *SemaCXX::BuildContractAttr(SourceLocation Loc, ContractKind Kind,
                                           Expr *Cond) {
+  // P1-1: Safety check for invalid contract kind.
+  if (Kind != ContractKind::Pre && Kind != ContractKind::Post &&
+      Kind != ContractKind::Assert) {
+    S.Diag(Loc, DiagID::err_contract_invalid_kind,
+           getContractKindName(Kind));
+    return nullptr;
+  }
+
   if (!CheckContractCondition(Cond, Loc))
     return nullptr;
 
   auto &Ctx = S.getASTContext();
-  return Ctx.create<ContractAttr>(Loc, Kind, Cond);
+  auto *CA = Ctx.create<ContractAttr>(Loc, Kind, Cond);
+
+  // P1-3: For postconditions, create an implicit 'result' VarDecl.
+  if (Kind == ContractKind::Post) {
+    // Try to determine the return type from the current function context.
+    QualType ResultType;
+    if (auto *FD = llvm::dyn_cast_or_null<FunctionDecl>(S.getCurrentFunction())) {
+      QualType FnTy = FD->getType();
+      if (auto *FT = llvm::dyn_cast<FunctionType>(FnTy.getTypePtr())) {
+        ResultType = QualType(FT->getReturnType(), Qualifier::None);
+      }
+    }
+    if (!ResultType.isNull() && !ResultType->isVoidType()) {
+      auto *ResultVar = Ctx.create<VarDecl>(Loc, "result", ResultType, nullptr);
+      CA->setResultDecl(ResultVar);
+    }
+  }
+
+  return CA;
 }
 
 } // namespace blocktype

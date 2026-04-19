@@ -85,6 +85,8 @@ class ContractAttr : public Decl {
   ContractKind Kind;
   Expr *Condition;
   ContractMode Mode;
+  /// P1-3: For postconditions, the implicit 'result' variable declaration.
+  ValueDecl *ResultDecl = nullptr;
 
 public:
   ContractAttr(SourceLocation Loc, ContractKind K,
@@ -100,6 +102,10 @@ public:
   /// The checking mode.
   ContractMode getContractMode() const { return Mode; }
   void setContractMode(ContractMode M) { Mode = M; }
+
+  /// P1-3: The implicit 'result' variable for postconditions.
+  ValueDecl *getResultDecl() const { return ResultDecl; }
+  void setResultDecl(ValueDecl *VD) { ResultDecl = VD; }
 
   /// Convenience predicates.
   bool isPrecondition() const { return Kind == ContractKind::Pre; }

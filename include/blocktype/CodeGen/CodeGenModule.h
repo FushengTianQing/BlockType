@@ -19,6 +19,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
+#include "blocktype/AST/Attr.h"  // ContractMode
 #include <memory>
 #include <optional>
 
@@ -104,6 +105,9 @@ class CodeGenModule {
   /// 字符串字面量池（StringRef → GlobalVariable*），用于合并相同的字符串字面量。
   /// Clang 也有类似的 StringLiteralPool 机制。
   llvm::DenseMap<llvm::StringRef, llvm::GlobalVariable *> StringLiteralPool;
+
+  /// P7.3.1: Default contract checking mode (configurable via -fcontract-mode).
+  ContractMode DefaultContractMode = ContractMode::Enforce;
 
 public:
   CodeGenModule(ASTContext &Ctx, llvm::LLVMContext &LLVMCtx,
@@ -217,6 +221,18 @@ public:
   llvm::DenseMap<llvm::StringRef, llvm::GlobalVariable *> &getStringLiteralPool() {
     return StringLiteralPool;
   }
+
+  //===------------------------------------------------------------------===//
+  // P7.3.1: Contract mode control
+  //===------------------------------------------------------------------===//
+
+  /// Get the default contract checking mode.
+  /// Used when a ContractAttr has mode=Default.
+  ContractMode getDefaultContractMode() const { return DefaultContractMode; }
+
+  /// Set the default contract checking mode.
+  /// Can be called from the driver to implement -fcontract-mode=...
+  void setDefaultContractMode(ContractMode M) { DefaultContractMode = M; }
 
   //===------------------------------------------------------------------===//
   // 全局构造/析构

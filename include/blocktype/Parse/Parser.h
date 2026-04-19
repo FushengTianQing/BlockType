@@ -577,17 +577,6 @@ public:
   // P7.3.1: C++26 Contract parsing (P2900R14)
   //===------------------------------------------------------------------===//
 
-  /// Try to parse a contract attribute [[pre:]], [[post:]], [[assert:]].
-  ///
-  /// Returns true if a contract was parsed (and added to ContractAttrs).
-  /// Returns false if the current token is not a contract keyword.
-  ///
-  /// Grammar:
-  ///   contract-attribute-specifier ::= '[[' contract-kind ':' condition ']]'
-  ///   contract-kind ::= 'pre' | 'post' | 'assert'
-  bool tryParseContractAttribute(SourceLocation Loc,
-                                  llvm::SmallVectorImpl<ContractAttr *> &ContractAttrs);
-
   /// Parses a constructor declaration.
   CXXConstructorDecl *parseConstructorDeclaration(CXXRecordDecl *Class, SourceLocation Loc);
 

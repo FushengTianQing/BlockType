@@ -1562,10 +1562,11 @@ AttributeListDecl *Parser::parseAttributeSpecifier(SourceLocation Loc) {
       auto *CA = llvm::cast_or_null<ContractAttr>(
           Actions.ActOnContractAttr(Loc, static_cast<unsigned>(CK), CondExpr).get());
 
-      // For pre/post, store as AttributeDecl with condition in the list.
-      // The ContractAttr itself is created for semantic analysis.
+      // Store ContractAttr directly in the attribute list for CodeGen.
+      // Also create an AttributeDecl for backward compatibility with attribute iteration.
       if (CA) {
-        // Create AttributeDecl to represent it in the list (for compatibility).
+        AttrList->addContract(CA);
+
         auto *AD = llvm::cast<AttributeDecl>(
             Actions.ActOnAttributeDecl(Loc,
                 getContractKindName(CK).str(), CondExpr).get());

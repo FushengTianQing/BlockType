@@ -2012,8 +2012,13 @@ void CodeGenFunction::EmitContractCheck(ContractAttr *CA) {
   if (!CA)
     return;
 
-  // If contract mode is Off, emit nothing.
-  if (CA->getContractMode() == ContractMode::Off)
+  // Resolve effective mode: use global default if contract mode is Default.
+  ContractMode EffectiveMode = CA->getContractMode();
+  if (EffectiveMode == ContractMode::Default)
+    EffectiveMode = CGM.getDefaultContractMode();
+
+  // If effective mode is Off, emit nothing.
+  if (EffectiveMode == ContractMode::Off)
     return;
 
   Expr *Cond = CA->getCondition();
@@ -2040,7 +2045,7 @@ void CodeGenFunction::EmitContractCheck(ContractAttr *CA) {
 
   // Fail block: emit violation handler.
   EmitBlock(FailBB);
-  EmitContractViolation(CA->getContractKind(), CA->getContractMode(),
+  EmitContractViolation(CA->getContractKind(), EffectiveMode,
                          CA->getLocation());
 
   // Pass block: continue execution.

@@ -209,6 +209,9 @@ public:
   DiagnosticsEngine &getDiagnostics() const { return Diags; }
   bool hasErrorOccurred() const { return Diags.hasErrorOccurred(); }
 
+  /// Get the current function being processed (for contract result binding).
+  FunctionDecl *getCurrentFunction() const { return CurFunction; }
+
   /// Access the type checker.
   TypeCheck &getTypeCheck() { return TC; }
 
