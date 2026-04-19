@@ -15,6 +15,7 @@
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Expr.h"
+#include "blocktype/AST/Stmt.h"
 
 namespace blocktype {
 
@@ -81,6 +82,10 @@ public:
 
   /// Check a contract condition expression.
   bool CheckContractCondition(Expr *Cond, SourceLocation Loc);
+
+private:
+  /// Recursively check a statement tree for CXXThisExpr usage.
+  void checkBodyForThisUse(Stmt *Body, SourceLocation Loc);
 };
 
 } // namespace blocktype

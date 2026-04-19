@@ -1,0 +1,40 @@
+// RUN: blocktype -emit-llvm %s 2>&1 | FileCheck %s
+
+//===----------------------------------------------------------------------===//
+// Stage 7.1 Integration Tests — C++23 P1 Features
+//===----------------------------------------------------------------------===//
+
+// --- Task 7.1.1: Deducing this (P0847R7) ---
+
+struct Doubler {
+    int scale(this const Doubler& self) { return 2; }
+};
+
+int test_deducing_this() {
+    Doubler d;
+    return d.scale();
+}
+// CHECK: define {{.*}} @test_deducing_this
+// CHECK: call {{.*}} @Doubler_scale
+
+// --- Task 7.1.2: Decay-copy auto(x) / auto{x} (P0849R8) ---
+
+int test_decay_copy() {
+    int x = 10;
+    // auto(x) performs decay-copy (copy-initialization)
+    int y = auto(x);
+    return y;
+}
+// CHECK: define {{.*}} @test_decay_copy
+
+// --- Task 7.1.3: Static operator() (P1169R4) ---
+
+struct Adder {
+    static int operator()(int a, int b) { return a + b; }
+};
+
+int test_static_call_op() {
+    return Adder::operator()(3, 4);
+}
+// CHECK: define {{.*}} @test_static_call_op
+// CHECK: call {{.*}} @Addler_operator_paren

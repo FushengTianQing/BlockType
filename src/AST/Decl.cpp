@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "blocktype/AST/Decl.h"
+#include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/TemplateParameterList.h"
@@ -1077,9 +1078,18 @@ QualType FunctionDecl::getThisType(ASTContext &Ctx) const {
       return ExplicitParam->getType();
   }
 
-  // For regular member functions, construct the traditional this pointer type.
-  // This requires knowing the parent class, which is stored in CXXMethodDecl.
-  // For a FunctionDecl that is not a CXXMethodDecl, return null.
+  // For regular CXXMethodDecl, construct the traditional this pointer type:
+  // ParentClass* (pointer to the parent record type).
+  if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(this)) {
+    CXXRecordDecl *Parent = MD->getParent();
+    if (Parent) {
+      QualType ClassType = Ctx.getRecordType(Parent);
+      if (!ClassType.isNull()) {
+        return QualType(Ctx.getPointerType(ClassType), Qualifier::None);
+      }
+    }
+  }
+
   return QualType();
 }
 

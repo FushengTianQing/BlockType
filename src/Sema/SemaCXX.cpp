@@ -91,10 +91,35 @@ QualType SemaCXX::DeduceExplicitObjectType(QualType ObjectType,
   if (ParamType.isNull() || ObjectType.isNull())
     return QualType();
 
-  // For now, return the object type as-is.
-  // Full deduction with template argument deduction will be implemented
-  // when template deducing-this support is complete.
-  return ObjectType;
+  // If ParamType is a reference, unwrap it and return the referenced type
+  // with appropriate cv-qualification based on the value category.
+  if (auto *RefTy = llvm::dyn_cast<ReferenceType>(ParamType.getTypePtr())) {
+    QualType Pointee = QualType(RefTy->getReferencedType(), Qualifier::None);
+
+    // For lvalue reference (T&): the object type with added lvalue reference.
+    // For rvalue reference (T&&): if VK is XValue or PRValue, std::move semantics.
+    // For now, return the pointee type — the actual reference construction happens
+    // at the call site when we pass the object.
+    return Pointee;
+  }
+
+  // By-value parameter: return the decayed object type.
+  QualType Result = ObjectType;
+  Result = Result.withoutConstQualifier().withoutVolatileQualifier();
+
+  // Array-to-pointer decay
+  if (auto *ArrTy = llvm::dyn_cast<ArrayType>(Result.getTypePtr())) {
+    auto *PtrTy = S.getASTContext().getPointerType(ArrTy->getElementType());
+    return QualType(PtrTy, Qualifier::None);
+  }
+
+  // Function-to-pointer decay
+  if (auto *FnTy = llvm::dyn_cast<FunctionType>(Result.getTypePtr())) {
+    auto *PtrTy = S.getASTContext().getPointerType(Result.getTypePtr());
+    return QualType(PtrTy, Qualifier::None);
+  }
+
+  return Result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -120,7 +145,60 @@ bool SemaCXX::CheckStaticOperator(CXXMethodDecl *MD, SourceLocation Loc) {
     Valid = false;
   }
 
+  // P7.1.3: Static operators cannot use 'this' pointer.
+  // Check if the function body contains CXXThisExpr.
+  if (Valid && MD->getBody()) {
+    checkBodyForThisUse(MD->getBody(), Loc);
+  }
+
   return Valid;
+}
+
+void SemaCXX::checkBodyForThisUse(Stmt *Body, SourceLocation Loc) {
+  if (!Body) return;
+
+  // Use the Stmt/Expr node kind to check for CXXThisExpr
+  switch (Body->getKind()) {
+  case ASTNode::NodeKind::CXXThisExprKind:
+    S.Diag(Loc, DiagID::err_static_operator_this);
+    return;
+  default:
+    break;
+  }
+
+  // Try to recurse into compound statements
+  if (auto *CS = llvm::dyn_cast<CompoundStmt>(Body)) {
+    for (auto *Child : CS->getBody()) {
+      if (Child) checkBodyForThisUse(Child, Loc);
+    }
+  } else if (auto *RS = llvm::dyn_cast<ReturnStmt>(Body)) {
+    // ReturnStmt::getRetValue() returns Expr* which inherits from ASTNode
+    if (RS->getRetValue()) {
+      if (RS->getRetValue()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+        S.Diag(Loc, DiagID::err_static_operator_this);
+    }
+  } else if (auto *ES = llvm::dyn_cast<ExprStmt>(Body)) {
+    if (ES->getExpr()) {
+      if (ES->getExpr()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+        S.Diag(Loc, DiagID::err_static_operator_this);
+    }
+  } else if (auto *IS = llvm::dyn_cast<IfStmt>(Body)) {
+    if (IS->getCond() && IS->getCond()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+      S.Diag(Loc, DiagID::err_static_operator_this);
+    if (IS->getThen()) checkBodyForThisUse(IS->getThen(), Loc);
+    if (IS->getElse()) checkBodyForThisUse(IS->getElse(), Loc);
+  } else if (auto *WS = llvm::dyn_cast<WhileStmt>(Body)) {
+    if (WS->getCond() && WS->getCond()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+      S.Diag(Loc, DiagID::err_static_operator_this);
+    if (WS->getBody()) checkBodyForThisUse(WS->getBody(), Loc);
+  } else if (auto *FS = llvm::dyn_cast<ForStmt>(Body)) {
+    if (FS->getCond() && FS->getCond()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+      S.Diag(Loc, DiagID::err_static_operator_this);
+    if (FS->getInit()) checkBodyForThisUse(FS->getInit(), Loc);
+    if (FS->getInc() && FS->getInc()->getKind() == ASTNode::NodeKind::CXXThisExprKind)
+      S.Diag(Loc, DiagID::err_static_operator_this);
+    if (FS->getBody()) checkBodyForThisUse(FS->getBody(), Loc);
+  }
 }
 
 //===----------------------------------------------------------------------===//

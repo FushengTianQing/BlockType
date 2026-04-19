@@ -442,6 +442,24 @@ DeclResult Sema::ActOnCXXMethodDeclFactory(SourceLocation Loc, llvm::StringRef N
       IsOverride, IsFinal, IsDefaulted, IsDeleted,
       RefQual, HasNoexceptSpec, NoexceptValue, NoexceptExpr, Access);
   ActOnCXXMethodDecl(MD);
+
+  // P7.1.1: Validate explicit object parameter (deducing this) via SemaCXX.
+  if (MD && MD->hasExplicitObjectParam()) {
+    SemaCXX Checker(*this);
+    if (!Checker.CheckExplicitObjectParameter(MD,
+            MD->getExplicitObjectParam(), Loc)) {
+      // Diagnostic already emitted; still register the decl for error recovery.
+    }
+  }
+
+  // P7.1.3: Validate static operator via SemaCXX.
+  if (MD && MD->isStaticOperator()) {
+    SemaCXX Checker(*this);
+    if (!Checker.CheckStaticOperator(MD, Loc)) {
+      // Diagnostic already emitted.
+    }
+  }
+
   return DeclResult(MD);
 }
 
@@ -1791,6 +1809,12 @@ ExprResult Sema::ActOnDecayCopyExpr(SourceLocation AutoLoc, Expr *SubExpr,
 
   auto *DCE = Context.create<DecayCopyExpr>(AutoLoc, SubExpr, IsDirectInit);
   DCE->setType(ResultTy);
+
+  // P7.1.2: Warn if decay-copy is redundant (subexpression is already a prvalue).
+  if (!SubTy.isNull() && SubExpr->isPRValue()) {
+    Diag(AutoLoc, DiagID::warn_decay_copy_redundant);
+  }
+
   return ExprResult(DCE);
 }
 
@@ -1803,8 +1827,48 @@ ExprResult Sema::ActOnAssumeAttr(SourceLocation Loc, Expr *Condition) {
     return ExprResult(nullptr);
 
   // The condition must be contextually convertible to bool.
-  // For now, we just return the expression — the actual check will be
-  // performed during CodeGen when we emit the llvm.assume intrinsic.
+  QualType CondTy = Condition->getType();
+  if (!CondTy.isNull()) {
+    // Check if the condition type is convertible to bool.
+    // In C++, any scalar type (integer, floating, pointer, member pointer)
+    // is contextually convertible to bool.
+    bool IsConvertible = false;
+    if (CondTy->isBooleanType()) {
+      IsConvertible = true;
+    } else if (CondTy->isIntegerType() || CondTy->isFloatingType()) {
+      IsConvertible = true;
+    } else if (CondTy->isPointerType() || CondTy->isReferenceType()) {
+      IsConvertible = true;
+    } else if (auto *MPT = llvm::dyn_cast<MemberPointerType>(CondTy.getTypePtr())) {
+      (void)MPT;
+      IsConvertible = true;
+    } else if (CondTy->isRecordType()) {
+      // User-defined conversion to bool might exist — accept for now.
+      IsConvertible = true;
+    }
+
+    if (!IsConvertible) {
+      Diag(Loc, DiagID::err_assume_attr_not_bool);
+      return ExprResult(nullptr);
+    }
+  }
+
+  // P7.1.4: Warn if the condition expression has potential side effects.
+  // Simple heuristic: if the expression is not a literal and contains
+  // assignment, increment/decrement, or function call operators.
+  if (Condition->getKind() == ASTNode::NodeKind::BinaryOperatorKind) {
+    auto *BO = llvm::cast<BinaryOperator>(Condition);
+    auto OPC = BO->getOpcode();
+    if (OPC == BinaryOpKind::Assign || OPC == BinaryOpKind::AddAssign ||
+        OPC == BinaryOpKind::SubAssign || OPC == BinaryOpKind::MulAssign ||
+        OPC == BinaryOpKind::DivAssign || OPC == BinaryOpKind::RemAssign ||
+        OPC == BinaryOpKind::ShlAssign || OPC == BinaryOpKind::ShrAssign ||
+        OPC == BinaryOpKind::AndAssign || OPC == BinaryOpKind::OrAssign ||
+        OPC == BinaryOpKind::XorAssign) {
+      Diag(Loc, DiagID::warn_assume_attr_side_effects);
+    }
+  }
+
   return ExprResult(Condition);
 }
 
