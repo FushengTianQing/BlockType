@@ -472,21 +472,28 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
     
     llvm::StringRef ClassName = RD->getName();
     
-    // Handle std::pair<T1, T2>
-    if (ClassName == "pair" || ClassName.ends_with("::pair")) {
-      // TODO: Extract template arguments from RecordDecl
-      // For now, return the tuple type as placeholder
-      // Full implementation needs:
-      // 1. Check if RD is a ClassTemplateSpecializationDecl
-      // 2. Get template arguments: pair<T1, T2>
-      // 3. Return T1 for Index=0, T2 for Index=1
-      return TupleType; // Placeholder
-    }
-    
-    // Handle std::tuple<Ts...>
-    if (ClassName == "tuple" || ClassName.ends_with("::tuple")) {
-      // TODO: Similar to pair, extract template arguments
-      return TupleType; // Placeholder
+    // Handle std::pair<T1, T2> and std::tuple<Ts...>
+    if ((ClassName == "pair" || ClassName.ends_with("::pair")) ||
+        (ClassName == "tuple" || ClassName.ends_with("::tuple"))) {
+      
+      // Check if this is a template specialization
+      if (auto *Spec = llvm::dyn_cast<ClassTemplateSpecializationDecl>(RD)) {
+        // Get template arguments
+        auto Args = Spec->getTemplateArgs();
+        
+        if (Index < Args.size()) {
+          const TemplateArgument &Arg = Args[Index];
+          
+          // If the argument is a type, return it directly
+          if (Arg.isType()) {
+            return Arg.getAsType();
+          }
+        }
+      }
+      
+      // Fallback: if not a specialization or index out of range,
+      // return the original type
+      return TupleType;
     }
   }
   
