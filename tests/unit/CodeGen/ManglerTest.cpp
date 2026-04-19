@@ -12,6 +12,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Basic/SourceManager.h"
 #include "llvm/IR/LLVMContext.h"
 
 using namespace blocktype;
@@ -22,12 +23,13 @@ class ManglerTest : public ::testing::Test {
 protected:
   llvm::LLVMContext LLVMCtx;
   ASTContext Ctx;
+  SourceManager SM;
   std::unique_ptr<CodeGenModule> CGM;
   std::unique_ptr<Mangler> M;
 
   ManglerTest()
       : Ctx(),
-        CGM(std::make_unique<CodeGenModule>(Ctx, LLVMCtx, "test", "arm64-apple-macosx14.0")),
+        CGM(std::make_unique<CodeGenModule>(Ctx, LLVMCtx, SM, "test", "arm64-apple-macosx14.0")),
         M(std::make_unique<Mangler>(*CGM)) {}
 
   /// Helper: allocate a BuiltinType via the ASTContext allocator

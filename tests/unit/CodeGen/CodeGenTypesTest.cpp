@@ -6,6 +6,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Basic/SourceManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -18,10 +19,11 @@ class CodeGenTypesTest : public ::testing::Test {
 protected:
   llvm::LLVMContext LLVMCtx;
   ASTContext Ctx;
+  SourceManager SM;
   std::unique_ptr<CodeGenModule> CGM;
 
   CodeGenTypesTest() {
-    CGM = std::make_unique<CodeGenModule>(Ctx, LLVMCtx, "test", "x86_64-apple-darwin");
+    CGM = std::make_unique<CodeGenModule>(Ctx, LLVMCtx, SM, "test", "x86_64-apple-darwin");
   }
 };
 

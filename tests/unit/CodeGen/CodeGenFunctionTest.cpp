@@ -7,6 +7,7 @@
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Basic/SourceManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -20,10 +21,11 @@ class CodeGenFunctionTest : public ::testing::Test {
 protected:
   llvm::LLVMContext LLVMCtx;
   ASTContext Ctx;
+  SourceManager SM;
   std::unique_ptr<CodeGenModule> CGM;
 
   CodeGenFunctionTest() {
-    CGM = std::make_unique<CodeGenModule>(Ctx, LLVMCtx, "test", "x86_64-apple-darwin");
+    CGM = std::make_unique<CodeGenModule>(Ctx, LLVMCtx, SM, "test", "x86_64-apple-darwin");
   }
 };
 
@@ -115,7 +117,8 @@ TEST_F(CodeGenFunctionTest, NoexceptDoesNotThrow) {
 
   llvm::SmallVector<ParmVarDecl *, 0> NoParams;
   auto *FD = Ctx.create<FunctionDecl>(SourceLocation(0), "safe_func",
-      FT, NoParams, Body, false, false,
+      FT, NoParams, Body,
+      false /*IsInline*/, false /*IsConstexpr*/, false /*IsConsteval*/,
       true /*hasNoexceptSpec*/, true /*noexceptValue*/);
 
   llvm::Function *Fn = CGM->GetOrCreateFunctionDecl(FD);
