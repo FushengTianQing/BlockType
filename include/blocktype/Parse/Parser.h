@@ -436,6 +436,11 @@ public:
   /// Builds a VarDecl from a parsed Declarator.
   VarDecl *buildVarDecl(Declarator &D);
 
+  /// Parses a structured binding declaration: auto [x, y] = expr;
+  /// P7.4.3: Structured binding (C++17/C++26)
+  Decl *parseStructuredBindingDeclaration(SourceLocation AutoLoc,
+                                           bool IsReference);
+
   /// Builds a FunctionDecl from a parsed Declarator.
   FunctionDecl *buildFunctionDecl(Declarator &D);
 

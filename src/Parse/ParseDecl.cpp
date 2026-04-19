@@ -281,6 +281,15 @@ Decl *Parser::parseDeclaration(
     return nullptr;
   }
 
+  // P7.4.3: Check for structured binding syntax: auto [x, y] = expr
+  // After parsing 'auto', check if next token is '['
+  if (Tok.is(TokenKind::l_square)) {
+    // This is a structured binding declaration
+    SourceLocation AutoLoc = Tok.getLocation();  // Use current location
+    bool IsReference = false;  // TODO: Support auto& and auto&&
+    return parseStructuredBindingDeclaration(AutoLoc, IsReference);
+  }
+
   // Parse declarator (name + pointer/reference/array/function chunks)
   Declarator D(DS, DeclaratorContext::FileContext);
   parseDeclarator(D);
@@ -1636,6 +1645,85 @@ end_attributes:
 //===----------------------------------------------------------------------===//
 // Constructor and Destructor Parsing (see ParseClass.cpp)
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Structured Binding Parsing (C++17/C++26 P0963R3, P1061R10)
+//===----------------------------------------------------------------------===//
+
+/// parseStructuredBindingDeclaration - Parse structured binding declaration.
+///
+/// Syntax: auto [name1, name2, ...] = initializer;
+///         auto& [name1, name2, ...] = initializer;
+///
+/// Returns a DeclStmt containing multiple BindingDecls.
+Decl *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
+                                                 bool IsReference) {
+  // Expect '['
+  if (!Tok.is(TokenKind::l_square)) {
+    emitError(DiagID::err_expected);
+    return nullptr;
+  }
+  consumeToken(); // consume '['
+  
+  // Parse binding names
+  llvm::SmallVector<llvm::StringRef, 4> Names;
+  llvm::SmallVector<SourceLocation, 4> NameLocs;
+  
+  do {
+    if (!Tok.is(TokenKind::identifier)) {
+      emitError(DiagID::err_expected_identifier);
+      return nullptr;
+    }
+    
+    Names.push_back(Tok.getText());
+    NameLocs.push_back(Tok.getLocation());
+    consumeToken(); // consume identifier
+    
+  } while (tryConsumeToken(TokenKind::comma));
+  
+  // Expect ']'
+  if (!Tok.is(TokenKind::r_square)) {
+    emitError(DiagID::err_expected_rbrace);  // Use existing diagnostic
+    return nullptr;
+  }
+  consumeToken(); // consume ']'
+  
+  // Expect '='
+  if (!Tok.is(TokenKind::equal)) {
+    emitError(DiagID::err_expected);  // Generic error
+    return nullptr;
+  }
+  consumeToken(); // consume '='
+  
+  // Parse initializer expression
+  Expr *Init = parseExpression();
+  if (!Init) {
+    emitError(DiagID::err_expected_expression);
+    return nullptr;
+  }
+  
+  // Expect ';'
+  if (!Tok.is(TokenKind::semicolon)) {
+    emitError(DiagID::err_expected_semi);
+    return nullptr;
+  }
+  consumeToken(); // consume ';'
+  
+  // Get the type of the initializer
+  QualType InitType = Init->getType();
+  
+  // Call Sema to create binding declarations
+  // TODO: Full implementation needs tuple_size/get<N> checking
+  auto Result = Actions.ActOnDecompositionDecl(AutoLoc, Names, InitType, Init);
+  
+  if (!Result.isUsable()) {
+    return nullptr;
+  }
+  
+  // Wrap in DeclStmt and return the statement
+  Stmt *DeclStmt = Actions.ActOnDeclStmtFromDecl(Result.get()).get();
+  return llvm::cast<Decl>(DeclStmt);  // Cast back to Decl for consistency
+}
 
 //===----------------------------------------------------------------------===//
 // buildVarDecl / buildFunctionDecl — AST construction from Declarator

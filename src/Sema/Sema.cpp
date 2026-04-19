@@ -394,14 +394,19 @@ DeclResult Sema::ActOnDecompositionDecl(SourceLocation Loc,
                                          Expr *Init) {
   // TODO: Full implementation requires:
   // 1. Check if TupleType is decomposable (has tuple_size, get<N>)
-  // 2. For each name, create a BindingDecl
+  //    - For std::pair: check pair<T1, T2>
+  //    - For std::tuple: check tuple<Ts...>
+  //    - For arrays: check array type
+  //    - For custom types: check for tuple_size<T> and get<N>(t)
+  // 2. For each name, create a BindingDecl with proper type
   // 3. Set binding expression to std::get<N>(init)
   // 4. Return DeclGroupRef containing all bindings
   
-  // For now, create placeholder VarDecls for each name
+  // Simplified implementation: create VarDecls for now
   llvm::SmallVector<Decl *, 4> Decls;
   for (unsigned i = 0; i < Names.size(); ++i) {
-    // Create a temporary VarDecl (should be BindingDecl in full impl)
+    // Create a BindingDecl (currently using VarDecl as placeholder)
+    // TODO: Replace with actual BindingDecl when CodeGen support is ready
     auto *VD = Context.create<VarDecl>(Loc, Names[i], TupleType, nullptr, false);
     Decls.push_back(VD);
     
