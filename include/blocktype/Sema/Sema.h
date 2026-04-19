@@ -224,6 +224,28 @@ public:
   /// Access the template deduction engine.
   TemplateDeduction &getTemplateDeduction() { return *Deduction; }
 
+  //===------------------------------------------------------------------===//
+  // Template Instantiation
+  //===------------------------------------------------------------------===//
+
+  /// Instantiate a function template with given template arguments.
+  /// 
+  /// \param FuncTemplate The function template to instantiate.
+  /// \param TemplateArgs The template arguments for instantiation.
+  /// \param Loc The location where instantiation is requested.
+  /// \returns The instantiated FunctionDecl, or nullptr on failure.
+  ///
+  /// This function:
+  /// 1. Checks if a specialization already exists (cache lookup)
+  /// 2. Performs template argument deduction if needed
+  /// 3. Applies SFINAE: substitution failures are not errors
+  /// 4. Clones the function body with type substitution
+  /// 5. Registers the new specialization
+  FunctionDecl *InstantiateFunctionTemplate(
+      FunctionTemplateDecl *FuncTemplate,
+      llvm::ArrayRef<TemplateArgument> TemplateArgs,
+      SourceLocation Loc);
+
   /// Access the concept constraint checker.
   ConstraintSatisfaction &getConstraintChecker() { return *ConstraintChecker; }
 

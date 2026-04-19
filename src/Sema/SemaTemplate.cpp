@@ -705,9 +705,8 @@ FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
   // removed from the overload set (similar to SFINAE).
   if (FTD->hasRequiresClause()) {
     Expr *RequiresClause = FTD->getRequiresClause();
-    TemplateArgumentList ArgList(DeducedArgs);
     bool Satisfied =
-        ConstraintChecker->CheckConstraintSatisfaction(RequiresClause, ArgList);
+        ConstraintChecker->CheckConstraintSatisfaction(RequiresClause, DeducedArgs);
     if (!Satisfied) {
       Diags.report(CallLoc, DiagID::err_concept_not_satisfied,
                    FTD->getName());

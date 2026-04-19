@@ -22,7 +22,8 @@
 // Type Nodes
 //===----------------------------------------------------------------------===//
 
-ABSTRACT_TYPE(Type, Type)
+// Note: The abstract base 'Type' class is not included here.
+// It is handled separately in TypeVisitor as VisitType().
 
 // Builtin types
 TYPE(Builtin, Type)

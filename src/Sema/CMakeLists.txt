@@ -13,6 +13,7 @@ add_library(blocktype-sema
   SymbolTable.cpp
   TemplateDeduction.cpp
   TemplateInstantiation.cpp
+  TemplateInstantiator.cpp
   TypeCheck.cpp
   TypeDeduction.cpp
 )

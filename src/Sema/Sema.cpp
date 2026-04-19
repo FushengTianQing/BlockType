@@ -18,6 +18,7 @@
 #include "blocktype/AST/Expr.h"
 #include "blocktype/AST/Type.h"
 #include "blocktype/AST/TemplateParameterList.h"
+#include "blocktype/AST/StmtCloner.h"  // For StmtCloner
 
 #include "llvm/Support/Casting.h"
 
@@ -82,13 +83,14 @@ NamespaceDecl *Sema::LookupNamespace(llvm::StringRef NamespaceName) const {
   
   // Start from the translation unit or current context
   DeclContext *CurrentDC = nullptr;
-  if (CurContext) {
-    CurrentDC = CurContext;
-  } else if (CurTU) {
+  if (CurTU) {
+    // Always start from translation unit for namespace lookup
     CurrentDC = CurTU;
   } else {
     return nullptr;
   }
+  
+  NamespaceDecl *LastNS = nullptr; // Track the last found namespace
   
   // Lookup each part of the namespace path
   for (llvm::StringRef Part : Parts) {
@@ -108,12 +110,13 @@ NamespaceDecl *Sema::LookupNamespace(llvm::StringRef NamespaceName) const {
       return nullptr; // Namespace not found
     }
     
+    LastNS = FoundNS; // Save the found namespace
     // Move into the found namespace for the next lookup
     CurrentDC = FoundNS;
   }
   
-  // The last found namespace should be a NamespaceDecl
-  return llvm::dyn_cast_or_null<NamespaceDecl>(CurrentDC);
+  // Return the last found namespace
+  return LastNS;
 }
 
 // P7.4.3: Lookup a declaration within a specific namespace
@@ -1816,13 +1819,12 @@ bool Sema::isCompleteType(QualType T) const {
   if (Ty->getTypeClass() == TypeClass::TemplateSpecialization) {
     // Check if the template specialization has been instantiated as a
     // complete type. Look for an existing specialization via the instantiator.
+    // TODO: Implement class template instantiation and FindExistingSpecialization
     auto *TST = static_cast<const TemplateSpecializationType *>(Ty);
     if (auto *CTD = llvm::dyn_cast_or_null<ClassTemplateDecl>(
             TST->getTemplateDecl())) {
-      auto *Spec = Instantiator->FindExistingSpecialization(
-          CTD, TST->getTemplateArgs());
-      if (Spec && Spec->isCompleteDefinition())
-        return true;
+      // For now, assume incomplete until class template instantiation is implemented
+      return false;
     }
     return false;
   }
@@ -2173,6 +2175,90 @@ void Sema::AttachContractsToFunction(FunctionDecl *FD,
         CA->getCondition());
     AttrList->addAttribute(AD);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Template Instantiation
+//===----------------------------------------------------------------------===//
+
+FunctionDecl *Sema::InstantiateFunctionTemplate(
+    FunctionTemplateDecl *FuncTemplate,
+    llvm::ArrayRef<TemplateArgument> TemplateArgs,
+    SourceLocation Loc) {
+  
+  if (FuncTemplate == nullptr) {
+    return nullptr;
+  }
+  
+  // Step 1: Check if a specialization already exists (cache lookup)
+  if (auto *Existing = FuncTemplate->findSpecialization(TemplateArgs)) {
+    return Existing;
+  }
+  
+  // Step 2: Get the templated function declaration
+  auto *TemplatedFunc = llvm::dyn_cast_or_null<FunctionDecl>(
+      FuncTemplate->getTemplatedDecl());
+  
+  if (TemplatedFunc == nullptr) {
+    Diags.report(Loc, DiagID::err_template_recursion);
+    return nullptr;
+  }
+  
+  // Step 3: Create TemplateInstantiation and set up substitutions
+  TemplateInstantiation Inst;
+  auto Params = FuncTemplate->getTemplateParameters();
+  
+  if (Params.empty()) {
+    Diags.report(Loc, DiagID::err_template_arg_num_different, 
+                 "no template parameters", FuncTemplate->getName());
+    return nullptr;
+  }
+  
+  // Build substitution map from template parameters to arguments
+  for (unsigned i = 0; i < std::min(TemplateArgs.size(), Params.size()); ++i) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(Params[i])) {
+      Inst.addSubstitution(ParamDecl, TemplateArgs[i]);
+    }
+  }
+  
+  // Step 4: Substitute function signature types
+  QualType SubstFuncType = Inst.substituteType(TemplatedFunc->getType());
+  
+  // Step 5: Clone parameter declarations with substituted types
+  llvm::SmallVector<ParmVarDecl *, 4> ClonedParams;
+  for (auto *OrigParam : TemplatedFunc->getParams()) {
+    // Substitute the parameter type
+    QualType SubstParamType = Inst.substituteType(OrigParam->getType());
+    
+    // Create new ParmVarDecl with substituted type
+    auto *ClonedParam = Context.create<ParmVarDecl>(
+        OrigParam->getLocation(),
+        OrigParam->getName(),
+        SubstParamType,
+        OrigParam->getFunctionScopeIndex(),
+        OrigParam->getDefaultArg());  // TODO: clone default arg expression
+    
+    ClonedParams.push_back(ClonedParam);
+  }
+  
+  // Step 6: Create new FunctionDecl with substituted types and cloned params
+  auto *NewFD = Context.create<FunctionDecl>(
+      TemplatedFunc->getLocation(),
+      TemplatedFunc->getName(),
+      SubstFuncType,
+      ClonedParams);
+  
+  // Step 7: Clone function body if present
+  if (auto *Body = TemplatedFunc->getBody()) {
+    StmtCloner Cloner(Inst);
+    Stmt *ClonedBody = Cloner.Clone(Body);
+    NewFD->setBody(ClonedBody);
+  }
+  
+  // Step 8: Register the specialization
+  FuncTemplate->addSpecialization(NewFD);
+  
+  return NewFD;
 }
 
 } // namespace blocktype
