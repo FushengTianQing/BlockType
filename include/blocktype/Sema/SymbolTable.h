@@ -15,6 +15,7 @@
 
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/Basic/LLVM.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -23,6 +24,7 @@
 namespace blocktype {
 
 class ASTContext;
+class DiagnosticsEngine;
 
 /// SymbolTable - Manages global symbol information across all scopes.
 ///
@@ -34,6 +36,7 @@ class ASTContext;
 /// Design follows Clang's IdentifierTable + multiple lookup maps pattern.
 class SymbolTable {
   ASTContext &Context;
+  DiagnosticsEngine &Diags;
 
   // Ordinary symbols: name → list of declarations (for overloading)
   llvm::StringMap<llvm::SmallVector<NamedDecl *, 4>> OrdinarySymbols;
@@ -54,7 +57,7 @@ class SymbolTable {
   llvm::StringMap<ConceptDecl *> Concepts;
 
 public:
-  explicit SymbolTable(ASTContext &C) : Context(C) {}
+  explicit SymbolTable(ASTContext &C, DiagnosticsEngine &D) : Context(C), Diags(D) {}
 
   //===------------------------------------------------------------------===//
   // Symbol addition

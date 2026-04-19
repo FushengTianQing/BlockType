@@ -8,6 +8,7 @@
 
 #include "blocktype/Sema/SymbolTable.h"
 #include "blocktype/AST/ASTContext.h"
+#include "blocktype/Basic/DiagnosticIDs.h"
 
 namespace blocktype {
 
@@ -21,16 +22,16 @@ bool SymbolTable::addOrdinarySymbol(NamedDecl *D) {
     return true;
   }
 
-  // Non-function: check for redefinition
+  // Non-function: check for redefinition against any existing non-function
   for (auto *Existing : Decls) {
-    // Allow redeclaration of extern variables
-    if (auto *ExistingVar = dyn_cast<VarDecl>(Existing)) {
-      if (auto *NewVar = dyn_cast<VarDecl>(D)) {
-        // TODO: Check extern/redeclaration rules
-      }
-    }
-    // Otherwise it's a redefinition
-    // Error is reported by caller via Diags
+    // Functions are already handled by the overloading path above,
+    // so any Existing here that is a function can be skipped.
+    if (isa<FunctionDecl>(Existing) || isa<CXXMethodDecl>(Existing))
+      continue;
+    // Two non-function declarations with the same name → redefinition
+    Diags.report(D->getLocation(), DiagID::err_redefinition, Name);
+    Diags.report(Existing->getLocation(), DiagID::note_previous_definition);
+    break; // Only report once
   }
 
   Decls.push_back(D);
@@ -43,8 +44,12 @@ bool SymbolTable::addTagDecl(TagDecl *D) {
 
   auto It = Tags.find(Name);
   if (It != Tags.end()) {
-    // Forward declarations are OK
-    // TODO: Check if existing is just a forward declaration
+    // Forward declarations are OK — if either is forward-only, allow
+    if (!D->isCompleteDefinition() || !It->second->isCompleteDefinition())
+      return true;
+    // Both are complete definitions — redefinition error
+    Diags.report(D->getLocation(), DiagID::err_redefinition, Name);
+    Diags.report(It->second->getLocation(), DiagID::note_previous_definition);
     return true;
   }
   Tags[Name] = D;

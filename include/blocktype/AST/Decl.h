@@ -52,6 +52,7 @@ enum class AccessSpecifier {
 /// Decl - Base class for all declaration nodes.
 class Decl : public ASTNode {
 protected:
+  bool Used = false;
   Decl(SourceLocation Loc) : ASTNode(Loc) {}
 
 public:
@@ -59,6 +60,9 @@ public:
     return N->getKind() >= NodeKind::NamedDeclKind &&
            N->getKind() < NodeKind::NumNodeKinds;
   }
+
+  bool isUsed() const { return Used; }
+  void setUsed(bool U = true) { Used = U; }
 };
 
 //===----------------------------------------------------------------------===//

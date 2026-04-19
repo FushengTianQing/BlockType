@@ -193,11 +193,13 @@ bool TypeCheck::CheckCall(FunctionDecl *F, llvm::ArrayRef<Expr *> Args,
 
   // Check argument count
   if (Args.size() < MinParams) {
-    Diags.report(CallLoc, DiagID::err_type_mismatch);
+    Diags.report(CallLoc, DiagID::err_too_few_args,
+                 std::to_string(MinParams), std::to_string(Args.size()));
     return false;
   }
   if (!IsVariadic && Args.size() > NumParams) {
-    Diags.report(CallLoc, DiagID::err_type_mismatch);
+    Diags.report(CallLoc, DiagID::err_too_many_args,
+                 std::to_string(NumParams), std::to_string(Args.size()));
     return false;
   }
 
@@ -207,7 +209,9 @@ bool TypeCheck::CheckCall(FunctionDecl *F, llvm::ArrayRef<Expr *> Args,
     QualType ArgType = Args[I]->getType();
 
     if (!isTypeCompatible(ArgType, ParamType)) {
-      Diags.report(CallLoc, DiagID::err_type_mismatch);
+      Diags.report(CallLoc, DiagID::err_arg_type_mismatch,
+                   std::to_string(I + 1),
+                   ArgType.isNull() ? "<unknown>" : ArgType.getAsString());
       return false;
     }
   }
@@ -259,7 +263,7 @@ bool TypeCheck::CheckCondition(Expr *Cond, SourceLocation Loc) {
     return true;
   }
 
-  Diags.report(Loc, DiagID::err_type_mismatch);
+  Diags.report(Loc, DiagID::err_condition_not_bool);
   return false;
 }
 

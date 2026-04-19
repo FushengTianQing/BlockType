@@ -161,6 +161,14 @@ class Sema {
   /// Translation unit being processed.
   TranslationUnitDecl *CurTU = nullptr;
 
+  /// Statement context depth counters for break/continue/case validation.
+  /// BreakScopeDepth: incremented by loops and switch, checked by break
+  /// ContinueScopeDepth: incremented by loops only, checked by continue
+  /// SwitchScopeDepth: incremented by switch only, checked by case/default
+  unsigned BreakScopeDepth = 0;
+  unsigned ContinueScopeDepth = 0;
+  unsigned SwitchScopeDepth = 0;
+
   /// Template definition nesting depth.
   /// Incremented when entering a template definition body,
   /// decremented when exiting.  When > 0, we are inside a
@@ -670,6 +678,10 @@ public:
 
   void Diag(SourceLocation Loc, DiagID ID);
   void Diag(SourceLocation Loc, DiagID ID, llvm::StringRef Extra);
+
+  /// Emit warnings for unused declarations and unreachable code.
+  /// Should be called after parsing is complete.
+  void DiagnoseUnusedDecls(TranslationUnitDecl *TU);
 };
 
 } // namespace blocktype

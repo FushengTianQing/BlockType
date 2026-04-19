@@ -9,6 +9,7 @@
 #include "blocktype/Sema/SymbolTable.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
+#include "blocktype/Basic/Diagnostics.h"
 
 using namespace blocktype;
 
@@ -17,9 +18,12 @@ namespace {
 class SymbolTableTest : public ::testing::Test {
 protected:
   ASTContext Context;
+  DiagnosticsEngine Diags;
   SymbolTable SymTab;
 
-  SymbolTableTest() : SymTab(Context) {}
+  SymbolTableTest()
+    : Diags(llvm::nulls()),
+      SymTab(Context, Diags) {}
 
   VarDecl *makeVar(StringRef Name) {
     return Context.create<VarDecl>(SourceLocation(1), Name,

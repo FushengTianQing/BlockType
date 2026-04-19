@@ -209,7 +209,10 @@ int main(int argc, char *argv[]) {
 
     TranslationUnitDecl *TU = P.parseTranslationUnit();
 
-    // 7. 报告错误
+    // 7. Post-parse diagnostics: unused declarations, unreachable code
+    S.DiagnoseUnusedDecls(TU);
+
+    // 8. 报告错误
     if (P.hasErrors()) {
       errs() << "Error: Parsing failed for '" << File << "'\n";
       continue;

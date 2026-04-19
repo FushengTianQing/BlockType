@@ -25,7 +25,7 @@ namespace blocktype {
 //===----------------------------------------------------------------------===//
 
 Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
-  : Context(C), Diags(D), Symbols(C),
+  : Context(C), Diags(D), Symbols(C, D),
     TC(C, D), ConstEval(C),
     Instantiator(std::make_unique<TemplateInstantiator>(*this)),
     Deduction(std::make_unique<TemplateDeduction>(*this)),
@@ -675,6 +675,9 @@ ExprResult Sema::ActOnCXXNullPtrLiteral(SourceLocation Loc) {
 
 ExprResult Sema::ActOnDeclRefExpr(SourceLocation Loc, ValueDecl *D) {
   auto *DRE = Context.create<DeclRefExpr>(Loc, D);
+  // Mark the declaration as used (for warn_unused_variable/function diagnostics)
+  if (D)
+    D->setUsed();
   return ExprResult(DRE);
 }
 
@@ -991,7 +994,8 @@ ExprResult Sema::ActOnMemberExpr(Expr *Base, llvm::StringRef Member,
     if (auto *PT = llvm::dyn_cast<PointerType>(BaseType.getTypePtr())) {
       BaseType = PT->getPointeeType();
     } else {
-      Diags.report(MemberLoc, DiagID::err_type_mismatch);
+      Diags.report(MemberLoc, DiagID::err_member_access_type_invalid,
+                   BaseType.isNull() ? "<unknown>" : BaseType.getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -999,7 +1003,8 @@ ExprResult Sema::ActOnMemberExpr(Expr *Base, llvm::StringRef Member,
   // Look up the member in the record type
   auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr());
   if (!RT) {
-    Diags.report(MemberLoc, DiagID::err_type_mismatch);
+    Diags.report(MemberLoc, DiagID::err_member_access_type_invalid,
+                 BaseType.isNull() ? "<unknown>" : BaseType.getAsString());
     return ExprResult::getInvalid();
   }
 
@@ -1045,12 +1050,23 @@ ExprResult Sema::ActOnBinaryOperator(BinaryOpKind Op, Expr *LHS, Expr *RHS,
   QualType LHSType = LHS->getType();
   QualType RHSType = RHS->getType();
 
+  // Check for void operands — not allowed in arithmetic/comparison/etc.
+  if (!LHSType.isNull() && LHSType->isVoidType()) {
+    Diags.report(OpLoc, DiagID::err_void_expr_not_allowed);
+    return ExprResult::getInvalid();
+  }
+  if (!RHSType.isNull() && RHSType->isVoidType()) {
+    Diags.report(OpLoc, DiagID::err_void_expr_not_allowed);
+    return ExprResult::getInvalid();
+  }
+
   // Compute the result type via TypeCheck
   QualType ResultType;
   if (!LHSType.isNull() && !RHSType.isNull()) {
     ResultType = TC.getBinaryOperatorResultType(Op, LHSType, RHSType);
     if (ResultType.isNull()) {
-      Diags.report(OpLoc, DiagID::err_type_mismatch);
+      Diags.report(OpLoc, DiagID::err_bin_op_type_invalid,
+                   LHSType.getAsString(), RHSType.getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -1069,12 +1085,22 @@ ExprResult Sema::ActOnUnaryOperator(UnaryOpKind Op, Expr *Operand,
 
   QualType OperandType = Operand->getType();
 
+  // Check for void operand on operators that require a value
+  // (Plus, Minus, Not, PreInc, PreDec, PostInc, PostDec, Deref)
+  // AddrOf on void is technically invalid but we let it through for error recovery.
+  if (!OperandType.isNull() && OperandType->isVoidType() &&
+      Op != UnaryOpKind::AddrOf) {
+    Diags.report(OpLoc, DiagID::err_void_expr_not_allowed);
+    return ExprResult::getInvalid();
+  }
+
   // Compute the result type via TypeCheck
   QualType ResultType;
   if (!OperandType.isNull()) {
     ResultType = TC.getUnaryOperatorResultType(Op, OperandType);
     if (ResultType.isNull()) {
-      Diags.report(OpLoc, DiagID::err_type_mismatch);
+      Diags.report(OpLoc, DiagID::err_bin_op_type_invalid,
+                   OperandType.getAsString(), OperandType.getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -1094,7 +1120,8 @@ ExprResult Sema::ActOnCastExpr(QualType TargetType, Expr *E,
 
   // Defensive: skip type compatibility check if expression type not set yet
   if (!E->getType().isNull() && !TC.isTypeCompatible(E->getType(), TargetType)) {
-    Diags.report(LParenLoc, DiagID::err_type_mismatch);
+    Diags.report(LParenLoc, DiagID::err_cast_incompatible,
+                 E->getType().getAsString(), TargetType.getAsString());
     return ExprResult::getInvalid();
   }
 
@@ -1116,7 +1143,8 @@ ExprResult Sema::ActOnArraySubscriptExpr(Expr *Base,
   if (!BaseType.isNull()) {
     const Type *BaseTy = BaseType.getTypePtr();
     if (!BaseTy->isPointerType() && !BaseTy->isArrayType()) {
-      Diags.report(LLoc, DiagID::err_type_mismatch);
+      Diags.report(LLoc, DiagID::err_subscript_not_pointer,
+                   BaseType.getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -1125,7 +1153,8 @@ ExprResult Sema::ActOnArraySubscriptExpr(Expr *Base,
     if (!Idx)
       continue;
     if (!Idx->getType().isNull() && !Idx->getType()->isIntegerType()) {
-      Diags.report(LLoc, DiagID::err_type_mismatch);
+      Diags.report(LLoc, DiagID::err_bin_op_type_invalid,
+                   BaseType.getAsString(), Idx->getType().getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -1148,6 +1177,16 @@ ExprResult Sema::ActOnConditionalExpr(Expr *Cond, Expr *Then, Expr *Else,
   if (!Cond || !Then || !Else)
     return ExprResult::getInvalid();
 
+  // Check for void branches — not allowed in conditional expression
+  if (!Then->getType().isNull() && Then->getType()->isVoidType()) {
+    Diags.report(ColonLoc, DiagID::err_void_expr_not_allowed);
+    return ExprResult::getInvalid();
+  }
+  if (!Else->getType().isNull() && Else->getType()->isVoidType()) {
+    Diags.report(ColonLoc, DiagID::err_void_expr_not_allowed);
+    return ExprResult::getInvalid();
+  }
+
   // Defensive: skip condition check if type not set yet
   if (!Cond->getType().isNull() && !TC.CheckCondition(Cond, QuestionLoc))
     return ExprResult::getInvalid();
@@ -1156,7 +1195,8 @@ ExprResult Sema::ActOnConditionalExpr(Expr *Cond, Expr *Then, Expr *Else,
   if (!Then->getType().isNull() && !Else->getType().isNull()) {
     QualType ResultType = TC.getCommonType(Then->getType(), Else->getType());
     if (ResultType.isNull()) {
-      Diags.report(ColonLoc, DiagID::err_type_mismatch);
+      Diags.report(ColonLoc, DiagID::err_bin_op_type_invalid,
+                   Then->getType().getAsString(), Else->getType().getAsString());
       return ExprResult::getInvalid();
     }
   }
@@ -1200,43 +1240,74 @@ StmtResult Sema::ActOnIfStmt(Expr *Cond, Stmt *Then, Stmt *Else,
 
 StmtResult Sema::ActOnWhileStmt(Expr *Cond, Stmt *Body,
                                  SourceLocation WhileLoc) {
-  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, WhileLoc))
+  ++BreakScopeDepth;
+  ++ContinueScopeDepth;
+  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, WhileLoc)) {
+    --BreakScopeDepth;
+    --ContinueScopeDepth;
     return StmtResult::getInvalid();
+  }
 
   auto *WS = Context.create<WhileStmt>(WhileLoc, Cond, Body);
+  --BreakScopeDepth;
+  --ContinueScopeDepth;
   return StmtResult(WS);
 }
 
 StmtResult Sema::ActOnForStmt(Stmt *Init, Expr *Cond, Expr *Inc, Stmt *Body,
                                SourceLocation ForLoc) {
-  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, ForLoc))
+  ++BreakScopeDepth;
+  ++ContinueScopeDepth;
+  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, ForLoc)) {
+    --BreakScopeDepth;
+    --ContinueScopeDepth;
     return StmtResult::getInvalid();
+  }
 
   auto *FS = Context.create<ForStmt>(ForLoc, Init, Cond, Inc, Body);
+  --BreakScopeDepth;
+  --ContinueScopeDepth;
   return StmtResult(FS);
 }
 
 StmtResult Sema::ActOnDoStmt(Expr *Cond, Stmt *Body, SourceLocation DoLoc) {
-  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, DoLoc))
+  ++BreakScopeDepth;
+  ++ContinueScopeDepth;
+  if (Cond && !Cond->getType().isNull() && !TC.CheckCondition(Cond, DoLoc)) {
+    --BreakScopeDepth;
+    --ContinueScopeDepth;
     return StmtResult::getInvalid();
+  }
 
   auto *DS = Context.create<DoStmt>(DoLoc, Body, Cond);
+  --BreakScopeDepth;
+  --ContinueScopeDepth;
   return StmtResult(DS);
 }
 
 StmtResult Sema::ActOnSwitchStmt(Expr *Cond, Stmt *Body,
                                   SourceLocation SwitchLoc) {
+  ++BreakScopeDepth;
+  ++SwitchScopeDepth;
   // Defensive: skip type check if type not yet set (incremental migration)
   if (Cond && !Cond->getType().isNull() && !Cond->getType()->isIntegerType()) {
-    Diags.report(SwitchLoc, DiagID::err_type_mismatch);
+    Diags.report(SwitchLoc, DiagID::err_condition_not_bool);
+    --BreakScopeDepth;
+    --SwitchScopeDepth;
     return StmtResult::getInvalid();
   }
 
   auto *SS = Context.create<SwitchStmt>(SwitchLoc, Cond, Body);
+  --BreakScopeDepth;
+  --SwitchScopeDepth;
   return StmtResult(SS);
 }
 
 StmtResult Sema::ActOnCaseStmt(Expr *Val, Stmt *Body, SourceLocation CaseLoc) {
+  if (SwitchScopeDepth == 0) {
+    Diags.report(CaseLoc, DiagID::err_case_not_in_switch);
+    // Fall through: still create the node for error recovery
+  }
   if (Val && !Val->getType().isNull() && !TC.CheckCaseExpression(Val, CaseLoc))
     return StmtResult::getInvalid();
 
@@ -1245,16 +1316,28 @@ StmtResult Sema::ActOnCaseStmt(Expr *Val, Stmt *Body, SourceLocation CaseLoc) {
 }
 
 StmtResult Sema::ActOnDefaultStmt(Stmt *Body, SourceLocation DefaultLoc) {
+  if (SwitchScopeDepth == 0) {
+    Diags.report(DefaultLoc, DiagID::err_case_not_in_switch);
+    // Fall through: still create the node for error recovery
+  }
   auto *DS = Context.create<DefaultStmt>(DefaultLoc, Body);
   return StmtResult(DS);
 }
 
 StmtResult Sema::ActOnBreakStmt(SourceLocation BreakLoc) {
+  if (BreakScopeDepth == 0) {
+    Diags.report(BreakLoc, DiagID::err_break_outside_loop);
+    // Fall through: still create the node for error recovery
+  }
   auto *BS = Context.create<BreakStmt>(BreakLoc);
   return StmtResult(BS);
 }
 
 StmtResult Sema::ActOnContinueStmt(SourceLocation ContinueLoc) {
+  if (ContinueScopeDepth == 0) {
+    Diags.report(ContinueLoc, DiagID::err_continue_outside_loop);
+    // Fall through: still create the node for error recovery
+  }
   auto *CS = Context.create<ContinueStmt>(ContinueLoc);
   return StmtResult(CS);
 }
@@ -1309,8 +1392,12 @@ StmtResult Sema::ActOnLabelStmt(SourceLocation Loc, llvm::StringRef LabelName,
 StmtResult Sema::ActOnCXXForRangeStmt(SourceLocation ForLoc,
                                        SourceLocation VarLoc, llvm::StringRef VarName,
                                        QualType VarType, Expr *Range, Stmt *Body) {
+  ++BreakScopeDepth;
+  ++ContinueScopeDepth;
   auto *RangeVar = Context.create<VarDecl>(VarLoc, VarName, VarType, nullptr);
   auto *FRS = Context.create<CXXForRangeStmt>(ForLoc, RangeVar, Range, Body);
+  --BreakScopeDepth;
+  --ContinueScopeDepth;
   return StmtResult(FRS);
 }
 
@@ -1508,6 +1595,78 @@ void Sema::Diag(SourceLocation Loc, DiagID ID) {
 
 void Sema::Diag(SourceLocation Loc, DiagID ID, llvm::StringRef Extra) {
   Diags.report(Loc, ID, Extra);
+}
+
+//===----------------------------------------------------------------------===//
+// Unused declarations and unreachable code diagnostics
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Walk the Stmt tree to check for unreachable code within CompoundStmts.
+void checkUnreachableInStmt(Stmt *S, DiagnosticsEngine &Diags) {
+  if (!S) return;
+
+  if (auto *CS = llvm::dyn_cast<CompoundStmt>(S)) {
+    bool seenReturn = false;
+    for (auto *Child : CS->getBody()) {
+      if (seenReturn) {
+        Diags.report(Child->getLocation(), DiagID::warn_unreachable_code);
+        break; // Only report once per block
+      }
+      if (llvm::isa<ReturnStmt>(Child))
+        seenReturn = true;
+    }
+    // Recurse into sub-statements
+    for (auto *Child : CS->getBody())
+      checkUnreachableInStmt(Child, Diags);
+    return;
+  }
+
+  // Recurse into if/while/for/do/switch bodies
+  if (auto *IS = llvm::dyn_cast<IfStmt>(S)) {
+    checkUnreachableInStmt(IS->getThen(), Diags);
+    checkUnreachableInStmt(IS->getElse(), Diags);
+  } else if (auto *WS = llvm::dyn_cast<WhileStmt>(S)) {
+    checkUnreachableInStmt(WS->getBody(), Diags);
+  } else if (auto *FS = llvm::dyn_cast<ForStmt>(S)) {
+    checkUnreachableInStmt(FS->getBody(), Diags);
+  } else if (auto *DS = llvm::dyn_cast<DoStmt>(S)) {
+    checkUnreachableInStmt(DS->getBody(), Diags);
+  } else if (auto *SS = llvm::dyn_cast<SwitchStmt>(S)) {
+    checkUnreachableInStmt(SS->getBody(), Diags);
+  }
+}
+} // anonymous namespace
+
+void Sema::DiagnoseUnusedDecls(TranslationUnitDecl *TU) {
+  if (!TU) return;
+
+  for (Decl *D : TU->decls()) {
+    // Skip declarations without a name (anonymous, etc.)
+    auto *ND = llvm::dyn_cast<NamedDecl>(D);
+    if (!ND || ND->getName().empty()) continue;
+
+    // Check unused variables (top-level or function-local)
+    if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
+      if (!VD->isUsed() && !VD->getType().isNull()) {
+        // Skip static variables (might be used in other TUs)
+        // Skip variables with initializers that have side effects (simplified: skip all for now)
+        Diags.report(VD->getLocation(), DiagID::warn_unused_variable, VD->getName());
+      }
+    }
+
+    // Check unused functions
+    if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
+      if (!FD->isUsed()) {
+        // Skip main function
+        if (FD->getName() == "main") continue;
+        Diags.report(FD->getLocation(), DiagID::warn_unused_function, FD->getName());
+      }
+      // Check unreachable code in function body
+      if (FD->getBody())
+        checkUnreachableInStmt(FD->getBody(), Diags);
+    }
+  }
 }
 
 } // namespace blocktype

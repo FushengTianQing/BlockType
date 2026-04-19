@@ -1,11 +1,12 @@
 # ExprTy 类型补设修复方案
 
-> **状态**: 方案设计  
+> **状态**: ✅ 已完成（2026-04-19）  
 > **前置依赖**: 阶段 3 已完成（Parser 零 `Context.create`，662/662 测试通过）  
-> **当前测试基线**: 662/662 全部通过  
+> **测试结果**: 662/662 全部通过  
 > **目标**: 所有表达式节点在 `ActOn*` 工厂方法中创建时即设置正确 `ExprTy`，**最终删除 `ProcessAST`**  
 > **风险等级**: 中高（修改 25+ 个表达式工厂方法，需确保类型推导链完整）
 > **最终状态**: ProcessAST → 完全删除，driver.cpp 编译流程简化为 Parse → Sema（内嵌于 ActOn*）→ CodeGen
+> **Git Commit**: `214636d`
 
 ---
 
@@ -87,7 +88,7 @@
 
 ## 三、分阶段修复计划
 
-### 阶段 4A：Tier 1 高优先级修复（7 处）
+### 阶段 4A：Tier 1 高优先级修复（7 处） — ✅ 已完成
 
 > 预计修改文件：`src/Sema/Sema.cpp`  
 > 预计工作量：1-2 小时  
@@ -205,7 +206,7 @@ auto *CO = Context.create<ConditionalOperator>(QuestionLoc, Cond, Then, Else);
 return ExprResult(CO);
 ```
 
-### 阶段 4B：Tier 2 中优先级修复（13 处）
+### 阶段 4B：Tier 2 中优先级修复（13 处） — ✅ 已完成
 
 > 预计修改文件：`src/Sema/Sema.cpp`，`include/blocktype/Sema/Sema.h`  
 > 预计工作量：2-3 小时  
@@ -352,13 +353,13 @@ ExprResult Sema::ActOnCXXConstructExpr(SourceLocation Loc,
 
 **影响范围**：需同步修改 `Sema.h` 声明和 `ParseExprCXX.cpp` 中的调用点。
 
-### 阶段 4C：Tier 3 低优先级修复（8 处）
+### 阶段 4C：Tier 3 低优先级修复（8 处） — ✅ 已完成
 
 > 预计修改文件：`src/Sema/Sema.cpp`，`include/blocktype/Sema/Sema.h`  
 > 预计工作量：3-4 小时  
 > 风险：低（当前测试可能不涉及这些表达式类型）
 
-#### 4C-1. `ActOnRequiresExpr` — 设置 `bool`
+#### 4C-1. `ActOnRequiresExpr` — 设置 `bool` ✅
 
 ```cpp
 ExprResult Sema::ActOnRequiresExpr(...) {
@@ -368,21 +369,66 @@ ExprResult Sema::ActOnRequiresExpr(...) {
 }
 ```
 
-#### 4C-2~8. 初始化列表、Lambda、Fold 表达式等
+#### 4C-2. `ActOnLambdaExpr` — 用 ReturnType 设置 ✅
 
-这些需要更复杂的类型推导机制：
+```cpp
+// ReturnType 已由 Parser 传入，只需设给 ExprTy
+auto *LE = Context.create<LambdaExpr>(...);
+if (!ReturnType.isNull())
+  LE->setType(ReturnType);
+```
 
-- **InitListExpr**：需从变量声明或函数参数的预期类型推导
-- **LambdaExpr**：需为每个 lambda 创建唯一的匿名 class 类型
-- **CXXFoldExpr**：需推导折叠结果类型
-- **PackIndexingExpr**：需展开包后推导
-- **ReflexprExpr**：需定义反射类型系统
-- **DesignatedInitExpr**：依赖初始化目标类型
-- **TemplateSpecializationExpr**：需模板实例化结果
+#### 4C-3. `ActOnCXXFoldExpr` — 用 Pattern 类型设置 ✅
 
-这些建议标记为 `TODO`，在对应功能开发时一并实现。
+```cpp
+// 折叠运算保持元素类型不变
+auto *FE = Context.create<CXXFoldExpr>(...);
+if (Pattern && !Pattern->getType().isNull())
+  FE->setType(Pattern->getType());
+```
 
-### 阶段 4D：清除 ProcessAST（最终目标）
+#### 4C-4. `ActOnReflexprExpr` — 用 void 占位 ✅
+
+```cpp
+// reflexpr 结果类型为 meta::info，在反射类型系统定义前用 void 占位
+RE->setType(Context.getVoidType());
+```
+
+#### 4C-5. `ActOnTemplateSpecializationExpr` — 从 VD 获取类型 ✅
+
+```cpp
+// 从解析到的模板声明获取类型
+if (VD && !VD->getType().isNull())
+  TSE->setType(VD->getType());
+```
+
+#### 4C-6. `ActOnDesignatedInitExpr` — 从 Init 表达式推导 ✅
+
+```cpp
+// 指定初始化器的类型 = 初始化表达式的类型
+if (Init && !Init->getType().isNull())
+  DIE->setType(Init->getType());
+```
+
+#### 4C-7. `ActOnInitListExpr` — 扩展签名传入 ExpectedType ✅
+
+```cpp
+// 扩展签名添加 ExpectedType 参数（默认 QualType()）
+// 有 ExpectedType 时直接使用，否则 fallback 到首元素类型
+ExprResult ActOnInitListExpr(SourceLocation LBraceLoc,
+                             llvm::ArrayRef<Expr *> Inits,
+                             SourceLocation RBraceLoc,
+                             QualType ExpectedType = QualType());
+```
+
+#### 4C-8. `ActOnPackIndexingExpr` — 标记 TODO ⏳
+
+```cpp
+// 包索引需要模板包展开才能确定类型
+// TODO: 在完整 variadic template 支持实现时一并完成
+```
+
+### 阶段 4D：清除 ProcessAST（最终目标） — ✅ 已完成
 
 > 预计修改文件：`src/Sema/Sema.cpp`，`include/blocktype/Sema/Sema.h`，`tools/driver.cpp`  
 > 预计工作量：0.5 小时  
@@ -570,7 +616,7 @@ void visitExpr(Expr *E) {
 
 1. ✅ 所有 Tier 1 方法（7 处）在创建节点时设置 `ExprTy`
 2. ✅ 所有 Tier 2 方法（13 处）在创建节点时设置 `ExprTy`
-3. ✅ Tier 3 方法标记 `TODO` 注释说明后续计划
+3. ✅ Tier 3 方法中 7 处已完成类型推导，仅 `PackIndexingExpr` 标记 TODO（依赖模板包展开系统）
 4. ✅ **`ProcessAST` 完全删除**（包括 `ASTVisitor` 内部类）
 5. ✅ **`ActOnCXXNewExpr(CXXNewExpr*)` / `ActOnCXXDeleteExpr(CXXDeleteExpr*)` 后处理方法删除**
 6. ✅ **`driver.cpp` 不再调用 `S.ProcessAST(TU)`**
@@ -590,3 +636,67 @@ void visitExpr(Expr *E) {
   ActOnCXXNewExpr(CXXNewExpr*): 已删除（由 ActOnCXXNewExprFactory 替代）
   ActOnCXXDeleteExpr(CXXDeleteExpr*): 已删除（由 ActOnCXXDeleteExprFactory 替代）
 ```
+
+---
+
+## 九、后续优化 Backlog
+
+> 以下为 ExprTy 类型推导完成后识别的架构改进项。按优先级排序，属于后续 Phase 5+ 级别的工作。
+
+### 9.1 Scope 统一（推荐，中等优先级）
+
+**现状**：Parser 和 Sema 各自维护 `CurrentScope`。类型查找（`lookup`）在 Parser 中完成，Sema 的 `ActOnMemberExpr` 等也需要查找。
+
+**目标**：将 Scope 管理统一到 Sema，Parser 通过 Sema 接口做名称解析。
+
+**收益**：
+- Sema 可直接做名称查找，ActOn* 方法无需依赖 Parser 预先查找的结果
+- 为后续语义分析（重载解析、ADL 查找、模板实例化）奠定基础
+- 消除 Parser 和 Sema 之间的隐式耦合
+
+**复杂度**：高。需重构 Parser 中所有 `CurrentScope->lookup()` 调用点。
+
+### 9.2 错误诊断增强（渐进式，低优先级）
+
+**现状**：`ActOn*` 方法只做了最基本的类型不匹配诊断（`err_type_mismatch`）。
+
+**目标**：增加更丰富的语义错误提示。
+
+**示例增强**：
+- 隐式转换丢失精度（float → int）
+- 窄化转换（double → float）
+- const 违规（修改 const 变量）
+- 未定义操作（void 类型参与算术运算）
+- 更具体的错误信息（指明具体不匹配的类型名）
+
+**策略**：随功能推进逐步做，不需要单独立项。在 `TypeCheck` 类中逐步添加诊断方法。
+
+### 9.3 ConstEval 前置（依赖 CodeGen 稳定，低优先级）
+
+**现状**：常量表达式求值仅在 `ActOnEnumConstant` 等少数方法中实现。
+
+**目标**：将常量折叠前置到更多 Sema `ActOn*` 方法中，减少 CodeGen 负担。
+
+**示例**：
+- `ActOnBinaryOperator`：对常量子表达式直接计算结果
+- `ActOnCastExpr`：对常量参数做编译期类型转换
+- `ActOnUnaryExprOrTypeTraitExpr`：`sizeof(int)` 在编译期已知
+
+**前提**：需要完整的 `EvalEmitter` 或常量表达式解释器。当前 CodeGen 尚未稳定，建议等 CodeGen 成熟后再做。
+
+### 9.4 InitListExpr ExpectedType 传入路径（中等优先级）
+
+**现状**：`ActOnInitListExpr` 已扩展 `ExpectedType` 参数，但 Parser 调用点尚未传入。
+
+**目标**：在 `parseVarDecl` 等已知变量类型的调用点，将变量类型作为 `ExpectedType` 传入。
+
+**需修改**：
+- `Parser::parseInitializerList()` 签名添加 `QualType ExpectedType` 参数
+- `Parser::parseVarDecl()` 传入变量类型 `T`
+- `CodeGen::EmitInitListExpr()` 可直接使用 `getType()` 确定 StructType/ArrayType 布局
+
+### 9.5 PackIndexingExpr 类型推导（依赖模板系统）
+
+**现状**：`ActOnPackIndexingExpr` 标记 TODO，未设 ExprTy。
+
+**目标**：在完整 variadic template 支持实现时一并完成。类型推导依赖包展开结果。

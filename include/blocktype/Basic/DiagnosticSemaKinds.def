@@ -195,4 +195,38 @@ DIAG(warn_implicit_conversion,   Warning, \
   "implicit conversion from '%0' to '%1'",       \
   "从 '%0' 到 '%1' 的隐式转换")
 
+//===----------------------------------------------------------------------===//
+// Function call argument diagnostics
+//===----------------------------------------------------------------------===//
+
+DIAG(err_too_few_args,             Error, \
+  "too few arguments to function call, expected %0, have %1", \
+  "函数调用参数过少，期望 %0 个，实际 %1 个")
+DIAG(err_too_many_args,            Error, \
+  "too many arguments to function call, expected %0, have %1", \
+  "函数调用参数过多，期望 %0 个，实际 %1 个")
+DIAG(err_arg_type_mismatch,        Error, \
+  "cannot convert argument %0 (type '%1')", \
+  "无法转换参数 %0（类型 '%1'）")
+
+//===----------------------------------------------------------------------===//
+// Precise type mismatch diagnostics (replacing generic err_type_mismatch)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_bin_op_type_invalid,      Error, \
+  "invalid operands to binary expression ('%0' and '%1')", \
+  "二元表达式的操作数类型无效（'%0' 和 '%1'）")
+DIAG(err_condition_not_bool,       Error, \
+  "expression is not contextually convertible to bool", \
+  "表达式不可上下文转换为 bool")
+DIAG(err_subscript_not_pointer,    Error, \
+  "subscript of type '%0' is not a pointer or array", \
+  "下标操作的目标类型 '%0' 不是指针或数组")
+DIAG(err_cast_incompatible,        Error, \
+  "cannot cast from type '%0' to type '%1'", \
+  "无法从类型 '%0' 转换为类型 '%1'")
+DIAG(err_member_access_type_invalid, Error, \
+  "member access into type '%0', which is not a record", \
+  "成员访问的目标类型 '%0' 不是记录类型")
+
 #undef DIAG
