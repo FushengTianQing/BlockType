@@ -47,11 +47,11 @@ public:
     switch (T->getTypeClass()) {
 #define TYPE(CLASS, PARENT) \
   case TypeClass::CLASS: \
-    return static_cast<ImplClass *>(this)->Visit##CLASS( \
+    return static_cast<ImplClass *>(this)->Visit##CLASS##Type( \
         llvm::cast<CLASS##Type>(T));
 #define ABSTRACT_TYPE(CLASS, PARENT) \
   case TypeClass::CLASS: \
-    return static_cast<ImplClass *>(this)->Visit##CLASS( \
+    return static_cast<ImplClass *>(this)->Visit##CLASS##Type( \
         llvm::cast<CLASS##Type>(T));
 #include "blocktype/AST/TypeNodes.def"
 #undef ABSTRACT_TYPE
@@ -134,7 +134,64 @@ public:
     return static_cast<ImplClass *>(this)->VisitType(T);
   }
 
-  // Add more Visit* methods as needed for other Type subclasses
+  //===------------------------------------------------------------------===//
+  // Additional Visit methods for all Type subclasses in TypeNodes.def
+  //===------------------------------------------------------------------===//
+
+  // Reference types (concrete)
+  const Type *VisitLValueReferenceType(const LValueReferenceType *T) {
+    return static_cast<ImplClass *>(this)->VisitReferenceType(T);
+  }
+
+  const Type *VisitRValueReferenceType(const RValueReferenceType *T) {
+    return static_cast<ImplClass *>(this)->VisitReferenceType(T);
+  }
+
+  // Array types (concrete)
+  const Type *VisitConstantArrayType(const ConstantArrayType *T) {
+    return static_cast<ImplClass *>(this)->VisitArrayType(T);
+  }
+
+  const Type *VisitIncompleteArrayType(const IncompleteArrayType *T) {
+    return static_cast<ImplClass *>(this)->VisitArrayType(T);
+  }
+
+  const Type *VisitVariableArrayType(const VariableArrayType *T) {
+    return static_cast<ImplClass *>(this)->VisitArrayType(T);
+  }
+
+  // Other concrete types
+  const Type *VisitElaboratedType(const ElaboratedType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitTemplateSpecializationType(const TemplateSpecializationType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitDependentType(const DependentType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitAutoType(const AutoType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitDecltypeType(const DecltypeType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitUnresolvedType(const UnresolvedType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitMemberPointerType(const MemberPointerType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
+
+  const Type *VisitMetaInfoType(const MetaInfoType *T) {
+    return static_cast<ImplClass *>(this)->VisitType(T);
+  }
 };
 
 } // namespace blocktype
