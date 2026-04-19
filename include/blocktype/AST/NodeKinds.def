@@ -232,3 +232,6 @@ DECL(AttributeListDecl, Decl)
 
 // C++26 Contract attribute (P2900R14)
 DECL(ContractAttr, Decl)
+
+// C++17/C++26 Structured binding (P0963R3, P1061R10)
+DECL(BindingDecl, ValueDecl)

@@ -387,6 +387,40 @@ DeclResult Sema::ActOnPlaceholderVarDecl(SourceLocation Loc, QualType T, Expr *I
   return DeclResult(VD);
 }
 
+// P7.4.3: Structured binding implementation
+DeclResult Sema::ActOnDecompositionDecl(SourceLocation Loc,
+                                         llvm::ArrayRef<llvm::StringRef> Names,
+                                         QualType TupleType,
+                                         Expr *Init) {
+  // TODO: Full implementation requires:
+  // 1. Check if TupleType is decomposable (has tuple_size, get<N>)
+  // 2. For each name, create a BindingDecl
+  // 3. Set binding expression to std::get<N>(init)
+  // 4. Return DeclGroupRef containing all bindings
+  
+  // For now, create placeholder VarDecls for each name
+  llvm::SmallVector<Decl *, 4> Decls;
+  for (unsigned i = 0; i < Names.size(); ++i) {
+    // Create a temporary VarDecl (should be BindingDecl in full impl)
+    auto *VD = Context.create<VarDecl>(Loc, Names[i], TupleType, nullptr, false);
+    Decls.push_back(VD);
+    
+    if (CurContext) {
+      CurContext->addDecl(VD);
+    }
+  }
+  
+  // Return first decl as result (simplified)
+  return Decls.empty() ? DeclResult(nullptr) : DeclResult(Decls[0]);
+}
+
+bool Sema::CheckBindingCondition(llvm::ArrayRef<class BindingDecl *> Bindings,
+                                  SourceLocation Loc) {
+  // P0963R3: Check if structured binding can be used in condition
+  // For now, just return true (allow it)
+  return true;
+}
+
 DeclResult Sema::ActOnFunctionDeclFull(SourceLocation Loc, llvm::StringRef Name,
                                        QualType T,
                                        llvm::ArrayRef<ParmVarDecl *> Params,

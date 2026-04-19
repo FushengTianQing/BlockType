@@ -92,6 +92,22 @@ DIAG(warn_placeholder_var_with_linkage, Warning, \
 DIAG(err_placeholder_var_not_auto, Error, \
   "placeholder variable '_' must have an auto type or be initialized", \
   "占位符变量 '_' 必须有 auto 类型或被初始化")
+
+//===----------------------------------------------------------------------===//
+// P7.4.3: Structured binding diagnostics (P0963R3, P1061R10)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_decomp_decl_not_tuple, Error, \
+  "cannot decompose non-tuple type '%0'", \
+  "无法分解非元组类型 '%0'")
+
+DIAG(err_decomp_decl_wrong_count, Error, \
+  "decomposition declaration requires %0 bindings but %1 were provided", \
+  "分解声明需要 %0 个绑定但提供了 %1 个")
+
+DIAG(err_decomp_decl_in_condition, Error, \
+  "structured binding in condition requires explicit 'auto' type", \
+  "条件中的结构化绑定需要显式 'auto' 类型")
 DIAG(note_ovl_candidate,         Note, \
   "candidate function",                           \
   "候选函数")

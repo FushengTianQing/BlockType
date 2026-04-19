@@ -308,6 +308,28 @@ public:
     return Name == "_";
   }
 
+  // P7.4.3: Structured binding extensions (P0963R3, P1061R10)
+  /// Create structured binding declaration group
+  ///
+  /// `auto [a, b, c] = expr` → creates multiple BindingDecl
+  ///
+  /// **Rules**:
+  /// - Number of bindings must match std::tuple_size
+  /// - Each binding extracts via std::get<N>
+  /// - Binding variable types are deduced as auto
+  ///
+  /// **Clang reference**:
+  /// - `clang/lib/Sema/SemaDeclCXX.cpp` BuildDecompositionDecl()
+  /// - `clang/include/clang/AST/DeclCXX.h` DecompositionDecl
+  DeclResult ActOnDecompositionDecl(SourceLocation Loc,
+                                     llvm::ArrayRef<llvm::StringRef> Names,
+                                     QualType TupleType,
+                                     Expr *Init);
+
+  /// Check if structured binding can be used in condition expression (P0963R3)
+  bool CheckBindingCondition(llvm::ArrayRef<class BindingDecl *> Bindings,
+                              SourceLocation Loc);
+
   DeclResult ActOnFunctionDecl(SourceLocation Loc, llvm::StringRef Name,
                                QualType T,
                                llvm::ArrayRef<ParmVarDecl *> Params,

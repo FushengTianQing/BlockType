@@ -292,6 +292,50 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// BindingDecl - Structured binding declaration (C++17/C++26)
+//===----------------------------------------------------------------------===//
+
+/// BindingDecl — 结构化绑定声明 (C++17 `auto [x, y] = expr`，C++26 扩展)
+///
+/// **Clang 参考**：
+/// - `clang/include/clang/AST/Decl.h` 中 `BindingDecl`
+/// - `clang/lib/Sema/SemaDeclCXX.cpp` 中 `BuildDecompositionDecl`
+///
+/// **C++26 扩展 (P0963R3)**：
+/// - 支持 `if (auto [x, y] = getPair())` 条件中使用
+///
+/// **C++26 扩展 (P1061R10)**：
+/// - 支持 `template <typename... Ts> auto [...ns] = tuple;` 引入包
+class BindingDecl : public ValueDecl {
+  Expr *BindingExpr;      // 绑定的表达式（如 get<N>(tuple)）
+  unsigned BindingIndex;  // 在结构化绑定中的索引
+
+  // P7.4.3 C++26 扩展
+  bool IsPackExpansion = false;  // 是否为包展开 (P1061R10)
+
+public:
+  BindingDecl(SourceLocation Loc, llvm::StringRef Name,
+              QualType T, Expr *BE, unsigned Idx)
+      : ValueDecl(Loc, Name, T),
+        BindingExpr(BE), BindingIndex(Idx) {}
+
+  Expr *getBindingExpr() const { return BindingExpr; }
+  unsigned getBindingIndex() const { return BindingIndex; }
+
+  // C++26: 包展开
+  bool isPackExpansion() const { return IsPackExpansion; }
+  void setPackExpansion(bool V) { IsPackExpansion = V; }
+
+  NodeKind getKind() const override { return NodeKind::BindingDeclKind; }
+
+  void dump(raw_ostream &OS, unsigned Indent = 0) const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == NodeKind::BindingDeclKind;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // FieldDecl - Field declaration (class/struct member)
 //===----------------------------------------------------------------------===//
 
