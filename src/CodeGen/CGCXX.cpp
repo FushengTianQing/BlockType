@@ -833,6 +833,78 @@ std::string CGCXX::getRTTIClassVTableName(CXXRecordDecl *RD) {
   }
 }
 
+llvm::Value *CGCXX::EmitCatchTypeInfo(CodeGenFunction &CGF, QualType CatchType) {
+  if (CatchType.isNull()) return nullptr;
+
+  auto &Ctx = CGM.getLLVMContext();
+  auto *PtrTy = llvm::PointerType::get(Ctx, 0);
+
+  // Record 类型（class/struct）→ 使用 EmitTypeInfo
+  if (CatchType->isRecordType()) {
+    if (auto *RT = llvm::dyn_cast<RecordType>(CatchType.getTypePtr())) {
+      if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (auto *TI = EmitTypeInfo(CXXRD)) {
+          return CGF.getBuilder().CreateBitCast(TI, PtrTy, "catch.ti");
+        }
+      }
+    }
+    // 非 CXX record → fallback
+    return nullptr;
+  }
+
+  // 基础类型和指针类型：引用 libcxxabi 的 __fundamental_type_info 全局符号
+  // Itanium C++ ABI 命名约定：_ZTI + Itanium 类型 mangling
+  //   int → _ZTIi, float → _ZTIf, char → _ZTIc, pointer → _ZTIPv 等
+
+  std::string TIName = "_ZTI";
+
+  if (auto *BT = llvm::dyn_cast<BuiltinType>(CatchType.getTypePtr())) {
+    // 根据 BuiltinKind 映射到 Itanium mangling
+    switch (BT->getKind()) {
+    case BuiltinKind::Void:   TIName += "v"; break;
+    case BuiltinKind::Bool:   TIName += "b"; break;
+    case BuiltinKind::Char:   TIName += "c"; break;
+    case BuiltinKind::SignedChar:  TIName += "a"; break;
+    case BuiltinKind::UnsignedChar:  TIName += "h"; break;
+    case BuiltinKind::WChar:  TIName += "w"; break;
+    case BuiltinKind::Char16: TIName += "Ds"; break;
+    case BuiltinKind::Char32: TIName += "Di"; break;
+    case BuiltinKind::Char8:  TIName += "Du"; break;
+    case BuiltinKind::Short:  TIName += "s"; break;
+    case BuiltinKind::Int:    TIName += "i"; break;
+    case BuiltinKind::Long:   TIName += "l"; break;
+    case BuiltinKind::LongLong: TIName += "x"; break;
+    case BuiltinKind::Int128: TIName += "n"; break;
+    case BuiltinKind::UnsignedShort: TIName += "t"; break;
+    case BuiltinKind::UnsignedInt:   TIName += "j"; break;
+    case BuiltinKind::UnsignedLong:  TIName += "m"; break;
+    case BuiltinKind::UnsignedLongLong: TIName += "y"; break;
+    case BuiltinKind::UnsignedInt128: TIName += "o"; break;
+    case BuiltinKind::Float:  TIName += "f"; break;
+    case BuiltinKind::Double: TIName += "d"; break;
+    case BuiltinKind::LongDouble: TIName += "e"; break;
+    case BuiltinKind::Float128: TIName += "g"; break;
+    case BuiltinKind::NullPtr: TIName += "Dn"; break;
+    default: return nullptr; // 未知基础类型 → fallback
+    }
+  } else if (CatchType->isPointerType()) {
+    // 指针类型 → _ZTIPv (void*) 简化
+    TIName += "Pv";
+  } else if (CatchType->isEnumType()) {
+    // Enum 类型：底层是整数，简化为 int 的 typeinfo
+    TIName += "i";
+  } else {
+    return nullptr;
+  }
+
+  // 引用外部 __fundamental_type_info 符号（由 libcxxabi 提供）
+  // 结构: [ vptr, name_ptr ] — 与 __class_type_info 布局相同
+  auto *TIStructTy = llvm::StructType::get(Ctx, {PtrTy, PtrTy});
+  auto *TIGV = CGM.getModule()->getOrInsertGlobal(TIName, TIStructTy);
+
+  return CGF.getBuilder().CreateBitCast(TIGV, PtrTy, "catch.ti");
+}
+
 //===----------------------------------------------------------------------===//
 // dynamic_cast
 //===----------------------------------------------------------------------===//

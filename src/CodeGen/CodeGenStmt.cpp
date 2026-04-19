@@ -834,6 +834,9 @@ void CodeGenFunction::EmitCXXTryStmt(CXXTryStmt *TryStatement) {
     // 保存 landingpad 结果
     Builder.CreateStore(LPad, LPadAlloca);
 
+    // 提取 selector value（landingpad 返回 { i8*, i32 } 中的 i32）
+    llvm::Value *Selector = Builder.CreateExtractValue(LPad, {1}, "selector");
+
     // 声明 __cxa_begin_catch 和 __cxa_end_catch
     auto &Ctx = CGM.getLLVMContext();
     llvm::FunctionType *BeginCatchTy = llvm::FunctionType::get(
@@ -847,12 +850,91 @@ void CodeGenFunction::EmitCXXTryStmt(CXXTryStmt *TryStatement) {
     llvm::FunctionCallee EndCatch =
         CGM.getModule()->getOrInsertFunction("__cxa_end_catch", EndCatchTy);
 
-    // 生成每个 catch handler
+    // 声明 llvm.eh.typeid.for intrinsic（获取 catch clause 的 type ID）
+    llvm::FunctionType *TypeidForTy = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(Ctx),
+        {llvm::PointerType::get(Ctx, 0)}, false);
+    llvm::FunctionCallee TypeidFor =
+        CGM.getModule()->getOrInsertFunction("llvm.eh.typeid.for", TypeidForTy);
+
+    // 为每个 catch 块计算 type ID，并准备 dispatch 块
+    llvm::SmallVector<llvm::BasicBlock *, 4> CatchBBs;
+    llvm::SmallVector<llvm::Value *, 4> TypeIDs;
+    bool HasCatchAll = false;
+
+    // 预先为每个 catch 创建 BB 和 type ID
     for (Stmt *CatchBlock : TryStatement->getCatchBlocks()) {
       llvm::BasicBlock *CatchBB = createBasicBlock("catch");
-      EmitBlock(CatchBB);
+      CatchBBs.push_back(CatchBB);
 
       if (auto *Catch = llvm::dyn_cast<CXXCatchStmt>(CatchBlock)) {
+        if (!Catch->getExceptionDecl()) {
+          // catch(...) — catch-all，无需 type ID
+          TypeIDs.push_back(nullptr);
+          HasCatchAll = true;
+        } else {
+          // catch(T e) — 获取 typeinfo 并计算 type ID
+          QualType CatchType = Catch->getExceptionDecl()->getType();
+          llvm::Value *TypeInfoClause =
+              CGM.getCXX().EmitCatchTypeInfo(*this, CatchType);
+          if (TypeInfoClause) {
+            llvm::Value *TypeID = Builder.CreateCall(TypeidFor,
+                {TypeInfoClause}, "typeid");
+            TypeIDs.push_back(TypeID);
+          } else {
+            // 无法生成 typeinfo → fallback 到 catch-all
+            TypeIDs.push_back(nullptr);
+            HasCatchAll = true;
+          }
+        }
+      } else {
+        TypeIDs.push_back(nullptr);
+        HasCatchAll = true;
+      }
+    }
+
+    // 生成 dispatch: 比较 selector 与每个 type ID
+    // 如果匹配则跳到对应的 catch BB，否则跳到下一个比较或 eh.resume
+    auto *EHResumeBB = createBasicBlock("eh.resume");
+
+    for (unsigned I = 0; I < CatchBBs.size(); ++I) {
+      if (TypeIDs[I]) {
+        // 有 type ID → 比较 selector == typeID
+        llvm::Value *MatchCond = Builder.CreateICmpEQ(
+            Selector, TypeIDs[I], "match");
+        // 如果是最后一个 catch 或后面没有需要 dispatch 的 catch
+        llvm::BasicBlock *NextBB;
+        if (I + 1 < CatchBBs.size()) {
+          NextBB = createBasicBlock("catch.dispatch");
+        } else if (HasCatchAll) {
+          // 已经有 catch-all 了，不需要 eh.resume
+          NextBB = nullptr;
+        } else {
+          NextBB = EHResumeBB;
+        }
+
+        if (NextBB) {
+          Builder.CreateCondBr(MatchCond, CatchBBs[I], NextBB);
+          if (I + 1 < CatchBBs.size()) {
+            EmitBlock(NextBB);
+          }
+        } else {
+          // 最后一个 catch 且无 catch-all → 匹配则执行，否则必为 catch-all
+          Builder.CreateCondBr(MatchCond, CatchBBs[I],
+                               CatchBBs[CatchBBs.size() - 1]);
+        }
+      } else {
+        // catch-all (null type ID) → 直接跳到这个 catch BB
+        Builder.CreateBr(CatchBBs[I]);
+      }
+    }
+
+    // 生成每个 catch handler
+    for (unsigned I = 0; I < CatchBBs.size(); ++I) {
+      EmitBlock(CatchBBs[I]);
+
+      if (auto *Catch = llvm::dyn_cast<CXXCatchStmt>(
+              TryStatement->getCatchBlocks()[I])) {
         // 从 landingpad 结果中提取异常对象指针
         llvm::Value *LPadResult = Builder.CreateLoad(LPadResultType,
                                                      LPadAlloca, "lpad");
@@ -890,7 +972,7 @@ void CodeGenFunction::EmitCXXTryStmt(CXXTryStmt *TryStatement) {
           Builder.CreateCall(EndCatch, {}, "end.catch");
         }
       } else {
-        EmitStmt(CatchBlock);
+        EmitStmt(TryStatement->getCatchBlocks()[I]);
       }
       if (haveInsertPoint()) {
         Builder.CreateBr(TryContBB);
@@ -898,8 +980,7 @@ void CodeGenFunction::EmitCXXTryStmt(CXXTryStmt *TryStatement) {
     }
 
     // 生成 eh.resume（未被 catch 捕获的异常继续传播）
-    llvm::BasicBlock *UnwindBB = createBasicBlock("eh.resume");
-    EmitBlock(UnwindBB);
+    EmitBlock(EHResumeBB);
     llvm::Value *LPadResult = Builder.CreateLoad(LPadResultType, LPadAlloca,
                                                   "lpad");
     Builder.CreateResume(LPadResult);

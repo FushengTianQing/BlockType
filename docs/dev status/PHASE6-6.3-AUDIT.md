@@ -83,7 +83,7 @@ Audit Findings
 --landingpad + catch clause + eh.resume 基本框架
 --catch 参数 alloca 创建和注册
 --try.cont 统一出口
---简化：所有 catch 按 catch-all 处理（无 RTTI 类型匹配）
+--简化：所有 catch 按 catch-all 处理 → ✅ 已实现 RTTI 类型匹配 dispatch
 
 7.✅ EmitCoreturnStmt — 已实现（文档未显式要求）
 --协程 co_return 基本框架
@@ -216,9 +216,12 @@ Audit Findings
 --EmitCallExpr 检测 isInTryBlock()，try 块内生成 invoke 而非 call
 --invoke 的 normal destination → NormalBB，unwind destination → LandingPadBB
 
-2. ⚠️ catch 类型匹配未实现
---所有 catch 按 catch-all 处理
---catch(T e) 需要 RTTI 类型信息匹配（P2）
+2. ✅ catch 类型匹配已实现
+--landingpad 使用 RTTI typeinfo 作为 catch clause（record + 基础类型 + 指针类型）
+--llvm.eh.typeid.for + selector 比较实现类型匹配 dispatch
+--EmitCatchTypeInfo: 统一获取各类型 typeinfo（CXXRecordDecl → EmitTypeInfo, 基础类型 → __fundamental_type_info）
+--catch(T e) 只有类型匹配时才执行对应 handler
+--catch(...) 仍为 catch-all（null clause）
 
 3. ✅ 异常对象提取 — 已修复
 --使用 ExtractValue 从 landingpad 结果中提取异常指针
@@ -322,8 +325,8 @@ Audit Findings
 6. ✅ Label lifetime 管理已验证正确（CodeGenFunction 栈实例自动清理 LabelMap）
 7. ✅ indirect goto 不实现（极少使用的 GNU 扩展）
 8. ✅ NRVO 优化已实现（analyzeNRVOCandidates + ReturnValue alloca 复用）
-9. catch 类型匹配未实现（全部 catch-all）
-10. CatchDispatchBB 创建但未使用
+9. ✅ catch 类型匹配已实现（llvm.eh.typeid.for + selector dispatch + EmitCatchTypeInfo）
+10. ✅ CatchDispatchBB 已用于类型匹配 dispatch（catch.dispatch 块链式比较 selector）
 11. EmitCXXForRangeStmt 中手动 alloca 未用 CreateAlloca
 12. range 临时变量 lifetime 管理
 13. 协程完全简化（需要完整 coroutine lowering）

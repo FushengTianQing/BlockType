@@ -145,6 +145,11 @@ public:
   /// 返回 typeinfo 对象的 llvm::GlobalVariable*（即 _ZTI... 符号）。
   llvm::GlobalVariable *EmitTypeInfo(CXXRecordDecl *RD);
 
+  /// 获取 catch clause 的 typeinfo（用于 landingpad clause）。
+  /// 支持基础类型（int, float, pointer 等）和 record 类型。
+  /// 返回 typeinfo 指针（i8*），catch-all 返回 nullptr。
+  llvm::Value *EmitCatchTypeInfo(CodeGenFunction &CGF, QualType CatchType);
+
   //===------------------------------------------------------------------===//
   // dynamic_cast
   //===------------------------------------------------------------------===//
