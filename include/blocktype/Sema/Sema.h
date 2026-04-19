@@ -241,6 +241,12 @@ public:
   /// Look up a name: first in the Scope chain, then in SymbolTable.
   NamedDecl *LookupName(llvm::StringRef Name) const;
 
+  // P7.4.3: Lookup a namespace by name (supports "std", "std::pair", etc.)
+  class NamespaceDecl *LookupNamespace(llvm::StringRef NamespaceName) const;
+  
+  // P7.4.3: Lookup a declaration within a specific namespace
+  NamedDecl *LookupInNamespace(class NamespaceDecl *NS, llvm::StringRef Name) const;
+
   /// Register a template parameter in the current scope (allows redeclaration).
   void RegisterTemplateParam(NamedDecl *ND) {
     registerDeclAllowRedecl(ND);

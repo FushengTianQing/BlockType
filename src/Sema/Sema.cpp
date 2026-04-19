@@ -68,6 +68,72 @@ NamedDecl *Sema::LookupName(llvm::StringRef Name) const {
   return Decls.empty() ? nullptr : Decls.front();
 }
 
+// P7.4.3: Lookup a namespace by name
+// Supports: "std", "std::pair", etc.
+NamespaceDecl *Sema::LookupNamespace(llvm::StringRef NamespaceName) const {
+  // Handle nested namespaces like "std::pair"
+  // Split by "::" and lookup each component
+  llvm::SmallVector<llvm::StringRef, 4> Parts;
+  NamespaceName.split(Parts, "::");
+  
+  if (Parts.empty()) {
+    return nullptr;
+  }
+  
+  // Start from the translation unit or current context
+  DeclContext *CurrentDC = nullptr;
+  if (CurContext) {
+    CurrentDC = CurContext;
+  } else if (CurTU) {
+    CurrentDC = CurTU;
+  } else {
+    return nullptr;
+  }
+  
+  // Lookup each part of the namespace path
+  for (llvm::StringRef Part : Parts) {
+    // Try to find a NamespaceDecl with this name in the current context
+    NamespaceDecl *FoundNS = nullptr;
+    
+    for (Decl *D : CurrentDC->decls()) {
+      if (auto *NS = llvm::dyn_cast<NamespaceDecl>(D)) {
+        if (NS->getName() == Part) {
+          FoundNS = NS;
+          break;
+        }
+      }
+    }
+    
+    if (!FoundNS) {
+      return nullptr; // Namespace not found
+    }
+    
+    // Move into the found namespace for the next lookup
+    CurrentDC = FoundNS;
+  }
+  
+  // The last found namespace should be a NamespaceDecl
+  return llvm::dyn_cast_or_null<NamespaceDecl>(CurrentDC);
+}
+
+// P7.4.3: Lookup a declaration within a specific namespace
+NamedDecl *Sema::LookupInNamespace(NamespaceDecl *NS, llvm::StringRef Name) const {
+  if (!NS) {
+    return nullptr;
+  }
+  
+  // Search in the namespace's DeclContext
+  for (Decl *D : NS->decls()) {
+    if (auto *ND = llvm::dyn_cast<NamedDecl>(D)) {
+      if (ND->getName() == Name) {
+        return ND;
+      }
+    }
+  }
+  
+  return nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // DeclContext management
 //===----------------------------------------------------------------------===//
