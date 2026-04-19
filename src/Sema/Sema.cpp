@@ -387,6 +387,53 @@ DeclResult Sema::ActOnPlaceholderVarDecl(SourceLocation Loc, QualType T, Expr *I
   return DeclResult(VD);
 }
 
+// P7.4.3: Helper function to extract element type from tuple-like types
+static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
+  // Remove qualifiers for analysis
+  QualType UnqualType = TupleType.getCanonicalType();
+  
+  const Type *Ty = UnqualType.getTypePtr();
+  if (!Ty) {
+    return TupleType; // Fallback to original type
+  }
+  
+  // Check if it's a RecordType (class/struct)
+  if (auto *RT = llvm::dyn_cast<RecordType>(Ty)) {
+    RecordDecl *RD = RT->getDecl();
+    if (!RD) {
+      return TupleType;
+    }
+    
+    llvm::StringRef ClassName = RD->getName();
+    
+    // Handle std::pair<T1, T2>
+    if (ClassName == "pair" || ClassName.ends_with("::pair")) {
+      // TODO: Extract template arguments from RecordDecl
+      // For now, return the tuple type as placeholder
+      // Full implementation needs:
+      // 1. Check if RD is a ClassTemplateSpecializationDecl
+      // 2. Get template arguments: pair<T1, T2>
+      // 3. Return T1 for Index=0, T2 for Index=1
+      return TupleType; // Placeholder
+    }
+    
+    // Handle std::tuple<Ts...>
+    if (ClassName == "tuple" || ClassName.ends_with("::tuple")) {
+      // TODO: Similar to pair, extract template arguments
+      return TupleType; // Placeholder
+    }
+  }
+  
+  // Handle array types T[N]
+  if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
+    // All elements have the same type
+    return AT->getElementType();
+  }
+  
+  // Fallback: return the original type
+  return TupleType;
+}
+
 // P7.4.3: Structured binding implementation
 DeclResult Sema::ActOnDecompositionDecl(SourceLocation Loc,
                                          llvm::ArrayRef<llvm::StringRef> Names,
@@ -406,11 +453,8 @@ DeclResult Sema::ActOnDecompositionDecl(SourceLocation Loc,
   llvm::SmallVector<Decl *, 4> Decls;
   
   for (unsigned i = 0; i < Names.size(); ++i) {
-    // TODO: Determine the correct type for each binding element
-    // For std::pair<T1, T2>: element 0 has type T1, element 1 has type T2
-    // For std::tuple<Ts...>: element i has type Ti
-    // For now, use the tuple type (should extract element type)
-    QualType ElementType = TupleType;  // Placeholder - needs proper extraction
+    // Extract the correct type for each binding element
+    QualType ElementType = GetTupleElementType(TupleType, i);
     
     // Create a BindingDecl (currently using VarDecl as placeholder)
     auto *VD = Context.create<VarDecl>(Loc, Names[i], ElementType, nullptr, false);
