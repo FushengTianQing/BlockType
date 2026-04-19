@@ -45,6 +45,13 @@ public:
     }
 
     switch (T->getTypeClass()) {
+// Undef macros from Type.h to avoid redefinition warnings
+#ifdef TYPE
+#undef TYPE
+#endif
+#ifdef ABSTRACT_TYPE
+#undef ABSTRACT_TYPE
+#endif
 #define TYPE(CLASS, PARENT) \
   case TypeClass::CLASS: \
     return static_cast<ImplClass *>(this)->Visit##CLASS##Type( \
@@ -56,6 +63,8 @@ public:
 #include "blocktype/AST/TypeNodes.def"
 #undef ABSTRACT_TYPE
 #undef TYPE
+    default:
+      break;
     }
 
     llvm_unreachable("Unknown type class!");

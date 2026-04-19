@@ -9,6 +9,7 @@ add_library(blocktype-ast
   Expr.cpp
   ReflectionTypes.cpp
   Stmt.cpp
+  StmtCloner.cpp
   TemplateParameterList.cpp
   Type.cpp
 )

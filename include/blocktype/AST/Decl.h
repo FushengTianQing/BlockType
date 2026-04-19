@@ -1665,10 +1665,9 @@ public:
 
   /// Find an existing specialization that exactly matches the given arguments.
   FunctionDecl *findSpecialization(llvm::ArrayRef<TemplateArgument> Args) const {
-    for (FunctionDecl *Spec : Specializations) {
-      // TODO: Compare template arguments
-      // For now, just return nullptr (needs full implementation)
-    }
+    // TODO: Compare template arguments and return matching specialization
+    // For now, just return nullptr (needs full implementation)
+    (void)Args; // Suppress unused parameter warning
     return nullptr;
   }
 
