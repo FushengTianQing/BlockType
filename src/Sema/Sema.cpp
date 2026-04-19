@@ -527,16 +527,68 @@ DeclResult Sema::ActOnDecompositionDecl(SourceLocation Loc,
   // 3. Set binding expression to std::get<N>(init)
   // 4. Return DeclGroupRef containing all bindings
   
+  // Step 1: Validate the type is decomposable
+  const Type *Ty = TupleType.getCanonicalType().getTypePtr();
+  if (!Ty) {
+    Diags.report(Loc, DiagID::err_structured_binding_not_decomposable,
+                 TupleType.getAsString());
+    return DeclResult::getInvalid();
+  }
+  
+  // Check if it's a record type (pair/tuple) or array
+  bool IsDecomposable = false;
+  unsigned NumElements = 0;
+  
+  if (auto *RT = llvm::dyn_cast<RecordType>(Ty)) {
+    RecordDecl *RD = RT->getDecl();
+    if (RD && llvm::isa<ClassTemplateSpecializationDecl>(RD)) {
+      auto *Spec = llvm::cast<ClassTemplateSpecializationDecl>(RD);
+      NumElements = Spec->getNumTemplateArgs();
+      IsDecomposable = true;
+    }
+  } else if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
+    // Array types are always decomposable
+    IsDecomposable = true;
+    // TODO: Get array size for fixed-size arrays
+    NumElements = Names.size(); // Assume correct for now
+  }
+  
+  if (!IsDecomposable) {
+    Diags.report(Loc, DiagID::err_structured_binding_not_decomposable,
+                 TupleType.getAsString());
+    return DeclResult::getInvalid();
+  }
+  
+  // Step 2: Check binding count matches element count
+  if (Names.size() != NumElements && !llvm::isa<ArrayType>(Ty)) {
+    Diags.report(Loc, DiagID::err_structured_binding_wrong_count,
+                 std::to_string(Names.size()), std::to_string(NumElements));
+    return DeclResult::getInvalid();
+  }
+  
   llvm::SmallVector<Decl *, 4> Decls;
   
   for (unsigned i = 0; i < Names.size(); ++i) {
     // Extract the correct type for each binding element
     QualType ElementType = GetTupleElementType(TupleType, i);
     
+    if (ElementType.isNull()) {
+      Diags.report(Loc, DiagID::err_structured_binding_no_get,
+                   TupleType.getAsString());
+      return DeclResult::getInvalid();
+    }
+    
     // Create std::get<i>(init) expression
     ExprResult GetCall = BuildStdGetCall(i, Init, ElementType, Loc);
     
-    Expr *BindingExpr = GetCall.isUsable() ? GetCall.get() : Init;
+    Expr *BindingExpr = nullptr;
+    if (GetCall.isUsable()) {
+      BindingExpr = GetCall.get();
+    } else {
+      // Fallback: use init expression with warning
+      Diags.report(Loc, DiagID::warn_structured_binding_reference);
+      BindingExpr = Init;
+    }
     
     // Create a BindingDecl with the correct type and binding expression
     auto *BD = Context.create<BindingDecl>(Loc, Names[i], ElementType,

@@ -359,4 +359,28 @@ DIAG(warn_reflexpr_paren, Warning, \
   "redundant parentheses around reflexpr operand", \
   "reflexpr 操作数周围的多余括号")
 
+//===----------------------------------------------------------------------===//
+// Structured binding diagnostics (P7.4.3)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_structured_binding_wrong_count, Error, \
+  "structured binding declares %0 names but %1 elements are available", \
+  "结构化绑定声明了 %0 个名称但只有 %1 个元素可用")
+
+DIAG(err_structured_binding_not_decomposable, Error, \
+  "type '%0' cannot be used in structured binding", \
+  "类型 '%0' 不能用于结构化绑定")
+
+DIAG(err_structured_binding_no_get, Error, \
+  "no matching 'std::get' function found for type '%0'", \
+  "找不到类型 '%0' 的匹配 'std::get' 函数")
+
+DIAG(err_structured_binding_tuple_size, Error, \
+  "no 'std::tuple_size' specialization found for type '%0'", \
+  "找不到类型 '%0' 的 'std::tuple_size' 特化")
+
+DIAG(warn_structured_binding_reference, Warning, \
+  "structured binding to reference may have unexpected lifetime", \
+  "结构化绑定到引用可能有意外的生命周期")
+
 #undef DIAG
