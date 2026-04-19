@@ -332,6 +332,9 @@ private:
   void EmitDoStmt(DoStmt *DS);
   void EmitReturnStmt(ReturnStmt *RS);
   void EmitDeclStmt(DeclStmt *DS);
+  
+  // P7.4.3: Structured binding code generation
+  void EmitBindingDecl(class BindingDecl *BD, llvm::Value *TupleAddr, unsigned Index);
   void EmitBreakStmt(BreakStmt *BS);
   void EmitContinueStmt(ContinueStmt *CS);
   void EmitGotoStmt(GotoStmt *GS);

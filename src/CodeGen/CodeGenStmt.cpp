@@ -606,6 +606,21 @@ void CodeGenFunction::EmitDeclStmt(DeclStmt *DeclarationStatement) {
   }
 
   for (Decl *Declaration : DeclarationStatement->getDecls()) {
+    // P7.4.3: Handle BindingDecl (structured binding)
+    if (auto *BD = llvm::dyn_cast<BindingDecl>(Declaration)) {
+      // For structured bindings, we need to:
+      // 1. Get the tuple/pair address from the initializer
+      // 2. Extract each element using std::get<N>
+      // 3. Store in the binding variable's alloca
+      
+      // TODO: Full implementation requires:
+      // - Access to the original decomposition declaration's init expression
+      // - Call to std::get<N> for each binding
+      // For now, treat as regular VarDecl
+      llvm::errs() << "WARNING: BindingDecl codegen not fully implemented yet\n";
+      continue;
+    }
+    
     if (auto *VariableDecl = llvm::dyn_cast<VarDecl>(Declaration)) {
       QualType VarType = VariableDecl->getType();
 
@@ -658,6 +673,54 @@ void CodeGenFunction::EmitDeclStmt(DeclStmt *DeclarationStatement) {
         }
       }
     }
+  }
+}
+
+// P7.4.3: Structured binding code generation
+void CodeGenFunction::EmitBindingDecl(BindingDecl *BD, llvm::Value *TupleAddr, unsigned Index) {
+  // TODO: Full implementation:
+  // 1. Call std::get<Index>(tuple) to extract the element
+  // 2. Create alloca for the binding variable
+  // 3. Store the extracted value
+  
+  // Simplified: just create an alloca for now
+  // Note: Currently Sema creates VarDecl as placeholder for BindingDecl
+  // So we cast it back to VarDecl for CodeGen compatibility
+  auto *VD = llvm::dyn_cast<VarDecl>(BD);
+  if (!VD) {
+    // If not a VarDecl (future: real BindingDecl), create a simple alloca
+    QualType BindingType = BD->getType();
+    llvm::AllocaInst *Alloca = CreateAlloca(BindingType, BD->getName());
+    if (Alloca) {
+      // Zero-initialize
+      llvm::Type *LLVMType = CGM.getTypes().ConvertType(BindingType);
+      if (LLVMType) {
+        Builder.CreateStore(llvm::Constant::getNullValue(LLVMType), Alloca);
+      }
+    }
+    return;
+  }
+  
+  // Treat as VarDecl (current implementation)
+  QualType BindingType = VD->getType();
+  llvm::AllocaInst *Alloca = CreateAlloca(BindingType, VD->getName());
+  
+  if (!Alloca) {
+    return;
+  }
+  
+  setLocalDecl(VD, Alloca);
+  
+  // Generate debug info
+  if (CGM.getDebugInfo().isInitialized()) {
+    CGM.getDebugInfo().EmitLocalVarDI(VD, Alloca);
+  }
+  
+  // TODO: Extract value from tuple and store
+  // For now, zero-initialize
+  llvm::Type *LLVMType = CGM.getTypes().ConvertType(BindingType);
+  if (LLVMType) {
+    Builder.CreateStore(llvm::Constant::getNullValue(LLVMType), Alloca);
   }
 }
 
