@@ -200,9 +200,11 @@ bool Parser::skipUntilNextDeclaration() {
       continue;
     }
 
-    // If we see '}' at the top level, stop — the caller will handle it.
-    if (Tok.is(TokenKind::r_brace))
+    // If we see '}' at the top level, consume it and stop
+    if (Tok.is(TokenKind::r_brace)) {
+      consumeToken();  // Consume '}' to ensure progress
       return true;
+    }
 
     // If we see '{', skip the entire balanced block
     if (Tok.is(TokenKind::l_brace)) {
