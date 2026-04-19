@@ -583,12 +583,26 @@ void PackIndexingExpr::dump(raw_ostream &OS, unsigned Indent) const {
 
 void ReflexprExpr::dump(raw_ostream &OS, unsigned Indent) const {
   printIndent(OS, Indent);
-  OS << "ReflexprExpr\n";
+  OS << "ReflexprExpr " << (reflectsType() ? "[type]" : "[expr]") << "\n";
 
-  if (Argument != nullptr) {
+  if (reflectsType()) {
+    printIndent(OS, Indent + 1);
+    OS << "ReflectedType: ";
+    if (ReflectedType.getTypePtr()) {
+      ReflectedType.getTypePtr()->dump(OS);
+    } else {
+      OS << "<<null>>\n";
+    }
+  } else if (Argument != nullptr) {
     printIndent(OS, Indent + 1);
     OS << "Argument:\n";
     Argument->dump(OS, Indent + 2);
+  }
+
+  if (ResultType.getTypePtr()) {
+    printIndent(OS, Indent + 1);
+    OS << "ResultType: ";
+    ResultType.getTypePtr()->dump(OS);
   }
 }
 

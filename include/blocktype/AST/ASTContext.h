@@ -258,6 +258,9 @@ public:
   /// Gets the built-in char type.
   QualType getCharType();
 
+  /// P7.2.1: Gets or creates the MetaInfo type (std::meta::info).
+  QualType getMetaInfoType();
+
   /// Gets the built-in signed char type.
   QualType getSCharType();
 

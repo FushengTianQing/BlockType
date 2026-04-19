@@ -6,6 +6,7 @@ add_library(blocktype-ast
   Decl.cpp
   DeclContext.cpp
   Expr.cpp
+  ReflectionTypes.cpp
   Stmt.cpp
   TemplateParameterList.cpp
   Type.cpp

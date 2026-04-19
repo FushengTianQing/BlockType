@@ -1397,16 +1397,60 @@ public:
 };
 
 /// ReflexprExpr - C++26 reflexpr expression.
+///
+/// Represents `reflexpr(type-id)` or `reflexpr(expression)`.
+/// The result type is MetaInfoType (std::meta::info).
+///
+/// **Clang reference**: Clang's reflection TS uses a similar approach in
+/// clang::Sema::ActOnReflectionTraitExpr.
 class ReflexprExpr : public Expr {
-  Expr *Argument;       // The type-id or expression being reflected
-  QualType ResultType;  // The result type (meta::info)
+public:
+  /// Discriminator for the kind of operand
+  enum OperandKind {
+    OK_Type,       ///< Reflecting a type: reflexpr(type-id)
+    OK_Expression  ///< Reflecting an expression: reflexpr(expr)
+  };
+
+private:
+  /// The kind of operand being reflected
+  OperandKind OpKind;
+
+  /// The reflected type (valid when OpKind == OK_Type)
+  QualType ReflectedType;
+
+  /// The reflected expression (valid when OpKind == OK_Expression)
+  Expr *Argument;
+
+  /// The result type (always MetaInfoType after semantic analysis)
+  QualType ResultType;
 
 public:
-  ReflexprExpr(SourceLocation Loc, Expr *Arg, QualType ResultType = QualType())
-      : Expr(Loc), Argument(Arg), ResultType(ResultType) {}
+  /// Construct for reflexpr(type-id)
+  ReflexprExpr(SourceLocation Loc, QualType T,
+               QualType ResultTy = QualType())
+      : Expr(Loc), OpKind(OK_Type), ReflectedType(T),
+        Argument(nullptr), ResultType(ResultTy) {}
 
+  /// Construct for reflexpr(expression)
+  ReflexprExpr(SourceLocation Loc, Expr *Arg,
+               QualType ResultTy = QualType())
+      : Expr(Loc), OpKind(OK_Expression), ReflectedType(),
+        Argument(Arg), ResultType(ResultTy) {}
+
+  /// Operand kind query
+  OperandKind getOperandKind() const { return OpKind; }
+  bool reflectsType() const { return OpKind == OK_Type; }
+  bool reflectsExpression() const { return OpKind == OK_Expression; }
+
+  /// Accessors
+  /// @{
+  QualType getReflectedType() const { return ReflectedType; }
   Expr *getArgument() const { return Argument; }
   QualType getResultType() const { return ResultType; }
+  /// @}
+
+  /// Set the result type after semantic analysis
+  void setResultType(QualType T) { ResultType = T; }
 
   NodeKind getKind() const override { return NodeKind::ReflexprExprKind; }
 
@@ -1414,7 +1458,9 @@ public:
 
   /// A reflexpr expression is type-dependent if its argument is type-dependent
   bool isTypeDependent() const override {
-    return Argument->isTypeDependent();
+    if (reflectsExpression())
+      return Argument && Argument->isTypeDependent();
+    return ReflectedType.getTypePtr() && ReflectedType.getTypePtr()->isDependentType();
   }
 
   static bool classof(const ASTNode *N) {

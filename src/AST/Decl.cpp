@@ -1085,7 +1085,7 @@ QualType FunctionDecl::getThisType(ASTContext &Ctx) const {
     if (Parent) {
       QualType ClassType = Ctx.getRecordType(Parent);
       if (!ClassType.isNull()) {
-        return QualType(Ctx.getPointerType(ClassType), Qualifier::None);
+        return QualType(Ctx.getPointerType(ClassType.getTypePtr()), Qualifier::None);
       }
     }
   }

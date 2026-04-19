@@ -273,6 +273,14 @@ private:
   void EmitAssumeAttr(Expr *Condition);
 
   //===------------------------------------------------------------------===//
+  // P7.2.1: Reflection expression codegen (C++26)
+  //===------------------------------------------------------------------===//
+
+  /// Generate code for a reflexpr expression.
+  /// Produces a runtime reflection info value (opaque pointer to metadata).
+  llvm::Value *EmitReflexprExpr(ReflexprExpr *RE);
+
+  //===------------------------------------------------------------------===//
   // 二元运算辅助
   //===------------------------------------------------------------------===//
 

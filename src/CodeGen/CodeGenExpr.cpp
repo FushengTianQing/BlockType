@@ -2002,3 +2002,72 @@ void CodeGenFunction::EmitAssumeAttr(Expr *Condition) {
       CGM.getModule(), llvm::Intrinsic::assume);
   Builder.CreateCall(AssumeIntrinsic, {CondVal});
 }
+
+//===----------------------------------------------------------------------===//
+// P7.2.1: reflexpr expression (C++26 reflection)
+//===----------------------------------------------------------------------===//
+
+llvm::Value *CodeGenFunction::EmitReflexprExpr(ReflexprExpr *RE) {
+  if (!RE)
+    return nullptr;
+
+  // reflexpr evaluates to an opaque reflection info value.
+  // At the IR level, represented as a pointer to a metadata struct.
+  //
+  // For reflexpr(type-id): create a global constant describing the type.
+  // For reflexpr(expr): evaluate the expression, return its address.
+
+  auto &Ctx = CGM.getLLVMContext();
+
+  if (RE->reflectsType()) {
+    QualType ReflectedType = RE->getReflectedType();
+    if (ReflectedType.isNull())
+      return nullptr;
+
+    // Build a type name string for the metadata
+    std::string TypeName;
+    llvm::raw_string_ostream OS(TypeName);
+    if (ReflectedType.getTypePtr())
+      ReflectedType.getTypePtr()->dump(OS);
+    OS.flush();
+
+    // Create a global string constant for the type name
+    auto *NameConst = llvm::ConstantDataArray::getString(Ctx, TypeName);
+    auto *NameGV = new llvm::GlobalVariable(
+        *CGM.getModule(), NameConst->getType(), /*isConstant=*/true,
+        llvm::GlobalValue::PrivateLinkage, NameConst,
+        "reflexpr.type.name");
+
+    // Create metadata struct: { i32 kind, ptr name }
+    auto *KindVal = llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 0);
+    auto *MetaStruct = llvm::ConstantStruct::getAnon(Ctx, {KindVal, NameGV});
+
+    auto *MetaGV = new llvm::GlobalVariable(
+        *CGM.getModule(), MetaStruct->getType(), /*isConstant=*/true,
+        llvm::GlobalValue::PrivateLinkage, MetaStruct,
+        "reflexpr.type.meta");
+
+    // Return pointer to the metadata struct
+    return MetaGV;
+  }
+
+  if (RE->reflectsExpression()) {
+    Expr *Arg = RE->getArgument();
+    if (!Arg)
+      return nullptr;
+
+    llvm::Value *ArgVal = EmitExpr(Arg);
+    if (!ArgVal)
+      return nullptr;
+
+    // Store the expression value in a temporary alloca
+    QualType ArgType = Arg->getType();
+    llvm::AllocaInst *Alloca = CreateAlloca(ArgType, "reflexpr.expr.val");
+    Builder.CreateStore(ArgVal, Alloca);
+
+    // Return the alloca pointer (opaque ptr in LLVM 18)
+    return Alloca;
+  }
+
+  return nullptr;
+}

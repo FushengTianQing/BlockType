@@ -676,6 +676,12 @@ public:
   /// Parses a C++26 reflexpr expression.
   Expr *parseReflexprExpr();
 
+  /// Parses __reflect_type(expr) built-in function (P7.2.2).
+  Expr *parseReflectTypeBuiltin(SourceLocation Loc);
+
+  /// Parses __reflect_members(type) built-in function (P7.2.2).
+  Expr *parseReflectMembersBuiltin(SourceLocation Loc);
+
   /// Parses a C++ static_cast expression.
   Expr *parseCXXStaticCastExpr();
 

@@ -483,6 +483,53 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// MetaInfoType - P7.2.1 Reflection info type (std::meta::info)
+//===----------------------------------------------------------------------===//
+
+/// MetaInfoType - The type of a reflexpr expression result.
+///
+/// Represents the opaque reflection info type (std::meta::info in C++26).
+/// This type wraps a pointer to the reflected AST node.
+///
+/// **Clang reference**: Similar to clang::QualType representing std::meta::info
+/// in the reflection TS implementation.
+class MetaInfoType : public Type {
+  /// The reflected AST node (Type, Decl, or Expr)
+  void *Reflectee;
+
+public:
+  /// Kind of entity being reflected
+  enum ReflecteeKind {
+    RK_Type,   ///< Reflecting a type (reflexpr(type-id))
+    RK_Decl,   ///< Reflecting a declaration
+    RK_Expr    ///< Reflecting an expression (reflexpr(expr))
+  };
+
+private:
+  ReflecteeKind RefKind;
+
+public:
+  MetaInfoType(void *R, ReflecteeKind K)
+      : Type(TypeClass::MetaInfo), Reflectee(R), RefKind(K) {}
+
+  void *getReflectee() const { return Reflectee; }
+  ReflecteeKind getReflecteeKind() const { return RefKind; }
+
+  /// Check if this reflects a type
+  bool reflectsType() const { return RefKind == RK_Type; }
+  /// Check if this reflects a declaration
+  bool reflectsDecl() const { return RefKind == RK_Decl; }
+  /// Check if this reflects an expression
+  bool reflectsExpr() const { return RefKind == RK_Expr; }
+
+  void dump(llvm::raw_ostream &OS) const;
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TypeClass::MetaInfo;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // TemplateTypeParmType - Template type parameter
 //===----------------------------------------------------------------------===//
 

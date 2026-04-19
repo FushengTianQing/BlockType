@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "blocktype/Sema/Sema.h"
+#include "blocktype/Sema/SemaCXX.h"
+#include "blocktype/Sema/SemaReflection.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
 #include "blocktype/Sema/ConstraintSatisfaction.h"
@@ -937,11 +939,47 @@ ExprResult Sema::ActOnPackIndexingExpr(SourceLocation Loc, Expr *Pack,
 }
 
 ExprResult Sema::ActOnReflexprExpr(SourceLocation Loc, Expr *Arg) {
+  if (!Arg) {
+    Diag(Loc, DiagID::err_reflexpr_no_type);
+    return ExprResult(nullptr);
+  }
+
+  // Create ReflexprExpr with expression operand
   auto *RE = Context.create<ReflexprExpr>(Loc, Arg);
-  // reflexpr result type is meta::info in the reflection proposal.
-  // Use void as placeholder until the reflection type system is defined.
-  RE->setType(Context.getVoidType());
+  // Set result type to MetaInfoType (std::meta::info)
+  RE->setType(Context.getMetaInfoType());
+  RE->setResultType(Context.getMetaInfoType());
   return ExprResult(RE);
+}
+
+ExprResult Sema::ActOnReflexprTypeExpr(SourceLocation Loc, QualType T) {
+  if (T.isNull()) {
+    Diag(Loc, DiagID::err_reflexpr_no_type);
+    return ExprResult(nullptr);
+  }
+
+  // Check for unresolved types
+  if (auto *UT = llvm::dyn_cast<UnresolvedType>(T.getTypePtr())) {
+    Diag(Loc, DiagID::err_reflexpr_unresolved_type, UT->getName());
+    return ExprResult(nullptr);
+  }
+
+  // Create ReflexprExpr with type operand
+  auto *RE = Context.create<ReflexprExpr>(Loc, T);
+  // Set result type to MetaInfoType (std::meta::info)
+  RE->setType(Context.getMetaInfoType());
+  RE->setResultType(Context.getMetaInfoType());
+  return ExprResult(RE);
+}
+
+ExprResult Sema::ActOnReflectTypeBuiltin(SourceLocation Loc, Expr *E) {
+  SemaReflection Refl(*this);
+  return Refl.ActOnReflectType(Loc, E);
+}
+
+ExprResult Sema::ActOnReflectMembersBuiltin(SourceLocation Loc, QualType T) {
+  SemaReflection Refl(*this);
+  return Refl.ActOnReflectMembers(Loc, T);
 }
 
 ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,

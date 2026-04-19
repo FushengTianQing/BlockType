@@ -4,11 +4,12 @@
 > **补充核查**: 2026-04-19
 > **基于 commit**: 5571734 (Stage 7.1)
 > **总计**: 34 项特性 (C++23: 18 项, C++26: 16 项)
-> **已实现**: 15 项 ✅ | **部分实现**: 4 项 ⚠️ | **未实现**: 15 项 ❌
+> **已实现**: 16 项 ✅ | **部分实现**: 3 项 ⚠️ | **未实现**: 15 项 ❌
 >
 > **补充核查说明 (2026-04-19):**
 > - 初次审计报告中多维 `operator[]`、`#warning`、`Z`/`z` 后缀曾误标为"存疑"，经补充精确搜索已全部确认为 ✅ 已实现。
 > - Stage 7.1 新增实现 5 项 C++23 P1 特性（commit 5571734）：Deducing this、DecayCopyExpr、static operator()、static operator[]、[[assume]]。
+> - Stage 7.2 新增实现 C++26 静态反射（reflexpr + MetaInfoType + SemaReflection + meta::TypeInfo/MemberInfo）。
 
 ---
 
@@ -46,7 +47,7 @@
 | 1 | **Contracts** (pre/post/assert) | P2900R14 | ❌ | P2 | 仅 `__cpp_contracts=202502L` 预定义宏，无实现 |
 | 2 | **包索引** `T...[N]` | P2662R3 | ✅ | — | `PackIndexingExpr` + `parsePackIndexingExpr()` 完整实现 |
 | 3 | **`= delete("reason")`** | P2573R2 | ❌ | P1 | 仅设计文档，AST 无 reason 字段 |
-| 4 | **静态反射** `reflexpr` | (提案中) | ⚠️ | P2 | `ReflexprExpr` 基础框架 + `parseReflexprExpr()`，功能有限 |
+| 4 | **静态反射** `reflexpr` | P2996 | ✅ | — | `ReflexprExpr`(type+expr) + `MetaInfoType` + `SemaReflection` + `meta::TypeInfo/MemberInfo` + `__reflect_type`/`__reflect_members` 内置函数 |
 | 5 | **`#embed`** | P1967R14 | ✅ | — | `handleEmbedDirective()` 完整实现，支持 `limit()`/`suffix()` |
 | 6 | 未命名占位符变量 `_` | P2169R4 | ❌ | P1 | 同 C++23 #12 |
 | 7 | 用户 `static_assert` 消息 | P2741R3 | ⚠️ | P1 | 支持 `static_assert(cond, "msg")` (C++11级)，无格式化增强 |
@@ -60,7 +61,7 @@
 | 15 | 可观察检查点 | P1494R5 | ❌ | P2 | 无代码 |
 | 16 | `[[indeterminate]]` 属性 | P2795R5 | ❌ | P2 | 无代码 |
 
-**C++26 支持率: 2/16 完整 + 3 部分实现 ≈ 22%**
+**C++26 支持率: 3/16 完整 + 2 部分实现 ≈ 31%**
 
 ---
 
@@ -70,7 +71,7 @@
 // src/Lex/Preprocessor.cpp:96-101
 definePredefinedMacro("__cplusplus", "202602L");          // 声称 C++26
 definePredefinedMacro("__cpp_contracts", "202502L");       // ❌ 未实现
-definePredefinedMacro("__cpp_reflexpr", "202502L");        // ⚠️ 基础框架
+definePredefinedMacro("__cpp_reflexpr", "202502L");        // ✅ Stage 7.2 已实现
 definePredefinedMacro("__cpp_pack_indexing", "202411L");   // ✅ 已实现
 ```
 

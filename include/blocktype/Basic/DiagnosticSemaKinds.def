@@ -282,4 +282,21 @@ DIAG(err_member_access_type_invalid, Error, \
   "member access into type '%0', which is not a record", \
   "成员访问的目标类型 '%0' 不是记录类型")
 
+//===----------------------------------------------------------------------===//
+// P7.2.1: reflexpr diagnostics (C++26 reflection)
+//===----------------------------------------------------------------------===//
+
+DIAG(err_reflexpr_invalid_operand, Error, \
+  "reflexpr operand is not a valid type or expression", \
+  "reflexpr 操作数不是有效的类型或表达式")
+DIAG(err_reflexpr_no_type, Error, \
+  "reflexpr requires a type or expression argument", \
+  "reflexpr 需要类型或表达式参数")
+DIAG(err_reflexpr_unresolved_type, Error, \
+  "reflexpr cannot reflect an unresolved type '%0'", \
+  "reflexpr 无法反射未解析的类型 '%0'")
+DIAG(warn_reflexpr_paren, Warning, \
+  "redundant parentheses around reflexpr operand", \
+  "reflexpr 操作数周围的多余括号")
+
 #undef DIAG

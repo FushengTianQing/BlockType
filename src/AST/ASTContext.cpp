@@ -358,4 +358,12 @@ void ASTContext::dumpMemoryUsage(raw_ostream &OS) const {
      << (getMemoryUsage() - Nodes.size() * sizeof(ASTNode)) << " bytes\n";
 }
 
+QualType ASTContext::getMetaInfoType() {
+  // MetaInfoType is a singleton — the canonical reflection type.
+  // It wraps a null reflectee since the actual reflected entity is set
+  // per-expression, not per-type.
+  static auto *MetaInfo = new MetaInfoType(nullptr, MetaInfoType::RK_Type);
+  return QualType(MetaInfo, Qualifier::None);
+}
+
 } // namespace blocktype

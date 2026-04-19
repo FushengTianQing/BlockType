@@ -497,7 +497,26 @@ public:
                                            Expr *SubExpr, QualType CastType,
                                            llvm::StringRef CastKind);
   ExprResult ActOnPackIndexingExpr(SourceLocation Loc, Expr *Pack, Expr *Index);
+
+  //===------------------------------------------------------------------===//
+  // P7.2.1: reflexpr expression (C++26 reflection)
+  //===------------------------------------------------------------------===//
+
+  /// ActOnReflexprExpr - Semantic analysis for reflexpr(expression).
   ExprResult ActOnReflexprExpr(SourceLocation Loc, Expr *Arg);
+
+  /// ActOnReflexprTypeExpr - Semantic analysis for reflexpr(type-id).
+  ExprResult ActOnReflexprTypeExpr(SourceLocation Loc, QualType T);
+
+  //===------------------------------------------------------------------===//
+  // P7.2.2: Built-in reflection functions
+  //===------------------------------------------------------------------===//
+
+  /// Process __reflect_type(expr) built-in.
+  ExprResult ActOnReflectTypeBuiltin(SourceLocation Loc, Expr *E);
+
+  /// Process __reflect_members(type) built-in.
+  ExprResult ActOnReflectMembersBuiltin(SourceLocation Loc, QualType T);
 
   //===------------------------------------------------------------------===//
   // P7.1.2: Decay-copy expression (P0849R8)

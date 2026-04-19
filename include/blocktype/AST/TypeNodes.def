@@ -72,3 +72,6 @@ TYPE(Unresolved, Type)
 
 // Member pointer type
 TYPE(MemberPointer, Type)
+
+// P7.2.1: MetaInfo type (reflection info type, corresponds to std::meta::info)
+TYPE(MetaInfo, Type)

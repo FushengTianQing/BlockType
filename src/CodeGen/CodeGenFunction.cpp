@@ -250,6 +250,10 @@ llvm::Value *CodeGenFunction::EmitExpr(Expr *Expression) {
   case ASTNode::NodeKind::DecayCopyExprKind:
     return EmitDecayCopyExpr(llvm::cast<DecayCopyExpr>(Expression));
 
+  // P7.2.1: reflexpr expression (C++26 reflection)
+  case ASTNode::NodeKind::ReflexprExprKind:
+    return EmitReflexprExpr(llvm::cast<ReflexprExpr>(Expression));
+
   // 类型转换
   case ASTNode::NodeKind::CXXStaticCastExprKind:
   case ASTNode::NodeKind::CXXDynamicCastExprKind:

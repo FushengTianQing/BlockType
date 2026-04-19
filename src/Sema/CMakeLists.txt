@@ -8,6 +8,7 @@ add_library(blocktype-sema
   Scope.cpp
   Sema.cpp
   SemaCXX.cpp
+  SemaReflection.cpp
   SemaTemplate.cpp
   SymbolTable.cpp
   TemplateDeduction.cpp

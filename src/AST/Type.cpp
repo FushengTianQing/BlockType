@@ -539,6 +539,19 @@ void MemberPointerType::dump(llvm::raw_ostream &OS) const {
 }
 
 //===----------------------------------------------------------------------===//
+// MetaInfoType Implementation (P7.2.1)
+//===----------------------------------------------------------------------===//
+
+void MetaInfoType::dump(llvm::raw_ostream &OS) const {
+  OS << "meta::info";
+  switch (RefKind) {
+  case RK_Type:  OS << "(type)"; break;
+  case RK_Decl:  OS << "(decl)"; break;
+  case RK_Expr:  OS << "(expr)"; break;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // TemplateTypeParmType Implementation
 //===----------------------------------------------------------------------===//
 

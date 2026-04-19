@@ -1,0 +1,61 @@
+// RUN: blocktype -emit-llvm %s 2>&1 | FileCheck %s
+
+//===----------------------------------------------------------------------===//
+// Stage 7.2 Integration Tests — C++26 Static Reflection
+//===----------------------------------------------------------------------===//
+
+// --- Task 7.2.1: reflexpr(type-id) ---
+
+int test_reflexpr_type() {
+    // reflexpr on a builtin type
+    auto info = reflexpr(int);
+    return 0;
+}
+// CHECK: define {{.*}} @test_reflexpr_type
+
+// --- Task 7.2.1: reflexpr(expr) ---
+
+int test_reflexpr_expr() {
+    int x = 42;
+    // reflexpr on an expression
+    auto info2 = reflexpr(x);
+    return 0;
+}
+// CHECK: define {{.*}} @test_reflexpr_expr
+
+// --- Task 7.2.1: reflexpr(class type) ---
+
+struct MyStruct {
+    int field;
+    void method();
+};
+
+int test_reflexpr_class() {
+    auto info3 = reflexpr(MyStruct);
+    return 0;
+}
+// CHECK: define {{.*}} @test_reflexpr_class
+
+// --- Task 7.2.2: __reflect_type built-in ---
+
+int test_reflect_type() {
+    int val = 10;
+    // __reflect_type returns the type reflection of the expression
+    auto type_info = __reflect_type(val);
+    return 0;
+}
+// CHECK: define {{.*}} @test_reflect_type
+
+// --- Task 7.2.2: __reflect_members built-in ---
+
+struct Point {
+    int x;
+    int y;
+    int distance();
+};
+
+int test_reflect_members() {
+    auto members = __reflect_members(Point);
+    return 0;
+}
+// CHECK: define {{.*}} @test_reflect_members

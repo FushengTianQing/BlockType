@@ -757,6 +757,16 @@ Expr *Parser::parsePackIndexingExpr() {
   return Actions.ActOnPackIndexingExpr(PackLoc, Pack, Index).get();
 }
 
+/// parseReflexprExpr - Parse a C++26 reflexpr expression.
+///
+/// Grammar:
+///   reflexpr-expression ::= 'reflexpr' '(' type-id ')'
+///                         | 'reflexpr' '(' expression ')'
+///
+/// The parser first tries to parse a type-id. If the next token
+/// looks like a type specifier, parse as type; otherwise parse as
+/// expression. This matches how Clang handles similar constructs
+/// (sizeof, alignof).
 Expr *Parser::parseReflexprExpr() {
   SourceLocation ReflexprLoc = Tok.getLocation();
   consumeToken(); // consume 'reflexpr'
@@ -767,12 +777,52 @@ Expr *Parser::parseReflexprExpr() {
     return createRecoveryExpr(ReflexprLoc);
   }
 
-  // Parse the argument (type-id or expression)
-  // reflexpr can accept both types and expressions
-  // Parsing as expression is acceptable as types can be represented
-  Expr *Arg = parseExpression();
-  if (Arg == nullptr) {
-    Arg = createRecoveryExpr(ReflexprLoc);
+  // Heuristic: check if the next token could start a type-id.
+  // Type-id tokens: keyword types (int, void, class, struct, enum, ...),
+  // identifier (could be a type name), '::', 'const', 'volatile', etc.
+  // Otherwise fall back to expression parsing.
+  bool IsType = false;
+  TokenKind Next = Tok.getKind();
+
+  // Check for known type-starting tokens
+  if (isTypeKeyword(Next) ||
+      Next == TokenKind::kw_class ||
+      Next == TokenKind::kw_struct ||
+      Next == TokenKind::kw_enum ||
+      Next == TokenKind::kw_union ||
+      Next == TokenKind::kw_const ||
+      Next == TokenKind::kw_volatile ||
+      Next == TokenKind::kw_unsigned ||
+      Next == TokenKind::kw_signed ||
+      Next == TokenKind::kw_auto ||
+      Next == TokenKind::kw_typename ||
+      Next == TokenKind::kw_wchar_t ||
+      Next == TokenKind::kw_char8_t ||
+      Next == TokenKind::kw_char16_t ||
+      Next == TokenKind::kw_char32_t) {
+    IsType = true;
+  }
+
+  Expr *Result = nullptr;
+
+  if (IsType) {
+    // Parse as type-id
+    QualType T = parseType();
+    if (!T.isNull()) {
+      Result = Actions.ActOnReflexprTypeExpr(ReflexprLoc, T).get();
+    } else {
+      // Type parsing failed, try as expression
+      Result = nullptr;
+    }
+  }
+
+  if (!IsType || Result == nullptr) {
+    // Parse as expression
+    Expr *Arg = parseExpression();
+    if (Arg == nullptr) {
+      Arg = createRecoveryExpr(ReflexprLoc);
+    }
+    Result = Actions.ActOnReflexprExpr(ReflexprLoc, Arg).get();
   }
 
   // Parse ')'
@@ -780,7 +830,58 @@ Expr *Parser::parseReflexprExpr() {
     emitError(DiagID::err_expected_rparen);
   }
 
-  return Actions.ActOnReflexprExpr(ReflexprLoc, Arg).get();
+  return Result ? Result : createRecoveryExpr(ReflexprLoc);
+}
+
+//===----------------------------------------------------------------------===//
+// P7.2.2: Built-in reflection functions
+//===----------------------------------------------------------------------===//
+
+/// parseReflectTypeBuiltin - Parse __reflect_type(expr)
+///
+/// __reflect_type(expr) returns reflexpr(decltype(expr))
+Expr *Parser::parseReflectTypeBuiltin(SourceLocation Loc) {
+  // '(' already confirmed by caller
+  consumeToken(); // consume '('
+
+  Expr *Arg = parseExpression();
+  if (!Arg) {
+    Arg = createRecoveryExpr(Loc);
+  }
+
+  if (!tryConsumeToken(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+  }
+
+  return Actions.ActOnReflectTypeBuiltin(Loc, Arg).get();
+}
+
+/// parseReflectMembersBuiltin - Parse __reflect_members(type)
+///
+/// __reflect_members(type-id) returns a reflection of all members of the type
+Expr *Parser::parseReflectMembersBuiltin(SourceLocation Loc) {
+  // '(' already confirmed by caller
+  consumeToken(); // consume '('
+
+  // Try to parse as a type first
+  QualType T = parseType();
+  if (T.isNull()) {
+    // Fall back to expression
+    Expr *Arg = parseExpression();
+    if (Arg && !Arg->getType().isNull()) {
+      T = Arg->getType();
+    }
+  }
+
+  if (!tryConsumeToken(TokenKind::r_paren)) {
+    emitError(DiagID::err_expected_rparen);
+  }
+
+  if (T.isNull()) {
+    return createRecoveryExpr(Loc);
+  }
+
+  return Actions.ActOnReflectMembersBuiltin(Loc, T).get();
 }
 
 //===----------------------------------------------------------------------===//

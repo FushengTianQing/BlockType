@@ -926,6 +926,14 @@ Expr *Parser::parseIdentifier() {
 
   consumeToken();
 
+  // P7.2.2: Built-in reflection functions
+  if (Name == "__reflect_type" && Tok.is(TokenKind::l_paren)) {
+    return parseReflectTypeBuiltin(Loc);
+  }
+  if (Name == "__reflect_members" && Tok.is(TokenKind::l_paren)) {
+    return parseReflectMembersBuiltin(Loc);
+  }
+
   // Check for scope resolution operator (::)
   if (Tok.is(TokenKind::coloncolon)) {
     // This is a qualified name: std::is_integral_v
