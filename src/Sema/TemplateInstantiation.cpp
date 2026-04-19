@@ -11,31 +11,54 @@
 
 namespace blocktype {
 
-QualType TemplateInstantiation::substituteType(QualType T) const {
-  if (T.isNull()) {
+/// TypeSubstitutionVisitor - Internal visitor that performs type substitution.
+class TypeSubstitutionVisitor 
+    : public TypeVisitor<TypeSubstitutionVisitor> {
+  const llvm::DenseMap<NamedDecl *, TemplateArgument> &Substitutions;
+
+public:
+  explicit TypeSubstitutionVisitor(
+      const llvm::DenseMap<NamedDecl *, TemplateArgument> &Subs)
+      : Substitutions(Subs) {}
+
+  /// Visit a template type parameter and substitute if found.
+  const Type *VisitTemplateTypeParmType(const TemplateTypeParmType *T) {
+    // Look up the parameter in the substitution map
+    auto It = Substitutions.find(T->getDecl());
+    if (It != Substitutions.end()) {
+      const TemplateArgument &Arg = It->second;
+      if (Arg.isType()) {
+        return Arg.getAsType().getTypePtr();
+      }
+    }
+    // Not found, return unchanged
     return T;
   }
+
+  // Use default implementations for other types (they recurse automatically)
+};
+
+QualType TemplateInstantiation::substituteType(QualType InputType) const {
+  if (InputType.isNull()) {
+    return InputType;
+  }
   
-  const Type *Substituted = substituteTypeImpl(T.getTypePtr());
-  return QualType(Substituted, T.getQualifiers());
+  // Create visitor with current substitutions
+  TypeSubstitutionVisitor Visitor(Substitutions);
+  
+  // Visit and substitute
+  const Type *Substituted = Visitor.Visit(InputType.getTypePtr());
+  return {Substituted, InputType.getQualifiers()};
 }
 
-const Type *TemplateInstantiation::substituteTypeImpl(const Type *T) const {
-  if (!T) {
+const Type *TemplateInstantiation::substituteTypeImpl(const Type *Ty) const {
+  if (!Ty) {
     return nullptr;
   }
   
-  // TODO: Full implementation needs to handle:
-  // 1. TemplateTypeParmType -> substitute with argument
-  // 2. PointerType -> recurse on pointee
-  // 3. ReferenceType -> recurse on referent
-  // 4. RecordType -> substitute template arguments
-  // 5. ArrayType -> substitute element type
-  // 6. FunctionType -> substitute parameter and return types
-  
-  // For now, return the original type (no substitution)
-  // This is a placeholder - full implementation requires Type visitor pattern
-  return T;
+  // Delegate to the visitor
+  TypeSubstitutionVisitor Visitor(Substitutions);
+  return Visitor.Visit(Ty);
 }
 
 FunctionDecl *TemplateInstantiation::substituteFunctionSignature(

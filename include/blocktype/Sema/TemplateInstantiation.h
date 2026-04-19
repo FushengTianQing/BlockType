@@ -19,6 +19,7 @@
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
 #include "blocktype/AST/Expr.h"
+#include "blocktype/AST/TypeVisitor.h"  // For TypeVisitor
 #include "llvm/ADT/DenseMap.h"
 
 namespace blocktype {
