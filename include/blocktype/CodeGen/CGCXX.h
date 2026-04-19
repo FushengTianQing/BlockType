@@ -128,6 +128,11 @@ public:
   /// 计算虚函数表中方法的索引。
   unsigned GetVTableIndex(CXXMethodDecl *MD);
 
+  /// 获取 vptr 在 LLVM StructType 中的字段索引。
+  /// vptr 在需要时始终在索引 0（Itanium ABI 约定）。
+  /// 如果类不需要 vptr，返回 -1。
+  int GetVPtrIndex(CXXRecordDecl *RD);
+
   /// 生成虚函数调用（vptr load → GEP → load → indirect call）。
   llvm::Value *EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
                                 llvm::Value *This,

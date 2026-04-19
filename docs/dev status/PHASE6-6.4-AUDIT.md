@@ -93,11 +93,11 @@
    -- **修复：** 新增 `FieldIndexCache` 在 GetRecordType 时自动记录每个 FieldDecl 的正确 GEP 索引
    -- **修复：** 简化 `GetFieldIndex` 直接查表返回
 
-7. ⚠️ **vptr 位置假设始终在索引 0**（P2）
-   -- GetRecordType 将 vptr 放在 StructType 的第一个元素
-   -- ComputeClassLayout 将 vptr 放在基类之后（当无虚基类时）
-   -- 两者位置不一致：GetRecordType 放在 fields 之前，但 ComputeClassLayout 放在 bases 之后
-   -- **影响：** InitializeVTablePtr 和 EmitVirtualCall 假设 vptr 在索引 0，与布局计算不符
+7. ✅ **vptr 位置统一为索引 0**（已修复）
+   --ComputeClassLayout 重排：vptr 在基类之前（索引 0），与 GetRecordType 一致
+   --新增 GetVPtrIndex(RD) 方法：统一查询 vptr 在 StructType 中的索引
+   --InitializeVTablePtr: 使用 GetVPtrIndex 获取索引，不再硬编码 0
+   --EmitVirtualCall: 使用 GetVPtrIndex 获取索引，支持 vptr 在基类中的场景
 
 ---
 

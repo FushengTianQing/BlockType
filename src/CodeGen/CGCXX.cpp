@@ -63,7 +63,31 @@ llvm::SmallVector<uint64_t, 16> CGCXX::ComputeClassLayout(CXXRecordDecl *RD) {
 
   uint64_t CurrentOffset = 0;
 
-  // 1. 基类子对象（按声明顺序排列）
+  // 1. vptr 指针（始终在最前面，索引 0，与 GetRecordType 一致）
+  // Clang 的 Itanium ABI：vptr 始终在对象起始位置
+  bool HasVPtr = hasVirtualFunctionsInHierarchy(RD);
+  bool HasVirtualBase = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BaseType = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
+      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BaseCXX)) {
+          HasVirtualBase = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // 如果自身有虚函数且没有带虚函数的基类，vptr 在索引 0
+  if (HasVPtr && !HasVirtualBase) {
+    uint64_t PtrSize = CGM.getTarget().getPointerSize();
+    uint64_t PtrAlign = CGM.getTarget().getPointerAlign();
+    CurrentOffset = llvm::alignTo(CurrentOffset, PtrAlign);
+    CurrentOffset += PtrSize;
+  }
+
+  // 2. 基类子对象（按声明顺序排列）
   for (const auto &Base : RD->bases()) {
     QualType BaseType = Base.getType();
     if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
@@ -82,29 +106,6 @@ llvm::SmallVector<uint64_t, 16> CGCXX::ComputeClassLayout(CXXRecordDecl *RD) {
         CurrentOffset += BaseSize;
       }
     }
-  }
-
-  // 2. vptr 指针（如果有虚函数，且没有带虚函数的基类时放在此处）
-  bool HasVPtr = hasVirtualFunctionsInHierarchy(RD);
-  bool HasVirtualBase = false;
-  for (const auto &Base : RD->bases()) {
-    QualType BaseType = Base.getType();
-    if (auto *RT = llvm::dyn_cast<RecordType>(BaseType.getTypePtr())) {
-      if (auto *BaseCXX = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
-        if (hasVirtualFunctionsInHierarchy(BaseCXX)) {
-          HasVirtualBase = true;
-          break;
-        }
-      }
-    }
-  }
-
-  // 如果没有带 vptr 的基类，且自身需要 vptr，则在此处放置
-  if (HasVPtr && !HasVirtualBase) {
-    uint64_t PtrSize = CGM.getTarget().getPointerSize();
-    uint64_t PtrAlign = CGM.getTarget().getPointerAlign();
-    CurrentOffset = llvm::alignTo(CurrentOffset, PtrAlign);
-    CurrentOffset += PtrSize;
   }
 
   // 3. 按声明顺序排列非静态数据成员
@@ -625,6 +626,32 @@ unsigned CGCXX::GetVTableIndex(CXXMethodDecl *MD) {
   return 2;
 }
 
+int CGCXX::GetVPtrIndex(CXXRecordDecl *RD) {
+  if (!RD) return -1;
+
+  // 只有自身有虚函数且没有带虚函数的基类时，才有自己的 vptr
+  bool HasVPtr = hasVirtualFunctionsInHierarchy(RD);
+  if (!HasVPtr) return -1;
+
+  bool HasVirtualBase = false;
+  for (const auto &Base : RD->bases()) {
+    QualType BT = Base.getType();
+    if (auto *RT = llvm::dyn_cast<RecordType>(BT.getTypePtr())) {
+      if (auto *BaseRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+        if (hasVirtualFunctionsInHierarchy(BaseRD)) {
+          HasVirtualBase = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (HasVirtualBase) return -1; // vptr 在基类中
+
+  // vptr 始终在索引 0（Itanium ABI 约定，与 GetRecordType 一致）
+  return 0;
+}
+
 llvm::Value *CGCXX::EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
                                       llvm::Value *This,
                                       llvm::ArrayRef<llvm::Value *> Args) {
@@ -632,10 +659,17 @@ llvm::Value *CGCXX::EmitVirtualCall(CodeGenFunction &CGF, CXXMethodDecl *MD,
   CXXRecordDecl *RD = MD->getParent();
   if (!RD) return nullptr;
 
-  // 1. 从对象头部加载 vptr
+  // 1. 从对象头部加载 vptr（使用 GetVPtrIndex 获取索引）
+  int VPtrIdx = GetVPtrIndex(RD);
+  // 如果派生类的 vptr 在基类中，需要回退到使用基类的 vptr
+  if (VPtrIdx < 0) {
+    // vptr 在层次结构中的某个基类里，回退到索引 0（主基类的 vptr）
+    VPtrIdx = 0;
+  }
+
   llvm::StructType *ClassTy = CGM.getTypes().GetRecordType(RD);
   llvm::Value *VTablePtrAddr = CGF.getBuilder().CreateStructGEP(
-      ClassTy, This, 0, "vtable.ptr");
+      ClassTy, This, VPtrIdx, "vtable.ptr");
   llvm::Value *VTable = CGF.getBuilder().CreateLoad(
       llvm::PointerType::get(CGM.getLLVMContext(), 0), VTablePtrAddr,
       "vtable");
@@ -673,15 +707,18 @@ void CGCXX::InitializeVTablePtr(CodeGenFunction &CGF, llvm::Value *This,
                                  CXXRecordDecl *RD) {
   if (!This || !RD) return;
 
+  int VPtrIdx = GetVPtrIndex(RD);
+  if (VPtrIdx < 0) return; // 此类不需要自己的 vptr
+
   llvm::GlobalVariable *VTable = EmitVTable(RD);
   if (!VTable) return;
 
   llvm::StructType *ClassTy = CGM.getTypes().GetRecordType(RD);
   if (!ClassTy || ClassTy->getNumElements() == 0) return;
 
-  // vptr 是结构体的第一个元素
+  // vptr 使用 GetVPtrIndex 获取索引（与 GetRecordType 布局一致）
   llvm::Value *VTablePtrAddr = CGF.getBuilder().CreateStructGEP(
-      ClassTy, This, 0, "vtable.ptr");
+      ClassTy, This, VPtrIdx, "vtable.ptr");
 
   // vtable 全局变量的地址
   llvm::Value *VTableAddr = CGF.getBuilder().CreateInBoundsGEP(
