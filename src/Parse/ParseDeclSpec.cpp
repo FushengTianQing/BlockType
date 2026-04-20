@@ -30,6 +30,8 @@ namespace blocktype {
 //                  | type-specifier
 //
 void Parser::parseDeclSpecifierSeq(DeclSpec &DS) {
+  llvm::errs() << "DEBUG parseDeclSpecifierSeq: Starting, current token = '" 
+               << Tok.getText().str() << "', kind = " << static_cast<int>(Tok.getKind()) << "\n";
   bool SeenType = false;
 
   while (true) {

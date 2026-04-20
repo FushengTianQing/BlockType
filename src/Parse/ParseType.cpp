@@ -91,28 +91,40 @@ QualType Parser::parseTypeSpecifier() {
 
         llvm::StringRef TypeName = Tok.getText();
         SourceLocation TypeNameLoc = Tok.getLocation();
-        consumeToken();
+        
+        // Layer 0: Check if next token is '<' (template specialization)
+        Token NextTok = PP.peekToken(0);
+        bool IsTemplateSpec = NextTok.is(TokenKind::less);
+        
+        consumeToken(); // consume identifier
 
         // Check for template argument list
         // Use three-layer disambiguation (similar to expression context)
         // to avoid misparsing comparisons as template specializations.
-        if (Tok.is(TokenKind::less)) {
+        if (IsTemplateSpec) {
+          llvm::errs() << "DEBUG parseTypeSpecifier: Layer 0 - Found '<' after '" << TypeName.str() << "', treating as template\n";
+          // Parse template arguments
+          Result = parseTemplateSpecializationType(TypeName);
+        } else if (Tok.is(TokenKind::less)) {
+          llvm::errs() << "DEBUG parseTypeSpecifier: Found '<' after '" << TypeName.str() << "'\n";
           bool ShouldParseAsTemplate = false;
 
           // Layer 1: Check if next token is a type keyword (int, float, etc.)
           Token Lookahead = PP.peekToken(0);
+          llvm::errs() << "DEBUG parseTypeSpecifier: Layer 1 - Next token kind = " << static_cast<int>(Lookahead.getKind()) << "\n";
           if (isTypeKeyword(Lookahead.getKind())) {
             ShouldParseAsTemplate = true;
+            llvm::errs() << "DEBUG parseTypeSpecifier: Layer 1 matched (type keyword)\n";
           }
 
           // Layer 2: Check if the identifier is a known template in symbol table
           if (!ShouldParseAsTemplate) {
             NamedDecl *D = Actions.LookupName(TypeName);
-            llvm::errs() << "DEBUG parseTypeSpecifier: LookupName('" << TypeName.str() 
+            llvm::errs() << "DEBUG parseTypeSpecifier: Layer 2 - LookupName('" << TypeName.str() 
                          << "') = " << (D ? D->getName().str() : "null") << "\n";
             if (D) {
               ShouldParseAsTemplate = llvm::isa<TemplateDecl>(D);
-              llvm::errs() << "DEBUG parseTypeSpecifier: IsTemplateDecl = " << ShouldParseAsTemplate << "\n";
+              llvm::errs() << "DEBUG parseTypeSpecifier: Layer 2 - IsTemplateDecl = " << ShouldParseAsTemplate << "\n";
             }
           }
 
@@ -155,9 +167,11 @@ QualType Parser::parseTypeSpecifier() {
           }
 
           if (ShouldParseAsTemplate) {
+            llvm::errs() << "DEBUG parseTypeSpecifier: Parsing '" << TypeName.str() << "' as template\n";
             // Parse template arguments
             Result = parseTemplateSpecializationType(TypeName);
           } else {
+            llvm::errs() << "DEBUG parseTypeSpecifier: NOT parsing '" << TypeName.str() << "' as template\n";
             // Not a template specialization - create unresolved type from the identifier
             // The '<' will be handled by the caller (e.g., as a comparison operator)
             UnresolvedType *Unresolved = Context.getUnresolvedType(TypeName);
@@ -446,6 +460,7 @@ QualType Parser::parseDeclarator(QualType Base) {
 /// template-arg ::= type
 ///
 QualType Parser::parseTemplateSpecializationType(llvm::StringRef TemplateName) {
+  llvm::errs() << "DEBUG parseTemplateSpecializationType: TemplateName = '" << TemplateName.str() << "'\n";
   assert(Tok.is(TokenKind::less) && "Expected '<'");
   consumeToken(); // consume '<'
   
