@@ -823,6 +823,51 @@ void Sema::InitializeStdNamespace() {
   
   // Add to std namespace
   StdNS->addDecl(GetTemplate);
+  
+  // Create std::make_pair function template
+  // template<class T1, class T2> constexpr pair<T1,T2> make_pair(T1&& t, T2&& u);
+  {
+    llvm::SmallVector<NamedDecl *, 2> MakePairParams;
+    auto *T1Param = Context.create<TemplateTypeParmDecl>(
+        SourceLocation(), "T1", /*Depth=*/0, /*Index=*/0,
+        /*IsParameterPack=*/false, /*TypenameKeyword=*/true);
+    MakePairParams.push_back(T1Param);
+    
+    auto *T2Param = Context.create<TemplateTypeParmDecl>(
+        SourceLocation(), "T2", /*Depth=*/0, /*Index=*/1,
+        /*IsParameterPack=*/false, /*TypenameKeyword=*/true);
+    MakePairParams.push_back(T2Param);
+    
+    auto *MakePairTPL = new TemplateParameterList(
+        SourceLocation(), SourceLocation(), SourceLocation(), MakePairParams);
+    
+    // Return type: pair<T1, T2>
+    // For now, use auto as placeholder
+    QualType ReturnType = Context.getAutoType();
+    
+    // Parameters: T1&& t, T2&& u (forwarding references)
+    QualType T1Type = Context.getTemplateTypeParmType(0, 0, false, T1Param);
+    QualType T2Type = Context.getTemplateTypeParmType(0, 1, false, T2Param);
+    QualType T1RefType = Context.getRValueReferenceType(T1Type.getTypePtr());
+    QualType T2RefType = Context.getRValueReferenceType(T2Type.getTypePtr());
+    
+    auto *Param1 = Context.create<ParmVarDecl>(SourceLocation(), "t", T1RefType, false);
+    auto *Param2 = Context.create<ParmVarDecl>(SourceLocation(), "u", T2RefType, false);
+    
+    llvm::SmallVector<ParmVarDecl *, 2> Params;
+    Params.push_back(Param1);
+    Params.push_back(Param2);
+    
+    auto *MakePairFD = Context.create<FunctionDecl>(
+        SourceLocation(), "make_pair", ReturnType, Params,
+        nullptr, false, true, false);
+    
+    auto *MakePairTemplate = Context.create<FunctionTemplateDecl>(
+        SourceLocation(), "make_pair", MakePairFD);
+    MakePairTemplate->setTemplateParameterList(MakePairTPL);
+    
+    StdNS->addDecl(MakePairTemplate);
+  }
 }
 
 FunctionTemplateDecl *Sema::LookupStdGetFunction() {
