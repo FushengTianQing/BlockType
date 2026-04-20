@@ -168,10 +168,6 @@ QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
     return QualType();
   }
   
-  llvm::errs() << "DEBUG InstantiateClassTemplate: OriginalRecord '" 
-               << OriginalRecord->getName().str() << "' has " 
-               << OriginalRecord->fields().size() << " fields\n";
-  
   // Create a new CXXRecordDecl for the specialization
   auto *SpecializedRecord = Context.create<CXXRecordDecl>(
       OriginalRecord->getLocation(),
@@ -194,6 +190,9 @@ QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
     SpecializedRecord->addField(NewField);
     registerDecl(NewField);
   }
+  
+  // Mark the specialized record as complete
+  SpecializedRecord->setCompleteDefinition();
   
   // Register the specialized record
   registerDecl(SpecializedRecord);
@@ -594,14 +593,10 @@ DeclResult Sema::ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
   QualType ActualType = T;
   if (T.getTypePtr() && T->getTypeClass() == TypeClass::TemplateSpecialization) {
     auto *TST = static_cast<const TemplateSpecializationType *>(T.getTypePtr());
-    llvm::errs() << "DEBUG ActOnVarDeclFull: Found TemplateSpecializationType '" 
-                 << TST->getTemplateName().str() << "'\n";
     QualType Instantiated = InstantiateClassTemplate(TST->getTemplateName(), TST);
     if (!Instantiated.isNull()) {
       ActualType = Instantiated;
-      llvm::errs() << "DEBUG ActOnVarDeclFull: Instantiation succeeded\n";
     } else {
-      llvm::errs() << "DEBUG ActOnVarDeclFull: Instantiation failed\n";
       return DeclResult::getInvalid();
     }
   }

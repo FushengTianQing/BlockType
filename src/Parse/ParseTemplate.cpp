@@ -262,9 +262,9 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     // Regular class template
     if (PreRegisteredCTD) {
       // Use the pre-registered ClassTemplateDecl
-      // The TemplatedDecl will be updated by replacing the forward declaration
+      // Update the TemplatedDecl to point to the fully parsed class with fields
+      PreRegisteredCTD->setTemplatedDecl(ClassDecl);
       Template = PreRegisteredCTD;
-      llvm::errs() << "DEBUG: Using pre-registered CTD for '" << ClassDecl->getName().str() << "'\n";
     } else {
       Template = llvm::cast<ClassTemplateDecl>(
           Actions.ActOnClassTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), TemplatedDecl).get());

@@ -330,17 +330,13 @@ TypeResult Sema::ActOnTemplateId(llvm::StringRef Name,
 
   // 4. Handle based on template kind
   if (auto *CTD = llvm::dyn_cast<ClassTemplateDecl>(TD)) {
-    llvm::errs() << "DEBUG ActOnTemplateId: Found ClassTemplateDecl '" << Name.str() << "'\n";
     // Class template → instantiate
     // Create TemplateSpecializationType for the instantiation call
     auto *TST = Context.getTemplateSpecializationType(Name);
     for (const auto &Arg : RawArgs)
       TST->addTemplateArg(Arg);
     
-    llvm::errs() << "DEBUG ActOnTemplateId: Calling InstantiateClassTemplate\n";
     QualType Spec = InstantiateClassTemplate(Name, TST);
-    llvm::errs() << "DEBUG ActOnTemplateId: InstantiateClassTemplate returned " 
-                 << (Spec.isNull() ? "null" : "non-null") << "\n";
     if (!Spec.isNull()) {
       return TypeResult(Spec);
     }

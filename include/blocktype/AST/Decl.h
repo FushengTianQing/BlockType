@@ -1121,6 +1121,7 @@ public:
   void addTemplateParameter(NamedDecl *Param);
 
   Decl *getTemplatedDecl() const { return TemplatedDecl; }
+  void setTemplatedDecl(Decl *D) { TemplatedDecl = D; }
 
   Expr *getRequiresClause() const {
     return Params ? Params->getRequiresClause() : nullptr;
