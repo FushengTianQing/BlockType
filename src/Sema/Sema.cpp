@@ -494,6 +494,11 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
     return TupleType; // Fallback to original type
   }
   
+  // Check if it's an ArrayType - handled separately
+  if (llvm::isa<ArrayType>(Ty)) {
+    return TupleType; // Will be handled by array subscript
+  }
+  
   // Check if it's a RecordType (class/struct)
   if (auto *RT = llvm::dyn_cast<RecordType>(Ty)) {
     RecordDecl *RD = RT->getDecl();
@@ -528,14 +533,31 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
     }
   }
   
-  // Handle array types T[N]
-  if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
-    // All elements have the same type
-    return AT->getElementType();
+  // Not a recognized tuple-like type
+  return QualType();
+}
+
+/// Check if a type is tuple-like (std::pair, std::tuple, or array)
+static bool IsTupleLikeType(QualType Ty) {
+  if (llvm::isa<ArrayType>(Ty.getTypePtr())) {
+    return true;
   }
   
-  // Fallback: return the original type
-  return TupleType;
+  QualType UnqualType = Ty.getCanonicalType();
+  const Type *TypePtr = UnqualType.getTypePtr();
+  
+  if (auto *RT = llvm::dyn_cast<RecordType>(TypePtr)) {
+    RecordDecl *RD = RT->getDecl();
+    if (RD) {
+      llvm::StringRef Name = RD->getName();
+      if (Name == "pair" || Name.ends_with("::pair") ||
+          Name == "tuple" || Name.ends_with("::tuple")) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 // P7.4.3: Structured binding implementation
@@ -671,6 +693,49 @@ void Sema::InitializeStdNamespace() {
   
   // Add to symbol table
   Symbols.addNamespaceDecl(StdNS);
+  
+  // Create std::tuple class template
+  // template<class... Types> class tuple;
+  {
+    llvm::SmallVector<NamedDecl *, 1> TupleParams;
+    auto *TypesParam = Context.create<TemplateTypeParmDecl>(
+        SourceLocation(), "Types", /*Depth=*/0, /*Index=*/0,
+        /*IsParameterPack=*/true, /*TypenameKeyword=*/true);
+    TupleParams.push_back(TypesParam);
+    
+    auto *TupleTPL = new TemplateParameterList(
+        SourceLocation(), SourceLocation(), SourceLocation(), TupleParams);
+    
+    auto *TupleClass = Context.create<ClassTemplateDecl>(
+        SourceLocation(), "tuple", nullptr);
+    TupleClass->setTemplateParameterList(TupleTPL);
+    
+    StdNS->addDecl(TupleClass);
+  }
+  
+  // Create std::pair class template
+  // template<class T1, class T2> struct pair;
+  {
+    llvm::SmallVector<NamedDecl *, 2> PairParams;
+    auto *T1Param = Context.create<TemplateTypeParmDecl>(
+        SourceLocation(), "T1", /*Depth=*/0, /*Index=*/0,
+        /*IsParameterPack=*/false, /*TypenameKeyword=*/true);
+    PairParams.push_back(T1Param);
+    
+    auto *T2Param = Context.create<TemplateTypeParmDecl>(
+        SourceLocation(), "T2", /*Depth=*/0, /*Index=*/1,
+        /*IsParameterPack=*/false, /*TypenameKeyword=*/true);
+    PairParams.push_back(T2Param);
+    
+    auto *PairTPL = new TemplateParameterList(
+        SourceLocation(), SourceLocation(), SourceLocation(), PairParams);
+    
+    auto *PairClass = Context.create<ClassTemplateDecl>(
+        SourceLocation(), "pair", nullptr);
+    PairClass->setTemplateParameterList(PairTPL);
+    
+    StdNS->addDecl(PairClass);
+  }
   
   // Create std::get function template with proper signature:
   // template<size_t N, class... Types> constexpr decltype(auto) get(tuple<Types...>& t) noexcept;
