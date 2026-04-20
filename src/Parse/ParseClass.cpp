@@ -93,9 +93,11 @@ CXXRecordDecl *Parser::parseClassDeclaration(SourceLocation ClassLoc,
 
   consumeToken(); // consume '{'
 
-  // Enter class scope
+  // Enter class scope and set DeclContext
   Actions.PushScope(ScopeFlags::ClassScope);
+  Actions.PushDeclContext(Class);  // Class inherits from DeclContext
   parseClassBody(Class);
+  Actions.PopDeclContext();
   Actions.PopScope();
 
   if (!Tok.is(TokenKind::r_brace)) {
@@ -168,8 +170,12 @@ CXXRecordDecl *Parser::parseStructDeclaration(SourceLocation StructLoc,
 
   consumeToken(); // consume '{'
 
-  // Parse members using parseClassBody
+  // Enter struct scope and set DeclContext
+  Actions.PushScope(ScopeFlags::ClassScope);
+  Actions.PushDeclContext(Struct);
   parseClassBody(Struct);
+  Actions.PopDeclContext();
+  Actions.PopScope();
 
   if (!Tok.is(TokenKind::r_brace)) {
     emitError(DiagID::err_expected_rbrace);
@@ -208,8 +214,12 @@ CXXRecordDecl *Parser::parseUnionDeclaration(SourceLocation UnionLoc) {
 
   consumeToken(); // consume '{'
 
-  // Parse members using parseClassBody
+  // Enter union scope and set DeclContext
+  Actions.PushScope(ScopeFlags::ClassScope);
+  Actions.PushDeclContext(Union);
   parseClassBody(Union);
+  Actions.PopDeclContext();
+  Actions.PopScope();
 
   if (!Tok.is(TokenKind::r_brace)) {
     emitError(DiagID::err_expected_rbrace);
