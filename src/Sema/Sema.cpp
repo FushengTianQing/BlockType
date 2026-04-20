@@ -168,6 +168,10 @@ QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
     return QualType();
   }
   
+  llvm::errs() << "DEBUG InstantiateClassTemplate: OriginalRecord '" 
+               << OriginalRecord->getName().str() << "' has " 
+               << OriginalRecord->fields().size() << " fields\n";
+  
   // Create a new CXXRecordDecl for the specialization
   auto *SpecializedRecord = Context.create<CXXRecordDecl>(
       OriginalRecord->getLocation(),
@@ -322,12 +326,6 @@ void Sema::ActOnFinishDecl(Decl *D) {
 
 DeclResult Sema::ActOnVarDecl(SourceLocation Loc, llvm::StringRef Name,
                                QualType T, Expr *Init) {
-  // Check if type is a TemplateSpecializationType (not yet instantiated)
-  if (T.getTypePtr() && T->getTypeClass() == TypeClass::TemplateSpecialization) {
-    Diags.report(Loc, DiagID::err_incomplete_type);
-    return DeclResult::getInvalid();
-  }
-  
   auto *VD = Context.create<VarDecl>(Loc, Name, T, Init);
 
   // Check initializer if present
@@ -592,15 +590,24 @@ DeclResult Sema::ActOnAttributeDeclWithNamespace(SourceLocation Loc,
 
 DeclResult Sema::ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
                                   QualType T, Expr *Init, bool IsStatic) {
-  // Check if type is a TemplateSpecializationType (not yet instantiated)
+  // Check if type needs template instantiation
+  QualType ActualType = T;
   if (T.getTypePtr() && T->getTypeClass() == TypeClass::TemplateSpecialization) {
-    Diags.report(Loc, DiagID::err_incomplete_type);
-    return DeclResult::getInvalid();
+    auto *TST = static_cast<const TemplateSpecializationType *>(T.getTypePtr());
+    llvm::errs() << "DEBUG ActOnVarDeclFull: Found TemplateSpecializationType '" 
+                 << TST->getTemplateName().str() << "'\n";
+    QualType Instantiated = InstantiateClassTemplate(TST->getTemplateName(), TST);
+    if (!Instantiated.isNull()) {
+      ActualType = Instantiated;
+      llvm::errs() << "DEBUG ActOnVarDeclFull: Instantiation succeeded\n";
+    } else {
+      llvm::errs() << "DEBUG ActOnVarDeclFull: Instantiation failed\n";
+      return DeclResult::getInvalid();
+    }
   }
   
   // Auto type deduction: replace AutoType with initializer's type
-  QualType ActualType = T;
-  if (T.getTypePtr() && T->getTypeClass() == TypeClass::Auto && Init) {
+  if (ActualType.getTypePtr() && ActualType->getTypeClass() == TypeClass::Auto && Init) {
     // Get the initializer's type
     QualType InitType = Init->getType();
     if (!InitType.isNull()) {

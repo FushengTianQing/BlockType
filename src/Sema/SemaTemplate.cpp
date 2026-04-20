@@ -330,11 +330,21 @@ TypeResult Sema::ActOnTemplateId(llvm::StringRef Name,
 
   // 4. Handle based on template kind
   if (auto *CTD = llvm::dyn_cast<ClassTemplateDecl>(TD)) {
-    // Class template → instantiate or create TemplateSpecializationType
-    // TODO: Implement class template instantiation
-    // auto *Spec = Instantiator->InstantiateClassTemplate(CTD, RawArgs);
-    // For now, return error until class template instantiation is implemented
-    Diags.report(NameLoc, DiagID::err_template_recursion);
+    llvm::errs() << "DEBUG ActOnTemplateId: Found ClassTemplateDecl '" << Name.str() << "'\n";
+    // Class template → instantiate
+    // Create TemplateSpecializationType for the instantiation call
+    auto *TST = Context.getTemplateSpecializationType(Name);
+    for (const auto &Arg : RawArgs)
+      TST->addTemplateArg(Arg);
+    
+    llvm::errs() << "DEBUG ActOnTemplateId: Calling InstantiateClassTemplate\n";
+    QualType Spec = InstantiateClassTemplate(Name, TST);
+    llvm::errs() << "DEBUG ActOnTemplateId: InstantiateClassTemplate returned " 
+                 << (Spec.isNull() ? "null" : "non-null") << "\n";
+    if (!Spec.isNull()) {
+      return TypeResult(Spec);
+    }
+    // Instantiation failed, error already reported
     return TypeResult::getInvalid();
   }
 
