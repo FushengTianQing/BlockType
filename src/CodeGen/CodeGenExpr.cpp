@@ -761,6 +761,28 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
 
   if (auto *DeclRef = llvm::dyn_cast<DeclRefExpr>(CalleeExpr)) {
     CalleeDecl = llvm::dyn_cast<FunctionDecl>(DeclRef->getDecl());
+    
+    // P7.1.5: Check if this is a lambda variable
+    if (!CalleeDecl) {
+      if (auto *VD = llvm::dyn_cast<VarDecl>(DeclRef->getDecl())) {
+        QualType VarType = VD->getType();
+        if (VarType->isRecordType()) {
+          auto *RT = static_cast<const RecordType *>(VarType.getTypePtr());
+          auto *RD = RT->getDecl();
+          if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RD)) {
+            if (CXXRD->isLambda()) {
+              // Find operator()
+              for (auto *Method : CXXRD->methods()) {
+                if (Method->getName() == "operator()") {
+                  CalleeDecl = Method;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   } else if (auto *MemberExpression = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
     CalleeDecl =
         llvm::dyn_cast<FunctionDecl>(MemberExpression->getMemberDecl());
@@ -816,8 +838,9 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
     // 对象作为第一个显式参数传递（在后面的参数循环中处理）。
     if (!MemberDecl->isStatic() && !MemberDecl->hasExplicitObjectParam()) {
       // 从 callee 表达式获取 this
+      llvm::Value *BaseValue = nullptr;
+      
       if (auto *MemberExpression = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
-        llvm::Value *BaseValue = nullptr;
         if (MemberExpression->isArrow()) {
           // ptr->method() → base 已经是指针
           BaseValue = EmitExpr(MemberExpression->getBase());
@@ -825,9 +848,14 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
           // obj.method() → base 是对象值，需要取地址得到 this 指针
           BaseValue = EmitLValue(MemberExpression->getBase());
         }
-        if (BaseValue) {
-          Arguments.push_back(BaseValue);
-        }
+      } else if (auto *DeclRef = llvm::dyn_cast<DeclRefExpr>(CalleeExpr)) {
+        // P7.1.5: Lambda variable call - the variable itself is the closure object
+        // We need to load the closure address from the variable
+        BaseValue = EmitLValue(CalleeExpr);
+      }
+      
+      if (BaseValue) {
+        Arguments.push_back(BaseValue);
       }
 
       // 虚函数调用：使用 vtable 进行间接调用
