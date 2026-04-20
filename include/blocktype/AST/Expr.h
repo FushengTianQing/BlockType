@@ -17,6 +17,7 @@
 #include "blocktype/AST/Type.h"  // For QualType
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -1132,6 +1133,9 @@ class LambdaExpr : public Expr {
   SourceLocation RBraceLoc;
   TemplateParameterList *TemplateParams = nullptr; // C++20: lambda-template
   class AttributeListDecl *Attrs = nullptr;         // C++23: lambda attributes
+  
+  // P7.1.5: Map from captured VarDecl to field index in closure
+  llvm::DenseMap<const class VarDecl *, unsigned> CapturedVarsMap;
 
 public:
   LambdaExpr(SourceLocation Loc, CXXRecordDecl *Closure,
@@ -1166,6 +1170,16 @@ public:
 
   /// A lambda expression is never type-dependent (it has a unique closure type)
   bool isTypeDependent() const override { return false; }
+  
+  // P7.1.5: Get captured variable to field index mapping
+  const llvm::DenseMap<const class VarDecl *, unsigned> &getCapturedVarsMap() const {
+    return CapturedVarsMap;
+  }
+  
+  // P7.1.5: Set captured variable mapping (called by Sema)
+  void setCapturedVar(const class VarDecl *VD, unsigned FieldIndex) {
+    CapturedVarsMap[VD] = FieldIndex;
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == NodeKind::LambdaExprKind;

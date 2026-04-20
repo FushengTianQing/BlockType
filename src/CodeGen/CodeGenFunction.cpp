@@ -105,14 +105,43 @@ void CodeGenFunction::EmitFunctionBody(FunctionDecl *FunctionDecl,
       // P7.1.5: If this is a lambda operator(), register captured variables
       auto *ParentClass = MD->getParent();
       if (ParentClass && ParentClass->isLambda()) {
-        // Iterate through fields and register them as captured vars
-        unsigned FieldIndex = 0;
-        for (auto *Field : ParentClass->fields()) {
-          // The field name matches the captured variable name
-          // We need to find the corresponding VarDecl from Sema context
-          // For now, we'll use a simplified approach: store field index by name
-          // TODO: Properly map VarDecl to FieldIndex using LambdaExpr captures
-          // This requires passing LambdaExpr info to CodeGen
+        // The LambdaExpr should be in the parent function's decls
+        // We need to find it by searching for a VarDecl with LambdaExpr initializer
+        // that has this ClosureClass
+        
+        // Get the containing function (where the lambda was defined)
+        // ParentClass's DeclContext should eventually lead to a FunctionDecl
+        auto *ContainingDC = ParentClass->getDeclContext();
+        class FunctionDecl *ContainingFn = nullptr;
+        
+        // Walk up the DeclContext chain to find a FunctionDecl
+        while (ContainingDC) {
+          // Check if this DeclContext is actually a FunctionDecl
+          // We can check by trying to cast using the known inheritance
+          if (ContainingDC->getKind() == ASTNode::NodeKind::FunctionDeclKind) {
+            ContainingFn = static_cast<class FunctionDecl *>(ContainingDC);
+            break;
+          }
+          ContainingDC = ContainingDC->getParent();
+        }
+        
+        if (ContainingFn) {
+          for (auto *D : ContainingFn->decls()) {
+            if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
+              if (auto *Init = VD->getInit()) {
+                if (auto *LE = llvm::dyn_cast<LambdaExpr>(Init)) {
+                  if (LE->getClosureClass() == ParentClass) {
+                    // Found it! Register captured vars
+                    const auto &CapturedMap = LE->getCapturedVarsMap();
+                    for (const auto &Pair : CapturedMap) {
+                      registerCapturedVar(Pair.first, Pair.second);
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

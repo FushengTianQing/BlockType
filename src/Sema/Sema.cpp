@@ -1442,6 +1442,17 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
   QualType LambdaType = Context.getRecordType(ClosureClass);
   LE->setType(LambdaType);
   
+  // P7.1.5: Build captured variable to field index mapping
+  unsigned FieldIndex = 0;
+  for (const auto &Capture : Captures) {
+    if (Capture.CapturedDecl) {
+      if (auto *VD = llvm::dyn_cast<VarDecl>(Capture.CapturedDecl)) {
+        LE->setCapturedVar(VD, FieldIndex);
+      }
+    }
+    ++FieldIndex;
+  }
+  
   return ExprResult(LE);
 }
 
