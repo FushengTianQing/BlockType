@@ -764,6 +764,17 @@ llvm::Value *CodeGenFunction::EmitCallExpr(CallExpr *CallExpression) {
   } else if (auto *MemberExpression = llvm::dyn_cast<MemberExpr>(CalleeExpr)) {
     CalleeDecl =
         llvm::dyn_cast<FunctionDecl>(MemberExpression->getMemberDecl());
+  } else if (auto *LE = llvm::dyn_cast<LambdaExpr>(CalleeExpr)) {
+    // P7.1.5: Lambda call - get operator() from closure class
+    auto *ClosureClass = LE->getClosureClass();
+    if (ClosureClass) {
+      for (auto *Method : ClosureClass->methods()) {
+        if (Method->getName() == "operator()") {
+          CalleeDecl = Method;
+          break;
+        }
+      }
+    }
   }
 
   if (!CalleeDecl) {

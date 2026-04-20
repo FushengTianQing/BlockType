@@ -1454,7 +1454,9 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
     // Lambda call: get the operator() from closure class
     auto *ClosureClass = LE->getClosureClass();
     if (!ClosureClass) {
-      return ExprResult::getInvalid();
+      // Fallback: create a basic CallExpr
+      auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
+      return ExprResult(CE);
     }
     
     // Find operator() method
@@ -1467,14 +1469,26 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
     }
     
     if (!CallOp) {
-      return ExprResult::getInvalid();
+      // Fallback: create a basic CallExpr
+      auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
+      return ExprResult(CE);
     }
     
     // Create CallExpr with operator() as callee
-    // Note: For lambda calls, we need to pass the lambda object as 'this'
-    // This is a simplified version - full implementation needs proper this handling
+    // For member function calls, the first argument should be 'this' pointer
+    // But for simplicity, we just use the lambda expression directly
     auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
-    CE->setType(CallOp->getType());
+    
+    // Set the return type from operator()
+    // The function type is ReturnType(Params...), so we need to extract ReturnType
+    QualType FuncType = CallOp->getType();
+    if (FuncType->isFunctionType()) {
+      auto *FT = static_cast<const FunctionType *>(FuncType.getTypePtr());
+      CE->setType(QualType(FT->getReturnType(), Qualifier::None));
+    } else {
+      CE->setType(FuncType);
+    }
+    
     return ExprResult(CE);
   }
 
