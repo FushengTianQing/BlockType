@@ -1343,9 +1343,34 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
   
   // 2. Add capture members to the closure class
   for (const auto &Capture : Captures) {
-    // For now, use int as placeholder type for captures
-    // TODO: Infer actual capture types from context
-    QualType CaptureType = Context.getIntType();
+    // P7.1.5 Phase 1: Infer capture type from context
+    QualType CaptureType;
+    
+    if (Capture.Kind == LambdaCapture::InitCopy && Capture.InitExpr) {
+      // Init capture: [x = expr] - type from initialization expression
+      CaptureType = Capture.InitExpr->getType();
+    } else {
+      // Named capture: [x] or [&x] - lookup in current scope
+      NamedDecl *CapturedDecl = LookupName(Capture.Name);
+      if (CapturedDecl) {
+        if (auto *VD = llvm::dyn_cast<VarDecl>(CapturedDecl)) {
+          CaptureType = VD->getType();
+          // If captured by reference, keep as reference type
+          // If captured by copy, use the value type
+          if (Capture.Kind == LambdaCapture::ByCopy) {
+            // For by-copy, we might want to strip references
+            // For now, keep as-is (TODO: implement proper decay)
+          }
+        } else {
+          // Fallback: not a variable, use int
+          CaptureType = Context.getIntType();
+        }
+      } else {
+        // Variable not found in scope, use int as fallback
+        CaptureType = Context.getIntType();
+      }
+    }
+    
     auto *Field = Context.create<FieldDecl>(Capture.Loc, Capture.Name, CaptureType);
     ClosureClass->addMember(Field);
   }
