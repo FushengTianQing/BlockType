@@ -1121,6 +1121,7 @@ struct LambdaCapture {
 
 /// LambdaExpr - Lambda expression.
 class LambdaExpr : public Expr {
+  CXXRecordDecl *ClosureClass;  // P7.1.5: The closure type
   llvm::SmallVector<LambdaCapture, 4> Captures;
   llvm::SmallVector<ParmVarDecl *, 4> Params;
   Stmt *Body;  // CompoundStmt
@@ -1132,14 +1133,16 @@ class LambdaExpr : public Expr {
   class AttributeListDecl *Attrs = nullptr;         // C++23: lambda attributes
 
 public:
-  LambdaExpr(SourceLocation Loc, llvm::ArrayRef<LambdaCapture> Captures,
+  LambdaExpr(SourceLocation Loc, CXXRecordDecl *Closure,
+             llvm::ArrayRef<LambdaCapture> Captures,
              llvm::ArrayRef<ParmVarDecl *> Params, Stmt *Body,
              bool IsMutable = false, QualType ReturnType = QualType(),
              SourceLocation LBraceLoc = SourceLocation(),
              SourceLocation RBraceLoc = SourceLocation(),
              TemplateParameterList *TemplateParams = nullptr,
              class AttributeListDecl *Attrs = nullptr)
-      : Expr(Loc), Captures(Captures.begin(), Captures.end()),
+      : Expr(Loc), ClosureClass(Closure),
+        Captures(Captures.begin(), Captures.end()),
         Params(Params.begin(), Params.end()), Body(Body),
         IsMutable(IsMutable), ReturnType(ReturnType),
         LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc),
@@ -1152,6 +1155,9 @@ public:
   QualType getReturnType() const { return ReturnType; }
   TemplateParameterList *getTemplateParameters() const { return TemplateParams; }
   class AttributeListDecl *getAttributes() const { return Attrs; }
+  
+  // P7.1.5: Lambda closure class access
+  CXXRecordDecl *getClosureClass() const { return ClosureClass; }
 
   NodeKind getKind() const override { return NodeKind::LambdaExprKind; }
 

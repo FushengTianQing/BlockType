@@ -609,6 +609,9 @@ private:
   bool HasMoveConstructor;
   bool HasDestructor;
   unsigned CurrentAccess; // Current access specifier (0=private, 1=protected, 2=public)
+  
+  // P7.1.5: Lambda support
+  bool IsLambda = false;  // Whether this is a lambda closure class
 
 public:
   CXXRecordDecl(SourceLocation Loc, llvm::StringRef Name, TagKind TK = TK_class)
@@ -644,6 +647,10 @@ public:
   unsigned getCurrentAccess() const { return CurrentAccess; }
   void setCurrentAccess(unsigned Access) { CurrentAccess = Access; }
   bool isDefaultAccessPublic() const { return getTagKind() == TK_struct || getTagKind() == TK_union; }
+  
+  // P7.1.5: Lambda support
+  bool isLambda() const { return IsLambda; }
+  void setIsLambda(bool V) { IsLambda = V; }
 
   /// Check if this class is derived from the given base class.
   /// Performs a recursive search through the inheritance hierarchy.

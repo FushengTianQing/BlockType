@@ -1333,13 +1333,52 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
                                  SourceLocation RBraceLoc,
                                  TemplateParameterList *TemplateParams,
                                  AttributeListDecl *Attrs) {
-  auto *LE = Context.create<LambdaExpr>(Loc, Captures, Params, Body, IsMutable,
-                                         ReturnType, LBraceLoc, RBraceLoc,
+  // P7.1.5: Create closure class for lambda
+  static unsigned LambdaCounter = 0;
+  std::string ClosureName = "__lambda_" + std::to_string(++LambdaCounter);
+  
+  // 1. Create the closure class (anonymous class)
+  auto *ClosureClass = Context.create<CXXRecordDecl>(Loc, ClosureName, TagDecl::TK_class);
+  ClosureClass->setIsLambda(true);
+  
+  // 2. Add capture members to the closure class
+  for (const auto &Capture : Captures) {
+    // For now, use int as placeholder type for captures
+    // TODO: Infer actual capture types from context
+    QualType CaptureType = Context.getIntType();
+    auto *Field = Context.create<FieldDecl>(Capture.Loc, Capture.Name, CaptureType);
+    ClosureClass->addMember(Field);
+  }
+  
+  // 3. Create operator() method
+  // For simplicity, use void() for now
+  // TODO: Properly build function type with parameters
+  QualType OpCallType = QualType(Context.getFunctionType(Context.getVoidType().getTypePtr(),
+                                                          llvm::ArrayRef<const Type *>(), false));
+  
+  auto *CallOp = Context.create<CXXMethodDecl>(Loc, "operator()", OpCallType,
+                                                Params, ClosureClass,
+                                                nullptr /* Body */,
+                                                false /* isStatic */,
+                                                !IsMutable /* isConst */,
+                                                false /* isVolatile */,
+                                                false /* isVirtual */);
+  CallOp->setParent(ClosureClass);
+  ClosureClass->addMethod(CallOp);
+  
+  // 4. Register closure class in current scope
+  if (CurContext) {
+    CurContext->addDecl(ClosureClass);
+  }
+  
+  // 5. Create LambdaExpr with closure class
+  auto *LE = Context.create<LambdaExpr>(Loc, ClosureClass, Captures, Params, Body,
+                                         IsMutable, ReturnType, LBraceLoc, RBraceLoc,
                                          TemplateParams, Attrs);
-  // Lambda expression type: use ReturnType if explicitly specified,
-  // otherwise the closure type would need to be synthesized (TODO for full support).
-  if (!ReturnType.isNull())
-    LE->setType(ReturnType);
+  
+  // Set lambda expression type to the closure class type
+  LE->setType(Context.getRecordType(ClosureClass));
+  
   return ExprResult(LE);
 }
 
