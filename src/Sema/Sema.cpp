@@ -611,6 +611,8 @@ DeclGroupRef Sema::ActOnDecompositionDecl(SourceLocation Loc,
       llvm::APInt IndexValue(32, i);
       auto *IndexExpr = Context.create<IntegerLiteral>(Loc, IndexValue, Context.getIntType());
       BindingExpr = Context.create<ArraySubscriptExpr>(Loc, Init, IndexExpr);
+      // Set the element type for the subscript expression
+      BindingExpr->setType(ElementType);
     } else {
       // For tuple/pair types, create std::get<i>(init)
       ExprResult GetCall = BuildStdGetCall(i, Init, ElementType, Loc);
@@ -624,6 +626,8 @@ DeclGroupRef Sema::ActOnDecompositionDecl(SourceLocation Loc,
         llvm::APInt IndexValue(32, i);
         auto *IndexExpr = Context.create<IntegerLiteral>(Loc, IndexValue, Context.getIntType());
         BindingExpr = Context.create<ArraySubscriptExpr>(Loc, Init, IndexExpr);
+        // Set the element type for the subscript expression
+        BindingExpr->setType(ElementType);
       }
     }
     
