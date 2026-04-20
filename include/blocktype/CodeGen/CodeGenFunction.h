@@ -263,6 +263,10 @@ private:
   llvm::Value *EmitArraySubscriptExpr(ArraySubscriptExpr *ASE);
   llvm::Value *EmitConditionalOperator(ConditionalOperator *CO);
   llvm::Value *EmitInitListExpr(InitListExpr *ILE);
+  
+  // P7.1.5: Lambda expression
+  llvm::Value *EmitLambdaExpr(LambdaExpr *LE);
+  
   llvm::Value *EmitCXXConstructExpr(CXXConstructExpr *CCE,
                                      llvm::Value *DestPtr = nullptr);
   llvm::Value *EmitCXXThisExpr(CXXThisExpr *TE);

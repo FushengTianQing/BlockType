@@ -303,6 +303,10 @@ llvm::Value *CodeGenFunction::EmitExpr(Expr *Expression) {
   case ASTNode::NodeKind::InitListExprKind:
     return EmitInitListExpr(llvm::cast<InitListExpr>(Expression));
 
+  // P7.1.5: Lambda expression
+  case ASTNode::NodeKind::LambdaExprKind:
+    return EmitLambdaExpr(llvm::cast<LambdaExpr>(Expression));
+
   default:
     break;
   }

@@ -7,6 +7,7 @@ add_library(blocktype-codegen
   CodeGenStmt.cpp
   CodeGenTypes.cpp
   CodeGenExpr.cpp
+  LambdaCodeGen.cpp
   Mangler.cpp
   TargetInfo.cpp
 )
