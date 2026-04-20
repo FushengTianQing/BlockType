@@ -448,17 +448,25 @@ DeclResult Sema::ActOnAttributeDeclWithNamespace(SourceLocation Loc,
 
 DeclResult Sema::ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
                                   QualType T, Expr *Init, bool IsStatic) {
-  // P7.1.5 Fix: For auto variables with lambda initializer, use lambda's type
+  // Auto type deduction: replace AutoType with initializer's type
   QualType ActualType = T;
   if (T.getTypePtr() && T->getTypeClass() == TypeClass::Auto && Init) {
-    // Auto deduction: use the initializer's type
+    // Get the initializer's type
     QualType InitType = Init->getType();
     if (!InitType.isNull()) {
       ActualType = InitType;
+    } else {
+      // If Init type is null, report error
+      Diags.report(Loc, DiagID::err_type_mismatch);
+      return DeclResult::getInvalid();
     }
   }
   
-  if (!ActualType.isNull()) RequireCompleteType(ActualType, Loc);
+  // Check for complete type
+  if (!ActualType.isNull() && !RequireCompleteType(ActualType, Loc)) {
+    return DeclResult::getInvalid();
+  }
+  
   auto *VD = Context.create<VarDecl>(Loc, Name, ActualType, Init, IsStatic);
   registerDecl(VD);
   if (CurContext) CurContext->addDecl(VD);

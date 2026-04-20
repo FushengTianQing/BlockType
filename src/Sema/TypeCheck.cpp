@@ -49,13 +49,17 @@ bool TypeCheck::CheckAssignment(QualType LHS, QualType RHS, SourceLocation Loc) 
 bool TypeCheck::CheckInitialization(QualType Dest, Expr *Init,
                                     SourceLocation Loc) {
   if (Dest.isNull() || !Init) {
-    Diags.report(Loc, DiagID::err_type_mismatch);
+    Diags.report(Loc, DiagID::err_type_mismatch, 
+                 Dest.isNull() ? "<null>" : Dest.getAsString(),
+                 "<null>");
     return false;
   }
 
   QualType InitType = Init->getType();
   if (InitType.isNull()) {
-    Diags.report(Loc, DiagID::err_type_mismatch);
+    Diags.report(Loc, DiagID::err_type_mismatch,
+                 Dest.getAsString(),
+                 "<null>");
     return false;
   }
 
@@ -66,7 +70,9 @@ bool TypeCheck::CheckInitialization(QualType Dest, Expr *Init,
 
   // Check convertibility
   if (!isTypeCompatible(InitType, Dest)) {
-    Diags.report(Loc, DiagID::err_type_mismatch);
+    Diags.report(Loc, DiagID::err_type_mismatch,
+                 Dest.getAsString(),
+                 InitType.getAsString());
     return false;
   }
 
@@ -240,11 +246,15 @@ bool TypeCheck::CheckReturn(Expr *RetVal, QualType FuncRetType,
         ILE->setType(FuncRetType);
         RetType = FuncRetType;
       } else {
-        Diags.report(ReturnLoc, DiagID::err_return_type_mismatch);
+        Diags.report(ReturnLoc, DiagID::err_return_type_mismatch,
+                     FuncRetType.getAsString(),
+                     "<null>");
         return false;
       }
     } else {
-      Diags.report(ReturnLoc, DiagID::err_return_type_mismatch);
+      Diags.report(ReturnLoc, DiagID::err_return_type_mismatch,
+                   FuncRetType.getAsString(),
+                   "<null>");
       return false;
     }
   }
@@ -256,7 +266,9 @@ bool TypeCheck::CheckReturn(Expr *RetVal, QualType FuncRetType,
 
   // Non-void function: return value must be convertible
   if (!isTypeCompatible(RetType, FuncRetType)) {
-    Diags.report(ReturnLoc, DiagID::err_return_type_mismatch);
+    Diags.report(ReturnLoc, DiagID::err_return_type_mismatch,
+                 FuncRetType.getAsString(),
+                 RetType.getAsString());
     return false;
   }
 
