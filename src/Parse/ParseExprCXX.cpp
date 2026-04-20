@@ -578,6 +578,58 @@ Expr *Parser::parseCStyleCastExpr() {
   if (!CastType.isNull() && Quals != Qualifier::None) {
     CastType = Context.getQualifiedType(CastType.getTypePtr(), Quals);
   }
+  
+  // Handle pointer types (e.g., int*, int**)
+  while (Tok.is(TokenKind::star)) {
+    consumeToken(); // consume '*'
+    
+    // Parse CVR qualifiers for pointer
+    Qualifier PtrQuals = Qualifier::None;
+    while (Tok.is(TokenKind::kw_const) || Tok.is(TokenKind::kw_volatile)) {
+      if (Tok.is(TokenKind::kw_const)) {
+        PtrQuals = PtrQuals | Qualifier::Const;
+        consumeToken();
+      }
+      if (Tok.is(TokenKind::kw_volatile)) {
+        PtrQuals = PtrQuals | Qualifier::Volatile;
+        consumeToken();
+      }
+    }
+    
+    // Create pointer type
+    CastType = Context.getPointerType(CastType.getTypePtr());
+    
+    // Apply pointer qualifiers
+    if (PtrQuals != Qualifier::None) {
+      CastType = Context.getQualifiedType(CastType.getTypePtr(), PtrQuals);
+    }
+  }
+  
+  // Handle pointer types (e.g., int*, int**)
+  while (Tok.is(TokenKind::star)) {
+    consumeToken(); // consume '*'
+    
+    // Parse CVR qualifiers for pointer
+    Qualifier PtrQuals = Qualifier::None;
+    while (Tok.is(TokenKind::kw_const) || Tok.is(TokenKind::kw_volatile)) {
+      if (Tok.is(TokenKind::kw_const)) {
+        PtrQuals = PtrQuals | Qualifier::Const;
+        consumeToken();
+      }
+      if (Tok.is(TokenKind::kw_volatile)) {
+        PtrQuals = PtrQuals | Qualifier::Volatile;
+        consumeToken();
+      }
+    }
+    
+    // Create pointer type
+    CastType = Context.getPointerType(CastType.getTypePtr());
+    
+    // Apply pointer qualifiers
+    if (PtrQuals != Qualifier::None) {
+      CastType = Context.getQualifiedType(CastType.getTypePtr(), PtrQuals);
+    }
+  }
 
   if (!tryConsumeToken(TokenKind::r_paren)) {
     emitError(DiagID::err_expected_rparen);

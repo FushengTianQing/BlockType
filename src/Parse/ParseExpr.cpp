@@ -331,7 +331,8 @@ Expr *Parser::parseUnaryExpression() {
   // P7.1.6: Check for C-style cast at the very beginning of unary expression parsing
   // This ensures we intercept (type)expr before any other path consumes the type token
   if (Tok.is(TokenKind::l_paren)) {
-    Token Next = PP.peekToken(0);
+    // Use NextTok instead of PP.peekToken() to avoid buffer synchronization issues
+    Token Next = NextTok;
     
     // Check if next token is a basic type keyword
     if (Next.is(TokenKind::kw_int) || Next.is(TokenKind::kw_float) || 
@@ -342,14 +343,8 @@ Expr *Parser::parseUnaryExpression() {
       return parseCStyleCastExpr();
     }
     
-    // Check for identifier that might be a type
-    if (Next.is(TokenKind::identifier)) {
-      Token NextNext = PP.peekToken(1);
-      if (NextNext.is(TokenKind::r_paren) || NextNext.is(TokenKind::kw_const) || 
-          NextNext.is(TokenKind::kw_volatile) || NextNext.is(TokenKind::star)) {
-        return parseCStyleCastExpr();
-      }
-    }
+    // For identifiers, we need 2-token lookahead which is complex.
+    // Let parseParenExpression handle it with tentative parsing.
   }
   
   // Check for C++ new/delete
@@ -1204,46 +1199,8 @@ Expr *Parser::tryParseTemplateOrComparison(SourceLocation Loc, llvm::StringRef N
 Expr *Parser::parseParenExpression() {
   SourceLocation LParenLoc = Tok.getLocation();
   
-  // P7.1.6: Use tentative parsing for C-style cast detection
-  // This allows us to try parsing as cast and fall back to normal paren expression
-  Token Next = PP.peekToken(0);
-  
-  bool MightBeCast = false;
-  
-  // Check if next token is a basic type keyword
-  if (Next.is(TokenKind::kw_int) || Next.is(TokenKind::kw_float) || 
-      Next.is(TokenKind::kw_double) || Next.is(TokenKind::kw_char) ||
-      Next.is(TokenKind::kw_void) || Next.is(TokenKind::kw_bool) ||
-      Next.is(TokenKind::kw_long) || Next.is(TokenKind::kw_short) ||
-      Next.is(TokenKind::kw_signed) || Next.is(TokenKind::kw_unsigned)) {
-    MightBeCast = true;
-  }
-  
-  // Check for identifier that might be a type
-  if (Next.is(TokenKind::identifier)) {
-    Token NextNext = PP.peekToken(1);
-    if (NextNext.is(TokenKind::r_paren) || NextNext.is(TokenKind::kw_const) || 
-        NextNext.is(TokenKind::kw_volatile) || NextNext.is(TokenKind::star)) {
-      MightBeCast = true;
-    }
-  }
-  
-  if (MightBeCast) {
-    // Try parsing as C-style cast using tentative parsing
-    TentativeParsingAction TPA(*this);
-    
-    Expr *CastExpr = parseCStyleCastExpr();
-    
-    // Check if parsing succeeded (not a recovery expression)
-    if (CastExpr && !llvm::isa<RecoveryExpr>(CastExpr)) {
-      // Success! Commit the parsing
-      TPA.commit();
-      return CastExpr;
-    }
-    
-    // Failed to parse as cast, abort and fall through to normal paren expression
-    TPA.abort();
-  }
+  // P7.1.6: C-style cast detection is now handled in parseUnaryExpression.
+  // This function only handles normal parenthesized expressions.
   
   // Normal parenthesized expression
   consumeToken();

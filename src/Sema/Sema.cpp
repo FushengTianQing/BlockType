@@ -1526,7 +1526,11 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
   
   // Case 2: Variable holding a lambda: auto lambda = [](){}; lambda()
   if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
-    if (auto *VD = llvm::dyn_cast<VarDecl>(DRE->getDecl())) {
+    Decl *D = DRE->getDecl();
+    // If D is nullptr, this is an undeclared identifier - skip lambda check
+    if (!D) {
+      // Continue to regular function call handling below
+    } else if (auto *VD = llvm::dyn_cast<VarDecl>(D)) {
       QualType VarType = VD->getType();
       if (VarType->isRecordType()) {
         auto *RT = static_cast<const RecordType *>(VarType.getTypePtr());
@@ -1560,7 +1564,7 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
           }
         }
       }
-    }
+    } // end else if VD
   }
 
   // Resolve the callee
