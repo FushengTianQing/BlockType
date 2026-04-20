@@ -151,6 +151,8 @@ void Parser::parseDeclSpecifierSeq(DeclSpec &DS) {
 
     // 4. Type specifier (only one allowed)
     if (!SeenType) {
+      llvm::errs() << "DEBUG parseDeclSpecifierSeq: About to call parseTypeSpecifier, current token = '" 
+                   << Tok.getText().str() << "', kind = " << static_cast<int>(Tok.getKind()) << "\n";
       QualType Ty = parseTypeSpecifier();
       llvm::errs() << "DEBUG: parseDeclSpecifierSeq - parseTypeSpecifier returned " 
                    << (Ty.isNull() ? "null" : "non-null") << "\n";

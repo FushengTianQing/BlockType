@@ -80,8 +80,12 @@ QualType Parser::parseTypeSpecifier() {
     if (Result.isNull()) {
       // Try to parse a named type
       if (Tok.is(TokenKind::identifier)) {
+        llvm::errs() << "DEBUG parseTypeSpecifier: Before parseNestedNameSpecifier, token = '" 
+                     << Tok.getText().str() << "'\n";
         // Check for nested-name-specifier (A::B::C)
         llvm::StringRef Qualifier = parseNestedNameSpecifier();
+        llvm::errs() << "DEBUG parseTypeSpecifier: After parseNestedNameSpecifier, token = '" 
+                     << Tok.getText().str() << "', kind = " << static_cast<int>(Tok.getKind()) << "\n";
 
         // Parse the final type name
         if (!Tok.is(TokenKind::identifier)) {
@@ -91,24 +95,12 @@ QualType Parser::parseTypeSpecifier() {
 
         llvm::StringRef TypeName = Tok.getText();
         SourceLocation TypeNameLoc = Tok.getLocation();
-        
-        // Layer 0: Check if next token is '<' (template specialization)
-        Token NextTok = PP.peekToken(0);
-        bool IsTemplateSpec = NextTok.is(TokenKind::less);
-        llvm::errs() << "DEBUG parseTypeSpecifier: Layer 0 - TypeName='" << TypeName.str() 
-                     << "', NextToken kind=" << static_cast<int>(NextTok.getKind()) 
-                     << ", IsTemplateSpec=" << IsTemplateSpec << "\n";
-        
         consumeToken(); // consume identifier
 
         // Check for template argument list
         // Use three-layer disambiguation (similar to expression context)
         // to avoid misparsing comparisons as template specializations.
-        if (IsTemplateSpec) {
-          llvm::errs() << "DEBUG parseTypeSpecifier: Layer 0 - Found '<' after '" << TypeName.str() << "', treating as template\n";
-          // Parse template arguments
-          Result = parseTemplateSpecializationType(TypeName);
-        } else if (Tok.is(TokenKind::less)) {
+        if (Tok.is(TokenKind::less)) {
           llvm::errs() << "DEBUG parseTypeSpecifier: Found '<' after '" << TypeName.str() << "'\n";
           bool ShouldParseAsTemplate = false;
 
@@ -509,6 +501,13 @@ QualType Parser::parseTemplateSpecializationType(llvm::StringRef TemplateName) {
   }
   consumeToken(); // consume '>'
   
+  // Try to instantiate the class template
+  QualType Result = Actions.InstantiateClassTemplate(TemplateName, TemplateSpec);
+  if (!Result.isNull()) {
+    return Result;
+  }
+  
+  // If instantiation failed, return the TemplateSpecializationType as-is
   return QualType(TemplateSpec, Qualifier::None);
 }
 

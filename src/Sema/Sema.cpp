@@ -109,6 +109,100 @@ NamedDecl *Sema::LookupName(llvm::StringRef Name) const {
   return Decls.empty() ? nullptr : Decls.front();
 }
 
+/// InstantiateClassTemplate - Instantiate a class template with given arguments.
+QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
+                                        TemplateSpecializationType *TST) {
+  llvm::errs() << "DEBUG InstantiateClassTemplate: TemplateName = '" << TemplateName.str() << "'\n";
+  // Step 1: Look up the template declaration
+  NamedDecl *LookupResult = LookupName(TemplateName);
+  if (!LookupResult) {
+    Diags.report(SourceLocation(), DiagID::err_undeclared_var, TemplateName);
+    return QualType();
+  }
+  
+  // Step 2: Check if it's a ClassTemplateDecl
+  auto *ClassTemplate = llvm::dyn_cast<ClassTemplateDecl>(LookupResult);
+  llvm::errs() << "DEBUG InstantiateClassTemplate: IsClassTemplateDecl = " << (ClassTemplate ? "yes" : "no") << "\n";
+  if (!ClassTemplate) {
+    // Not a class template, can't instantiate
+    return QualType();
+  }
+  
+  // Step 3: Get template arguments from TST
+  auto Args = TST->getTemplateArgs();
+  if (Args.empty()) {
+    Diags.report(SourceLocation(), DiagID::err_template_arg_num_different,
+                 "no arguments", TemplateName);
+    return QualType();
+  }
+  
+  // Step 4: Check if this specialization already exists
+  // TODO: Implement specialization cache
+  
+  // Step 5: Get the templated class declaration
+  auto *TemplatedDecl = ClassTemplate->getTemplatedDecl();
+  if (!TemplatedDecl) {
+    Diags.report(SourceLocation(), DiagID::err_template_recursion);
+    return QualType();
+  }
+  
+  // Step 6: Create TemplateInstantiation and set up substitutions
+  TemplateInstantiation Inst;
+  auto Params = ClassTemplate->getTemplateParameters();
+  
+  if (Params.empty()) {
+    Diags.report(SourceLocation(), DiagID::err_template_arg_num_different,
+                 "no template parameters", TemplateName);
+    return QualType();
+  }
+  
+  // Build substitution map from template parameters to arguments
+  for (unsigned i = 0; i < std::min(Args.size(), Params.size()); ++i) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(Params[i])) {
+      Inst.addSubstitution(ParamDecl, Args[i]);
+    }
+  }
+  
+  // Step 7: Clone the CXXRecordDecl with substituted types
+  auto *OriginalRecord = llvm::dyn_cast<CXXRecordDecl>(TemplatedDecl);
+  llvm::errs() << "DEBUG InstantiateClassTemplate: OriginalRecord = " << (OriginalRecord ? "found" : "null") << "\n";
+  if (!OriginalRecord) {
+    Diags.report(SourceLocation(), DiagID::err_expected);
+    return QualType();
+  }
+  
+  llvm::errs() << "DEBUG InstantiateClassTemplate: OriginalRecord has " << OriginalRecord->fields().size() << " fields\n";
+  
+  // Create a new CXXRecordDecl for the specialization
+  auto *SpecializedRecord = Context.create<CXXRecordDecl>(
+      OriginalRecord->getLocation(),
+      OriginalRecord->getName(),
+      OriginalRecord->getTagKind());
+  
+  // Clone fields with substituted types
+  for (auto *Field : OriginalRecord->fields()) {
+    QualType SubstFieldType = Inst.substituteType(Field->getType());
+    
+    auto *NewField = Context.create<FieldDecl>(
+        Field->getLocation(),
+        Field->getName(),
+        SubstFieldType,
+        Field->getBitWidth(),
+        Field->isMutable(),
+        Field->getInClassInitializer(),
+        Field->getAccess());
+    
+    SpecializedRecord->addField(NewField);
+    registerDecl(NewField);
+  }
+  
+  // Register the specialized record
+  registerDecl(SpecializedRecord);
+  
+  // Return the type of the specialized record
+  return Context.getTypeDeclType(SpecializedRecord);
+}
+
 // P7.4.3: Lookup a namespace by name
 // Supports: "std", "std::pair", etc.
 NamespaceDecl *Sema::LookupNamespace(llvm::StringRef NamespaceName) const {
