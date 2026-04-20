@@ -1113,6 +1113,7 @@ struct LambdaCapture {
   StringRef Name;
   class Expr *InitExpr = nullptr;  // For init captures
   SourceLocation Loc;
+  class NamedDecl *CapturedDecl = nullptr;  // P7.1.5: The captured variable declaration
   
   LambdaCapture() = default;
   LambdaCapture(CaptureKind K, StringRef N, class Expr *I, SourceLocation L)

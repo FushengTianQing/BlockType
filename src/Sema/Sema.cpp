@@ -1377,7 +1377,7 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
   ClosureClass->setCompleteDefinition(true);
   
   // 2. Add capture members to the closure class
-  for (const auto &Capture : Captures) {
+  for (auto &Capture : Captures) {
     // P7.1.5 Phase 1: Infer capture type from context
     QualType CaptureType;
     
@@ -1387,6 +1387,7 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
     } else {
       // Named capture: [x] or [&x] - lookup in current scope
       NamedDecl *CapturedDecl = LookupName(Capture.Name);
+      Capture.CapturedDecl = CapturedDecl;  // Store for CodeGen
       if (CapturedDecl) {
         if (auto *VD = llvm::dyn_cast<VarDecl>(CapturedDecl)) {
           CaptureType = VD->getType();
