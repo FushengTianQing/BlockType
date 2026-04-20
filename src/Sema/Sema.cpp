@@ -539,6 +539,8 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
 
 /// Check if a type is tuple-like (std::pair, std::tuple, or array)
 static bool IsTupleLikeType(QualType Ty) {
+  if (!Ty.getTypePtr()) return false;
+  
   if (llvm::isa<ArrayType>(Ty.getTypePtr())) {
     return true;
   }
