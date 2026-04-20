@@ -1450,6 +1450,7 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
     return ExprResult::getInvalid();
 
   // P7.1.5 Phase 2: Handle lambda expression calls
+  // Case 1: Direct lambda expression: [](){}()
   if (auto *LE = llvm::dyn_cast<LambdaExpr>(Fn)) {
     // Lambda call: get the operator() from closure class
     auto *ClosureClass = LE->getClosureClass();
@@ -1475,12 +1476,9 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
     }
     
     // Create CallExpr with operator() as callee
-    // For member function calls, the first argument should be 'this' pointer
-    // But for simplicity, we just use the lambda expression directly
     auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
     
     // Set the return type from operator()
-    // The function type is ReturnType(Params...), so we need to extract ReturnType
     QualType FuncType = CallOp->getType();
     if (FuncType->isFunctionType()) {
       auto *FT = static_cast<const FunctionType *>(FuncType.getTypePtr());
@@ -1490,6 +1488,45 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
     }
     
     return ExprResult(CE);
+  }
+  
+  // Case 2: Variable holding a lambda: auto lambda = [](){}; lambda()
+  if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
+    if (auto *VD = llvm::dyn_cast<VarDecl>(DRE->getDecl())) {
+      QualType VarType = VD->getType();
+      if (VarType->isRecordType()) {
+        auto *RT = static_cast<const RecordType *>(VarType.getTypePtr());
+        auto *RD = RT->getDecl();
+        if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RD)) {
+          if (CXXRD->isLambda()) {
+            // This is a lambda variable, find operator()
+            CXXMethodDecl *CallOp = nullptr;
+            for (auto *Method : CXXRD->methods()) {
+              if (Method->getName() == "operator()") {
+                CallOp = Method;
+                break;
+              }
+            }
+            
+            if (CallOp) {
+              // Create CallExpr with the variable as callee
+              auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
+              
+              // Set return type
+              QualType FuncType = CallOp->getType();
+              if (FuncType->isFunctionType()) {
+                auto *FT = static_cast<const FunctionType *>(FuncType.getTypePtr());
+                CE->setType(QualType(FT->getReturnType(), Qualifier::None));
+              } else {
+                CE->setType(FuncType);
+              }
+              
+              return ExprResult(CE);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Resolve the callee

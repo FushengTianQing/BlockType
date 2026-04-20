@@ -1450,6 +1450,33 @@ llvm::Value *CodeGenFunction::EmitLValue(Expr *Expression) {
     }
   }
 
+  // P7.1.5: Lambda expression - the lambda object itself is an lvalue
+  if (auto *LE = llvm::dyn_cast<LambdaExpr>(Expression)) {
+    // For lambda expressions, we need to get the closure object address
+    // The lambda variable should have been allocated as a local variable
+    // We look it up in the local declarations
+    auto *ClosureClass = LE->getClosureClass();
+    if (ClosureClass) {
+      // Try to find the lambda variable in local scope
+      // For now, we create an alloca for the closure object
+      llvm::StructType *ClosureTy = llvm::dyn_cast<llvm::StructType>(
+          CGM.getTypes().ConvertType(Expression->getType()));
+      if (ClosureTy) {
+        // Create alloca for the closure object
+        llvm::AllocaInst *Alloca = Builder.CreateAlloca(
+            ClosureTy, nullptr, "lambda_closure");
+        
+        // Initialize capture members (simplified - just zero init for now)
+        Builder.CreateMemSet(Alloca, 
+                            llvm::ConstantInt::get(Builder.getInt8Ty(), 0),
+                            CGM.getDataLayout().getTypeAllocSize(ClosureTy),
+                            llvm::MaybeAlign());
+        
+        return Alloca;
+      }
+    }
+  }
+
   return nullptr;
 }
 
