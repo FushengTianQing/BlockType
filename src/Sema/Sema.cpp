@@ -494,9 +494,9 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
     return TupleType; // Fallback to original type
   }
   
-  // Check if it's an ArrayType - handled separately
-  if (llvm::isa<ArrayType>(Ty)) {
-    return TupleType; // Will be handled by array subscript
+  // Handle array types T[N] - all elements have the same type
+  if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
+    return AT->getElementType();
   }
   
   // Check if it's a RecordType (class/struct)
@@ -528,7 +528,16 @@ static QualType GetTupleElementType(QualType TupleType, unsigned Index) {
       }
       
       // Fallback: if not a specialization or index out of range,
-      // return the original type
+      // try to get field type from record declaration
+      unsigned FieldIndex = 0;
+      for (auto *Field : RD->fields()) {
+        if (FieldIndex == Index) {
+          return Field->getType();
+        }
+        FieldIndex++;
+      }
+      
+      // Last resort: return the original type
       return TupleType;
     }
   }
@@ -562,6 +571,43 @@ static bool IsTupleLikeType(QualType Ty) {
   return false;
 }
 
+/// Get the number of elements in a tuple-like type
+static unsigned GetTupleElementCount(QualType TupleType) {
+  QualType UnqualType = TupleType.getCanonicalType();
+  const Type *Ty = UnqualType.getTypePtr();
+  
+  if (!Ty) {
+    return 0;
+  }
+  
+  // Handle array types
+  if (auto *AT = llvm::dyn_cast<ConstantArrayType>(Ty)) {
+    return AT->getSize().getZExtValue();
+  }
+  
+  // Handle record types (pair/tuple)
+  if (auto *RT = llvm::dyn_cast<RecordType>(Ty)) {
+    RecordDecl *RD = RT->getDecl();
+    if (!RD) {
+      return 0;
+    }
+    
+    // Check if it's a template specialization
+    if (auto *Spec = llvm::dyn_cast<ClassTemplateSpecializationDecl>(RD)) {
+      return Spec->getNumTemplateArgs();
+    }
+    
+    // For non-specialization, count fields
+    unsigned Count = 0;
+    for (auto *Field : RD->fields()) {
+      Count++;
+    }
+    return Count;
+  }
+  
+  return 0;
+}
+
 // P7.4.3: Structured binding implementation
 DeclGroupRef Sema::ActOnDecompositionDecl(SourceLocation Loc,
                                          llvm::ArrayRef<llvm::StringRef> Names,
@@ -588,22 +634,8 @@ DeclGroupRef Sema::ActOnDecompositionDecl(SourceLocation Loc,
   }
   
   // Check if it's a record type (pair/tuple) or array
-  bool IsDecomposable = false;
-  unsigned NumElements = 0;
-  
-  if (auto *RT = llvm::dyn_cast<RecordType>(Ty)) {
-    RecordDecl *RD = RT->getDecl();
-    if (RD && llvm::isa<ClassTemplateSpecializationDecl>(RD)) {
-      auto *Spec = llvm::cast<ClassTemplateSpecializationDecl>(RD);
-      NumElements = Spec->getNumTemplateArgs();
-      IsDecomposable = true;
-    }
-  } else if (auto *AT = llvm::dyn_cast<ArrayType>(Ty)) {
-    // Array types are always decomposable
-    IsDecomposable = true;
-    // TODO: Get array size for fixed-size arrays
-    NumElements = Names.size(); // Assume correct for now
-  }
+  bool IsDecomposable = IsTupleLikeType(TupleType);
+  unsigned NumElements = GetTupleElementCount(TupleType);
   
   if (!IsDecomposable) {
     Diags.report(Loc, DiagID::err_structured_binding_not_decomposable,
