@@ -672,36 +672,55 @@ void Sema::InitializeStdNamespace() {
   // Add to symbol table
   Symbols.addNamespaceDecl(StdNS);
   
-  // Create a simplified std::get function template
-  // For structured bindings, we need: template<size_t N, class T> get(T&)
-  // We'll create a minimal version that can be instantiated
+  // Create std::get function template with proper signature:
+  // template<size_t N, class... Types> constexpr decltype(auto) get(tuple<Types...>& t) noexcept;
   
-  // Create template parameter list with just one type parameter for simplicity
-  llvm::SmallVector<NamedDecl *, 1> TemplateParams;
+  // For simplicity in current implementation, we create a version that works for structured bindings:
+  // template<size_t I, class T> constexpr T& get(T& t) noexcept;
+  
+  // Create template parameter list
+  llvm::SmallVector<NamedDecl *, 2> TemplateParams;
+  
+  // First parameter: size_t I (non-type template parameter)
+  QualType SizeTType = Context.getIntType(); // Use int for simplicity (size_t would be better)
+  auto *IParam = Context.create<NonTypeTemplateParmDecl>(
+      SourceLocation(), "I", SizeTType,
+      /*Depth=*/0, /*Index=*/0, /*IsParameterPack=*/false);
+  TemplateParams.push_back(IParam);
+  
+  // Second parameter: class T (type parameter)
   auto *TParam = Context.create<TemplateTypeParmDecl>(
-      SourceLocation(), "_T", /*Depth=*/0, /*Index=*/0, /*IsParameterPack=*/false,
-      /*TypenameKeyword=*/true);
+      SourceLocation(), "T", /*Depth=*/0, /*Index=*/1, 
+      /*IsParameterPack=*/false, /*TypenameKeyword=*/true);
   TemplateParams.push_back(TParam);
   
   auto *TPL = new TemplateParameterList(
       SourceLocation(), SourceLocation(), SourceLocation(), TemplateParams);
   
-  // Create function declaration with generic signature
-  QualType ParamType = Context.getAutoType();
+  // Create function declaration
+  // Parameter: T& t (reference to T)
+  QualType TType = Context.getTemplateTypeParmType(/*Depth=*/0, /*Index=*/1, 
+                                                     /*IsParameterPack=*/false, TParam);
+  QualType RefType = Context.getLValueReferenceType(TType.getTypePtr());
+  
   auto *Param = Context.create<ParmVarDecl>(
-      SourceLocation(), "t", ParamType, /*HasDefaultArg=*/false);
+      SourceLocation(), "t", RefType, /*HasDefaultArg=*/false);
   
   llvm::SmallVector<ParmVarDecl *, 1> Params;
   Params.push_back(Param);
   
+  // Return type: T& (same as parameter)
   auto *FD = Context.create<FunctionDecl>(
-      SourceLocation(), "get", Context.getAutoType(), Params,
+      SourceLocation(), "get", RefType, Params,
       /*Body=*/nullptr, /*IsInline=*/false, 
-      /*IsConstexpr=*/false, /*IsConsteval=*/false);
+      /*IsConstexpr=*/true, /*IsConsteval=*/false);
   
-  // FunctionTemplateDecl takes (Loc, Name, TemplatedDecl)
+  // Create function template
   auto *GetTemplate = Context.create<FunctionTemplateDecl>(
       SourceLocation(), "get", FD);
+  
+  // Set the template parameter list on the template (not the function)
+  GetTemplate->setTemplateParameterList(TPL);
   
   // Add to std namespace
   StdNS->addDecl(GetTemplate);
