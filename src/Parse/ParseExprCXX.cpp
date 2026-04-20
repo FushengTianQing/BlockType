@@ -527,11 +527,56 @@ Expr *Parser::parseCStyleCastExpr() {
   SourceLocation LParenLoc = Tok.getLocation();
   consumeToken(); // consume '('
 
-  // Parse type
-  QualType CastType = parseType();
+  // P7.1.6: Parse a simple type for C-style cast
+  // Instead of using full parseType(), use a simplified version
+  // that only handles basic type keywords
+  QualType CastType;
+  
+  // Parse CVR qualifiers
+  Qualifier Quals = Qualifier::None;
+  while (Tok.is(TokenKind::kw_const) || Tok.is(TokenKind::kw_volatile)) {
+    if (Tok.is(TokenKind::kw_const)) {
+      Quals = Quals | Qualifier::Const;
+      consumeToken();
+    }
+    if (Tok.is(TokenKind::kw_volatile)) {
+      Quals = Quals | Qualifier::Volatile;
+      consumeToken();
+    }
+  }
+  
+  // Parse base type
+  CastType = parseBuiltinType();
+  
   if (CastType.isNull()) {
-    emitError(DiagID::err_expected_type);
-    return createRecoveryExpr(LParenLoc);
+    // Try identifier (user-defined type)
+    if (Tok.is(TokenKind::identifier)) {
+      llvm::StringRef TypeName = Tok.getText();
+      SourceLocation TypeNameLoc = Tok.getLocation();
+      consumeToken();
+      
+      // Lookup the type
+      if (NamedDecl *LookupDecl = Actions.LookupName(TypeName)) {
+        if (auto *RecDecl = llvm::dyn_cast<RecordDecl>(LookupDecl)) {
+          CastType = Context.getRecordType(RecDecl);
+        } else if (auto *TypedefDeclPtr = llvm::dyn_cast<TypedefDecl>(LookupDecl)) {
+          CastType = TypedefDeclPtr->getUnderlyingType();
+        }
+      }
+      
+      if (CastType.isNull()) {
+        emitError(DiagID::err_expected_type);
+        return createRecoveryExpr(LParenLoc);
+      }
+    } else {
+      emitError(DiagID::err_expected_type);
+      return createRecoveryExpr(LParenLoc);
+    }
+  }
+  
+  // Apply qualifiers
+  if (!CastType.isNull() && Quals != Qualifier::None) {
+    CastType = Context.getQualifiedType(CastType.getTypePtr(), Quals);
   }
 
   if (!tryConsumeToken(TokenKind::r_paren)) {

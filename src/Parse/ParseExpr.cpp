@@ -328,6 +328,30 @@ Expr *Parser::parseRHS(Expr *LHS, PrecedenceLevel MinPrec) {
 //===----------------------------------------------------------------------===//
 
 Expr *Parser::parseUnaryExpression() {
+  // P7.1.6: Check for C-style cast at the very beginning of unary expression parsing
+  // This ensures we intercept (type)expr before any other path consumes the type token
+  if (Tok.is(TokenKind::l_paren)) {
+    Token Next = PP.peekToken(0);
+    
+    // Check if next token is a basic type keyword
+    if (Next.is(TokenKind::kw_int) || Next.is(TokenKind::kw_float) || 
+        Next.is(TokenKind::kw_double) || Next.is(TokenKind::kw_char) ||
+        Next.is(TokenKind::kw_void) || Next.is(TokenKind::kw_bool) ||
+        Next.is(TokenKind::kw_long) || Next.is(TokenKind::kw_short) ||
+        Next.is(TokenKind::kw_signed) || Next.is(TokenKind::kw_unsigned)) {
+      return parseCStyleCastExpr();
+    }
+    
+    // Check for identifier that might be a type
+    if (Next.is(TokenKind::identifier)) {
+      Token NextNext = PP.peekToken(1);
+      if (NextNext.is(TokenKind::r_paren) || NextNext.is(TokenKind::kw_const) || 
+          NextNext.is(TokenKind::kw_volatile) || NextNext.is(TokenKind::star)) {
+        return parseCStyleCastExpr();
+      }
+    }
+  }
+  
   // Check for C++ new/delete
   if (Tok.is(TokenKind::kw_new)) {
     return parseCXXNewExpression();
