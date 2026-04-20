@@ -1343,6 +1343,27 @@ ExprResult Sema::ActOnLambdaExpr(SourceLocation Loc,
                                  SourceLocation RBraceLoc,
                                  TemplateParameterList *TemplateParams,
                                  AttributeListDecl *Attrs) {
+  // P7.1.5: Infer return type if not specified
+  if (ReturnType.isNull() && Body) {
+    // Simple return type deduction: look for return statements in body
+    // For now, just check if there's a return with an integer literal
+    // TODO: Implement proper return type deduction
+    if (auto *CS = llvm::dyn_cast<CompoundStmt>(Body)) {
+      for (auto *S : CS->getBody()) {
+        if (auto *RS = llvm::dyn_cast<ReturnStmt>(S)) {
+          if (auto *RetExpr = RS->getRetValue()) {
+            ReturnType = RetExpr->getType();
+            break; // Use the first return statement's type
+          }
+        }
+      }
+    }
+    // If still null, default to void
+    if (ReturnType.isNull()) {
+      ReturnType = Context.getVoidType();
+    }
+  }
+  
   // P7.1.5: Create closure class for lambda
   static unsigned LambdaCounter = 0;
   std::string ClosureName = "__lambda_" + std::to_string(++LambdaCounter);
