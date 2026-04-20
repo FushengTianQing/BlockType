@@ -1688,8 +1688,17 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
   // Parse binding names
   llvm::SmallVector<llvm::StringRef, 4> Names;
   llvm::SmallVector<SourceLocation, 4> NameLocs;
+  bool HasPackExpansion = false;
+  SourceLocation PackExpansionLoc;
   
   do {
+    // Check for pack expansion: ...name
+    if (Tok.is(TokenKind::ellipsis)) {
+      PackExpansionLoc = Tok.getLocation();
+      consumeToken(); // consume '...'
+      HasPackExpansion = true;
+    }
+    
     if (!Tok.is(TokenKind::identifier)) {
       emitError(DiagID::err_expected_identifier);
       return nullptr;
@@ -1699,6 +1708,10 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
     NameLocs.push_back(Tok.getLocation());
     consumeToken(); // consume identifier
     
+    // If we have a pack expansion, it must be the last element
+    if (HasPackExpansion) {
+      break;
+    }
   } while (tryConsumeToken(TokenKind::comma));
   
   // Expect ']'
@@ -1735,7 +1748,14 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
   QualType InitType = Init->getType();
   
   // Call Sema to create binding declarations
-  auto Result = Actions.ActOnDecompositionDecl(AutoLoc, Names, InitType, Init);
+  DeclGroupRef Result;
+  if (HasPackExpansion) {
+    // P1061R10: Structured binding with pack expansion
+    Result = Actions.ActOnDecompositionDeclWithPack(AutoLoc, Names, HasPackExpansion,
+                                                     PackExpansionLoc, InitType, Init);
+  } else {
+    Result = Actions.ActOnDecompositionDecl(AutoLoc, Names, InitType, Init);
+  }
   
   if (!Result.isUsable()) {
     return nullptr;

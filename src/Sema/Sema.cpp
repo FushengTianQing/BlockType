@@ -768,6 +768,89 @@ DeclGroupRef Sema::ActOnDecompositionDecl(SourceLocation Loc,
   return Decls.empty() ? DeclGroupRef::createEmpty() : DeclGroupRef(Decls);
 }
 
+/// P1061R10: Structured binding with pack expansion
+/// Syntax: auto [a, b, ...rest] = tuple;
+DeclGroupRef Sema::ActOnDecompositionDeclWithPack(
+    SourceLocation Loc,
+    llvm::ArrayRef<llvm::StringRef> Names,
+    bool HasPackExpansion,
+    SourceLocation PackExpansionLoc,
+    QualType TupleType,
+    Expr *Init) {
+  if (!HasPackExpansion) {
+    // No pack expansion, use regular implementation
+    return ActOnDecompositionDecl(Loc, Names, TupleType, Init);
+  }
+  
+  // P1061R10: Handle pack expansion
+  // The last name is a pack that should expand to multiple bindings
+  if (Names.empty()) {
+    Diags.report(Loc, DiagID::err_expected_identifier);
+    return DeclGroupRef::getInvalid();
+  }
+  
+  // Get the number of elements in the tuple
+  unsigned NumElements = GetTupleElementCount(TupleType);
+  unsigned NumFixedBindings = Names.size() - 1;  // All except the pack
+  
+  if (NumFixedBindings > NumElements) {
+    Diags.report(Loc, DiagID::err_structured_binding_wrong_count,
+                 std::to_string(Names.size()), std::to_string(NumElements));
+    return DeclGroupRef::getInvalid();
+  }
+  
+  llvm::SmallVector<Decl *, 8> Decls;
+  
+  // Create fixed bindings (non-pack)
+  for (unsigned i = 0; i < NumFixedBindings; ++i) {
+    QualType ElementType = GetTupleElementType(TupleType, i);
+    if (ElementType.isNull()) {
+      Diags.report(Loc, DiagID::err_structured_binding_no_get,
+                   TupleType.getAsString());
+      return DeclGroupRef::getInvalid();
+    }
+    
+    // Create std::get<i>(init)
+    ExprResult GetCall = BuildStdGetCall(i, Init, ElementType, Loc);
+    Expr *BindingExpr = GetCall.isUsable() ? GetCall.get() : nullptr;
+    
+    auto *BD = Context.create<BindingDecl>(Loc, Names[i], ElementType,
+                                            BindingExpr, i);
+    Decls.push_back(BD);
+    
+    if (CurContext) {
+      CurContext->addDecl(BD);
+    }
+  }
+  
+  // Create pack bindings (remaining elements)
+  llvm::StringRef PackName = Names.back();
+  for (unsigned i = NumFixedBindings; i < NumElements; ++i) {
+    QualType ElementType = GetTupleElementType(TupleType, i);
+    if (ElementType.isNull()) {
+      Diags.report(Loc, DiagID::err_structured_binding_no_get,
+                   TupleType.getAsString());
+      return DeclGroupRef::getInvalid();
+    }
+    
+    // Create std::get<i>(init)
+    ExprResult GetCall = BuildStdGetCall(i, Init, ElementType, Loc);
+    Expr *BindingExpr = GetCall.isUsable() ? GetCall.get() : nullptr;
+    
+    // For pack elements, append index to name: rest0, rest1, ...
+    std::string ExpandedName = PackName.str() + std::to_string(i - NumFixedBindings);
+    auto *BD = Context.create<BindingDecl>(Loc, ExpandedName, ElementType,
+                                            BindingExpr, i);
+    Decls.push_back(BD);
+    
+    if (CurContext) {
+      CurContext->addDecl(BD);
+    }
+  }
+  
+  return Decls.empty() ? DeclGroupRef::createEmpty() : DeclGroupRef(Decls);
+}
+
 bool Sema::CheckBindingCondition(llvm::ArrayRef<class BindingDecl *> Bindings,
                                   SourceLocation Loc) {
   // P0963R3: Check if structured binding can be used in condition

@@ -401,6 +401,15 @@ public:
                                      QualType TupleType,
                                      Expr *Init);
 
+  /// P1061R10: Structured binding with pack expansion
+  DeclGroupRef ActOnDecompositionDeclWithPack(
+      SourceLocation Loc,
+      llvm::ArrayRef<llvm::StringRef> Names,
+      bool HasPackExpansion,
+      SourceLocation PackExpansionLoc,
+      QualType TupleType,
+      Expr *Init);
+
   /// Check if structured binding can be used in condition expression (P0963R3)
   bool CheckBindingCondition(llvm::ArrayRef<class BindingDecl *> Bindings,
                               SourceLocation Loc);
