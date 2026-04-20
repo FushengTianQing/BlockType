@@ -68,12 +68,21 @@ void CodeGenFunction::EmitIfStmt(IfStmt *IfStatement) {
     return;
   }
 
-  // 处理条件变量（如 if (int x = expr)）
-  if (VarDecl *CondVar = IfStatement->getConditionVariable()) {
+  // P0963R3: Handle structured bindings in condition
+  // Syntax: if (auto [x, y] = expr) { ... }
+  if (IfStatement->hasStructuredBinding()) {
+    auto Bindings = IfStatement->getBindingDecls();
+    
+    // Emit each binding declaration
+    for (auto *BD : Bindings) {
+      EmitBindingDecl(BD, nullptr, BD->getBindingIndex());
+    }
+  } else if (VarDecl *CondVar = IfStatement->getConditionVariable()) {
+    // Handle condition variable (e.g., if (int x = expr))
     EmitCondVarDecl(CondVar);
   }
 
-  // 生成条件
+  // Generate condition
   llvm::Value *Condition = EmitExpr(IfStatement->getCond());
   if (!Condition) {
     return;
@@ -85,7 +94,7 @@ void CodeGenFunction::EmitIfStmt(IfStmt *IfStatement) {
 
   Condition = EmitConversionToBool(Condition, IfStatement->getCond()->getType());
 
-  // 检测 then 分支的 [[likely]]/[[unlikely]] 属性，附加 BranchWeights 元数据
+  // Detect [[likely]]/[[unlikely]] attributes on then branch, attach BranchWeights metadata
   llvm::MDNode *Weights = createIfBranchWeights(
       CGM.getLLVMContext(), IfStatement->getThen(),
       IfStatement->getElse() != nullptr);
@@ -108,7 +117,7 @@ void CodeGenFunction::EmitIfStmt(IfStmt *IfStatement) {
   // Else
   if (ElseBB) {
     EmitBlock(ElseBB);
-    // else if 链：递归处理嵌套的 IfStmt
+    // else if chain: recursively handle nested IfStmt
     {
       RunCleanupsScope ElseScope(*this);
       EmitStmt(IfStatement->getElse());

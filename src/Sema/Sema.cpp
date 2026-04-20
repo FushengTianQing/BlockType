@@ -2139,6 +2139,29 @@ StmtResult Sema::ActOnIfStmt(Expr *Cond, Stmt *Then, Stmt *Else,
   return StmtResult(IS);
 }
 
+/// P0963R3: ActOnIfStmt with structured bindings
+/// Syntax: if (auto [x, y] = expr) { ... }
+StmtResult Sema::ActOnIfStmtWithBindings(Expr *Cond, Stmt *Then, Stmt *Else,
+                                         SourceLocation IfLoc,
+                                         llvm::ArrayRef<class BindingDecl *> Bindings,
+                                         bool IsConsteval, bool IsNegated) {
+  // Check condition type
+  if (!IsConsteval && Cond && !Cond->getType().isNull()
+      && !TC.CheckCondition(Cond, IfLoc))
+    return StmtResult::getInvalid();
+  
+  // Validate bindings
+  if (Bindings.empty()) {
+    Diags.report(IfLoc, DiagID::err_expected_expression);
+    return StmtResult::getInvalid();
+  }
+  
+  // Create IfStmt with structured bindings
+  auto *IS = Context.create<IfStmt>(IfLoc, Cond, Then, Else, Bindings,
+                                     IsConsteval, IsNegated);
+  return StmtResult(IS);
+}
+
 StmtResult Sema::ActOnWhileStmt(Expr *Cond, Stmt *Body,
                                  SourceLocation WhileLoc,
                                  VarDecl *CondVar) {

@@ -441,8 +441,13 @@ public:
 
   /// Parses a structured binding declaration: auto [x, y] = expr;
   /// P7.4.3: Structured binding (C++17/C++26)
+  /// Parse structured binding declaration: auto [x, y] = expr
+  /// @param AutoLoc Location of 'auto' keyword
+  /// @param IsReference Whether this is auto& (reference binding)
+  /// @param ExpectSemicolon Whether to expect semicolon at end (false for if conditions)
   Stmt *parseStructuredBindingDeclaration(SourceLocation AutoLoc,
-                                           bool IsReference);
+                                           bool IsReference = false,
+                                           bool ExpectSemicolon = true);
 
   /// Builds a FunctionDecl from a parsed Declarator.
   FunctionDecl *buildFunctionDecl(Declarator &D);

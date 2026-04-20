@@ -1669,10 +1669,15 @@ end_attributes:
 ///
 /// Syntax: auto [name1, name2, ...] = initializer;
 ///         auto& [name1, name2, ...] = initializer;
+///         (in if condition): auto [name1, name2, ...] = initializer
 ///
 /// Returns a DeclStmt containing multiple BindingDecls.
+/// 
+/// @param ExpectSemicolon Whether to expect and consume semicolon at the end.
+///                        For if conditions, this should be false.
 Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
-                                                 bool IsReference) {
+                                                 bool IsReference,
+                                                 bool ExpectSemicolon) {
   // Expect '['
   if (!Tok.is(TokenKind::l_square)) {
     emitError(DiagID::err_expected);
@@ -1718,11 +1723,13 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
   }
   
   // Expect ';'
-  if (!Tok.is(TokenKind::semicolon)) {
-    emitError(DiagID::err_expected_semi);
-    return nullptr;
+  if (ExpectSemicolon) {
+    if (!Tok.is(TokenKind::semicolon)) {
+      emitError(DiagID::err_expected_semi);
+      return nullptr;
+    }
+    consumeToken(); // consume ';'
   }
-  consumeToken(); // consume ';'
   
   // Get the type of the initializer
   QualType InitType = Init->getType();

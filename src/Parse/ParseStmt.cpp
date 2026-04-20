@@ -90,6 +90,11 @@ bool Parser::isDeclarationStatement() {
 //===----------------------------------------------------------------------===//
 
 std::pair<Expr *, VarDecl *> Parser::parseCondition() {
+  // P0963R3: Check for structured binding in condition
+  // Syntax: if (auto [x, y] = expr) { ... }
+  // Note: This is handled specially in parseIfStatement, not here
+  // We detect it but don't fully parse it in parseCondition
+  
   // Check if this looks like a condition variable declaration:
   //   type identifier = expr
   // Heuristic: if isDeclarationStatement() and after consuming the type specifiers
@@ -549,6 +554,8 @@ Stmt *Parser::parseIfStatement() {
 
   Expr *Cond = nullptr;
   VarDecl *CondVar = nullptr;
+  llvm::SmallVector<class BindingDecl *, 4> BindingDecls; // P0963R3
+  
   if (!IsConsteval) {
     // Parse condition (only for regular if)
     if (!tryConsumeToken(TokenKind::l_paren)) {
@@ -556,9 +563,48 @@ Stmt *Parser::parseIfStatement() {
       return Actions.ActOnNullStmt(IfLoc).get();
     }
 
-    auto [CondExpr, CV] = parseCondition();
-    Cond = CondExpr;
-    CondVar = CV;
+    // P0963R3: Check for structured binding in condition
+    // Syntax: if (auto [x, y] = expr) { ... }
+    if (Tok.is(TokenKind::kw_auto) && NextTok.is(TokenKind::l_square)) {
+      SourceLocation AutoLoc = Tok.getLocation();
+      consumeToken(); // consume 'auto'
+      
+      // Parse structured binding declaration (no semicolon in condition)
+      Stmt *SBDecl = parseStructuredBindingDeclaration(AutoLoc, /*IsReference=*/false,
+                                                        /*ExpectSemicolon=*/false);
+      if (!SBDecl) {
+        emitError(DiagID::err_expected_expression);
+        Cond = createRecoveryExpr(AutoLoc);
+      } else {
+        // Extract BindingDecls from the DeclStmt
+        auto *DeclStatement = llvm::dyn_cast<DeclStmt>(SBDecl);
+        if (DeclStatement) {
+          for (auto *D : DeclStatement->getDecls()) {
+            if (auto *BD = llvm::dyn_cast<class BindingDecl>(D)) {
+              BindingDecls.push_back(BD);
+            }
+          }
+          
+          if (!BindingDecls.empty()) {
+            // Create condition expression: reference to first binding
+            // This will be converted to bool in Sema
+            Cond = Actions.ActOnDeclRefExpr(AutoLoc, BindingDecls[0]).get();
+          } else {
+            emitError(DiagID::err_expected_expression);
+            Cond = createRecoveryExpr(AutoLoc);
+          }
+        } else {
+          emitError(DiagID::err_expected_expression);
+          Cond = createRecoveryExpr(AutoLoc);
+        }
+      }
+    } else {
+      // Regular condition parsing
+      auto [CondExpr, CV] = parseCondition();
+      Cond = CondExpr;
+      CondVar = CV;
+    }
+    
     if (!Cond) {
       emitError(DiagID::err_expected_expression);
       Cond = createRecoveryExpr(IfLoc);
@@ -585,6 +631,12 @@ Stmt *Parser::parseIfStatement() {
     }
   }
 
+  // P0963R3: If we have structured bindings, use the new constructor
+  if (!BindingDecls.empty()) {
+    return Actions.ActOnIfStmtWithBindings(Cond, ThenStmt, ElseStmt, IfLoc,
+                                           BindingDecls, IsConsteval, IsNegated).get();
+  }
+  
   return Actions.ActOnIfStmt(Cond, ThenStmt, ElseStmt, IfLoc,
                              CondVar, IsConsteval, IsNegated).get();
 }

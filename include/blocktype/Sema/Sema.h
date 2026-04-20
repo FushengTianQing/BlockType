@@ -771,6 +771,14 @@ public:
                          VarDecl *CondVar = nullptr,
                          bool IsConsteval = false,
                          bool IsNegated = false);
+  
+  /// P0963R3: ActOnIfStmt with structured bindings
+  /// Syntax: if (auto [x, y] = expr) { ... }
+  StmtResult ActOnIfStmtWithBindings(Expr *Cond, Stmt *Then, Stmt *Else,
+                                     SourceLocation IfLoc,
+                                     llvm::ArrayRef<class BindingDecl *> Bindings,
+                                     bool IsConsteval = false,
+                                     bool IsNegated = false);
   StmtResult ActOnWhileStmt(Expr *Cond, Stmt *Body,
                             SourceLocation WhileLoc,
                             VarDecl *CondVar = nullptr);

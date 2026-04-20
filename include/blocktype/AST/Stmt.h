@@ -171,6 +171,7 @@ class IfStmt : public Stmt {
   Stmt *Then;
   Stmt *Else;
   VarDecl *CondVar; // Optional condition variable
+  llvm::SmallVector<class BindingDecl *, 4> BindingDecls; // P0963R3: structured binding in condition
   bool IsConsteval : 1 = false;
   bool IsNegated : 1 = false; // for `if !consteval`
 
@@ -181,10 +182,23 @@ public:
       : Stmt(Loc), Cond(Cond), Then(Then), Else(Else), CondVar(CondVar),
         IsConsteval(IsConsteval), IsNegated(IsNegated) {}
 
+  /// P0963R3: Constructor with structured bindings
+  IfStmt(SourceLocation Loc, Expr *Cond, Stmt *Then, Stmt *Else,
+         llvm::ArrayRef<class BindingDecl *> Bindings,
+         bool IsConsteval = false, bool IsNegated = false)
+      : Stmt(Loc), Cond(Cond), Then(Then), Else(Else), CondVar(nullptr),
+        BindingDecls(Bindings.begin(), Bindings.end()),
+        IsConsteval(IsConsteval), IsNegated(IsNegated) {}
+
   Expr *getCond() const { return Cond; }
   Stmt *getThen() const { return Then; }
   Stmt *getElse() const { return Else; }
   VarDecl *getConditionVariable() const { return CondVar; }
+  
+  /// P0963R3: Get structured bindings
+  llvm::ArrayRef<class BindingDecl *> getBindingDecls() const { return BindingDecls; }
+  bool hasStructuredBinding() const { return !BindingDecls.empty(); }
+  
   bool isConsteval() const { return IsConsteval; }
   bool isNegated() const { return IsNegated; }
 
