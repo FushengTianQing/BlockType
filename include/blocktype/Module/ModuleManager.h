@@ -29,9 +29,9 @@ class NamedDecl;
 
 /// ModuleInfo - 模块元信息
 struct ModuleInfo {
-  llvm::StringRef Name;              // 模块名 (e.g., "std.core")
-  llvm::StringRef PrimaryModule;     // 主模块名
-  llvm::StringRef Partition;         // 分区名（如果有）
+  std::string Name;                  // 模块名 (e.g., "std.core")
+  std::string PrimaryModule;         // 主模块名
+  std::string Partition;             // 分区名（如果有）
   std::string BMIPath;               // BMI文件路径
   bool IsExported;                   // 是否导出
   bool IsPartition;                  // 是否为分区
@@ -39,11 +39,11 @@ struct ModuleInfo {
   bool IsPrivateFragment;            // 是否为私有模块片段
 
   // 依赖信息
-  llvm::SmallVector<llvm::StringRef, 8> Imports;
-  llvm::SmallVector<llvm::StringRef, 4> Partitions;
+  llvm::SmallVector<std::string, 8> Imports;
+  llvm::SmallVector<std::string, 4> Partitions;
 
   // 导出符号（简化版：仅存储名称）
-  llvm::SmallVector<llvm::StringRef, 16> ExportedSymbols;
+  llvm::SmallVector<std::string, 16> ExportedSymbols;
 
   // AST节点（如果已加载）
   ModuleDecl *Decl = nullptr;
@@ -163,7 +163,7 @@ public:
   bool isExported(NamedDecl *D) const;
 
   /// 获取模块的所有导出符号
-  llvm::ArrayRef<llvm::StringRef> getExportedSymbols(llvm::StringRef ModuleName) const;
+  llvm::ArrayRef<std::string> getExportedSymbols(llvm::StringRef ModuleName) const;
 };
 
 } // namespace blocktype

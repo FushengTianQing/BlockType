@@ -93,7 +93,7 @@ void ModuleManager::registerModuleDecl(ModuleDecl *MD) {
   Info->IsPrivateFragment = MD->isPrivateModuleFragment();
 
   if (!MD->getPartitionName().empty()) {
-    Info->Partition = MD->getPartitionName();
+    Info->Partition = MD->getPartitionName().str();
   }
 
   LoadedModules[Name] = std::move(Info);
@@ -106,7 +106,7 @@ void ModuleManager::registerImportDecl(ImportDecl *ID) {
   // 将导入添加到当前模块的依赖列表
   auto It = LoadedModules.find(CurrentModule->getModuleName());
   if (It != LoadedModules.end()) {
-    It->second->Imports.push_back(ID->getModuleName());
+    It->second->Imports.push_back(ID->getModuleName().str());
   }
 }
 
@@ -156,13 +156,13 @@ ModuleManager::getModuleDependencies(llvm::StringRef Name) {
   ModuleInfo *Info = It->second.get();
 
   // 递归收集依赖
-  llvm::SmallVector<llvm::StringRef, 16> WorkList;
-  llvm::SmallVector<llvm::StringRef, 16> Visited;
+  llvm::SmallVector<std::string, 16> WorkList;
+  llvm::SmallVector<std::string, 16> Visited;
 
   WorkList.append(Info->Imports.begin(), Info->Imports.end());
 
   while (!WorkList.empty()) {
-    llvm::StringRef DepName = WorkList.pop_back_val();
+    std::string DepName = WorkList.pop_back_val();
 
     // 检查是否已访问
     if (std::find(Visited.begin(), Visited.end(), DepName) != Visited.end()) {
@@ -176,7 +176,7 @@ ModuleManager::getModuleDependencies(llvm::StringRef Name) {
       Result.push_back(DepIt->second.get());
 
       // 添加依赖的依赖
-      for (llvm::StringRef TransitiveDep : DepIt->second->Imports) {
+      for (const std::string &TransitiveDep : DepIt->second->Imports) {
         if (std::find(Visited.begin(), Visited.end(), TransitiveDep) ==
             Visited.end()) {
           WorkList.push_back(TransitiveDep);
@@ -258,7 +258,7 @@ void ModuleManager::markExported(NamedDecl *D) {
 
   auto It = LoadedModules.find(CurrentModule->getModuleName());
   if (It != LoadedModules.end()) {
-    It->second->ExportedSymbols.push_back(D->getName());
+    It->second->ExportedSymbols.push_back(D->getName().str());
   }
 }
 
@@ -271,7 +271,7 @@ bool ModuleManager::isExported(NamedDecl *D) const {
   return false;
 }
 
-llvm::ArrayRef<llvm::StringRef>
+llvm::ArrayRef<std::string>
 ModuleManager::getExportedSymbols(llvm::StringRef ModuleName) const {
   auto It = LoadedModules.find(ModuleName);
   if (It != LoadedModules.end()) {

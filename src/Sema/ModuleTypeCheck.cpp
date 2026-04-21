@@ -13,6 +13,7 @@
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/AST/TypeCasting.h"
 #include "blocktype/Module/ModuleManager.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -36,9 +37,167 @@ bool Sema::checkCrossModuleType(const Type *T1, const Type *T2,
     return true;
   }
 
-  // 2. 简化实现：仅比较类型指针
-  // TODO: 实现完整的跨模块类型比较
-  return false;
+  // 2. 类型种类必须相同
+  if (T1->getTypeClass() != T2->getTypeClass()) {
+    return false;
+  }
+
+  // 3. 根据类型种类进行递归检查
+  switch (T1->getTypeClass()) {
+  case TypeClass::Builtin:
+    // 内置类型直接比较
+    return T1 == T2;
+
+  case TypeClass::Pointer: {
+    // 指针类型：比较指向的类型
+    const PointerType *PT1 = dyn_cast<PointerType>(T1);
+    const PointerType *PT2 = dyn_cast<PointerType>(T2);
+    if (!PT1 || !PT2) return false;
+    return checkCrossModuleType(PT1->getPointeeType(),
+                                PT2->getPointeeType(), M1, M2);
+  }
+
+  case TypeClass::LValueReference: {
+    // 左值引用：比较引用的类型
+    const LValueReferenceType *RT1 = dyn_cast<LValueReferenceType>(T1);
+    const LValueReferenceType *RT2 = dyn_cast<LValueReferenceType>(T2);
+    if (!RT1 || !RT2) return false;
+    return checkCrossModuleType(RT1->getReferencedType(),
+                                RT2->getReferencedType(), M1, M2);
+  }
+
+  case TypeClass::RValueReference: {
+    // 右值引用：比较引用的类型
+    const RValueReferenceType *RT1 = dyn_cast<RValueReferenceType>(T1);
+    const RValueReferenceType *RT2 = dyn_cast<RValueReferenceType>(T2);
+    if (!RT1 || !RT2) return false;
+    return checkCrossModuleType(RT1->getReferencedType(),
+                                RT2->getReferencedType(), M1, M2);
+  }
+
+  case TypeClass::ConstantArray: {
+    // 常量数组类型：比较元素类型和大小
+    const ConstantArrayType *AT1 = dyn_cast<ConstantArrayType>(T1);
+    const ConstantArrayType *AT2 = dyn_cast<ConstantArrayType>(T2);
+    if (!AT1 || !AT2) return false;
+    if (AT1->getSize() != AT2->getSize()) {
+      return false;
+    }
+    return checkCrossModuleType(AT1->getElementType(),
+                                AT2->getElementType(), M1, M2);
+  }
+
+  case TypeClass::IncompleteArray:
+  case TypeClass::VariableArray: {
+    // 不完整数组和变长数组：只比较元素类型
+    const ArrayType *AT1 = dyn_cast<ArrayType>(T1);
+    const ArrayType *AT2 = dyn_cast<ArrayType>(T2);
+    if (!AT1 || !AT2) return false;
+    return checkCrossModuleType(AT1->getElementType(),
+                                AT2->getElementType(), M1, M2);
+  }
+
+  case TypeClass::Function: {
+    // 函数类型：比较参数和返回类型
+    const FunctionType *FT1 = dyn_cast<FunctionType>(T1);
+    const FunctionType *FT2 = dyn_cast<FunctionType>(T2);
+    if (!FT1 || !FT2) return false;
+
+    // 检查返回类型
+    if (!checkCrossModuleType(FT1->getReturnType(),
+                              FT2->getReturnType(), M1, M2)) {
+      return false;
+    }
+
+    // 检查参数类型
+    llvm::ArrayRef<const Type *> Params1 = FT1->getParamTypes();
+    llvm::ArrayRef<const Type *> Params2 = FT2->getParamTypes();
+
+    if (Params1.size() != Params2.size()) {
+      return false;
+    }
+
+    for (size_t I = 0; I < Params1.size(); ++I) {
+      if (!checkCrossModuleType(Params1[I], Params2[I], M1, M2)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  case TypeClass::Record: {
+    // 记录类型（类/结构体）：结构等价性检查
+    const RecordType *RT1 = dyn_cast<RecordType>(T1);
+    const RecordType *RT2 = dyn_cast<RecordType>(T2);
+    if (!RT1 || !RT2) return false;
+
+    RecordDecl *RD1 = RT1->getDecl();
+    RecordDecl *RD2 = RT2->getDecl();
+
+    // 如果来自同一模块，直接比较声明
+    // TODO: 实现 getOwningModule
+    // if (RD1->getOwningModule() == RD2->getOwningModule()) {
+    //   return RD1 == RD2;
+    // }
+
+    // 跨模块：检查结构等价性
+    return checkRecordEquivalence(RD1, RD2, M1, M2);
+  }
+
+  case TypeClass::Enum: {
+    // 枚举类型：比较底层类型和枚举值
+    const EnumType *ET1 = dyn_cast<EnumType>(T1);
+    const EnumType *ET2 = dyn_cast<EnumType>(T2);
+    if (!ET1 || !ET2) return false;
+
+    EnumDecl *ED1 = ET1->getDecl();
+    EnumDecl *ED2 = ET2->getDecl();
+
+    // 如果来自同一模块，直接比较声明
+    // TODO: 实现 getOwningModule
+    // if (ED1->getOwningModule() == ED2->getOwningModule()) {
+    //   return ED1 == ED2;
+    // }
+
+    // 跨模块：检查枚举等价性
+    return checkEnumEquivalence(ED1, ED2, M1, M2);
+  }
+
+  case TypeClass::Typedef: {
+    // typedef 类型：比较底层类型
+    const TypedefType *TT1 = dyn_cast<TypedefType>(T1);
+    const TypedefType *TT2 = dyn_cast<TypedefType>(T2);
+    if (!TT1 || !TT2) return false;
+
+    // 获取底层类型
+    QualType Underlying1 = TT1->getDecl()->getUnderlyingType();
+    QualType Underlying2 = TT2->getDecl()->getUnderlyingType();
+
+    return checkCrossModuleType(Underlying1.getTypePtr(),
+                                Underlying2.getTypePtr(), M1, M2);
+  }
+
+  case TypeClass::Auto:
+    // auto 类型：需要推导后比较
+    // TODO: 实现推导后的类型比较
+    return false;
+
+  case TypeClass::Decltype:
+    // decltype 类型：比较表达式类型
+    // TODO: 实现表达式类型比较
+    return false;
+
+  case TypeClass::TemplateTypeParm:
+  case TypeClass::TemplateSpecialization:
+    // 模板类型：比较模板参数
+    // TODO: 实现模板类型比较
+    return false;
+
+  default:
+    // 未知类型，保守处理
+    return false;
+  }
 }
 
 /// 检查记录类型的结构等价性
@@ -58,7 +217,38 @@ bool Sema::checkRecordEquivalence(RecordDecl *RD1, RecordDecl *RD2,
     return false;
   }
 
-  // TODO: 实现字段比较
+  // 3. 字段数量必须相同
+  llvm::SmallVector<FieldDecl *, 8> Fields1;
+  llvm::SmallVector<FieldDecl *, 8> Fields2;
+
+  for (FieldDecl *F : RD1->fields()) {
+    Fields1.push_back(F);
+  }
+  for (FieldDecl *F : RD2->fields()) {
+    Fields2.push_back(F);
+  }
+
+  if (Fields1.size() != Fields2.size()) {
+    return false;
+  }
+
+  // 4. 逐个比较字段
+  for (size_t I = 0; I < Fields1.size(); ++I) {
+    FieldDecl *F1 = Fields1[I];
+    FieldDecl *F2 = Fields2[I];
+
+    // 字段名必须相同
+    if (F1->getName() != F2->getName()) {
+      return false;
+    }
+
+    // 字段类型必须等价
+    if (!checkCrossModuleType(F1->getType().getTypePtr(),
+                              F2->getType().getTypePtr(), M1, M2)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -74,7 +264,47 @@ bool Sema::checkEnumEquivalence(EnumDecl *ED1, EnumDecl *ED2,
     return false;
   }
 
-  // TODO: 实现枚举值比较
+  // 2. 底层类型必须相同
+  QualType Underlying1 = ED1->getUnderlyingType();
+  QualType Underlying2 = ED2->getUnderlyingType();
+
+  // 如果底层类型不为空，则进行比较
+  if (!Underlying1.isNull() && !Underlying2.isNull()) {
+    if (!checkCrossModuleType(Underlying1.getTypePtr(),
+                              Underlying2.getTypePtr(), M1, M2)) {
+      return false;
+    }
+  }
+
+  // 3. 枚举值数量必须相同
+  llvm::SmallVector<EnumConstantDecl *, 8> Enumerators1;
+  llvm::SmallVector<EnumConstantDecl *, 8> Enumerators2;
+
+  for (EnumConstantDecl *E : ED1->enumerators()) {
+    Enumerators1.push_back(E);
+  }
+  for (EnumConstantDecl *E : ED2->enumerators()) {
+    Enumerators2.push_back(E);
+  }
+
+  if (Enumerators1.size() != Enumerators2.size()) {
+    return false;
+  }
+
+  // 4. 逐个比较枚举值
+  for (size_t I = 0; I < Enumerators1.size(); ++I) {
+    EnumConstantDecl *E1 = Enumerators1[I];
+    EnumConstantDecl *E2 = Enumerators2[I];
+
+    // 枚举值名称必须相同
+    if (E1->getName() != E2->getName()) {
+      return false;
+    }
+
+    // 枚举值必须相同
+    // TODO: 实现常量表达式比较
+  }
+
   return true;
 }
 
@@ -125,9 +355,90 @@ bool Sema::validateTypeIntegrity(const Type *T, ModuleDecl *Mod) {
     return true;
   }
 
-  // 简化实现：所有类型都认为是完整的
-  // TODO: 实现完整的类型完整性验证
-  return true;
+  // 根据类型种类进行验证
+  switch (T->getTypeClass()) {
+  case TypeClass::Builtin:
+    // 内置类型总是完整的
+    return true;
+
+  case TypeClass::Pointer:
+  case TypeClass::LValueReference:
+  case TypeClass::RValueReference: {
+    // 指针/引用：验证指向的类型
+    const Type *Pointee = nullptr;
+    if (auto *PT = dyn_cast<PointerType>(T)) {
+      Pointee = PT->getPointeeType();
+    } else if (auto *RT = dyn_cast<LValueReferenceType>(T)) {
+      Pointee = RT->getReferencedType();
+    } else if (auto *RT = dyn_cast<RValueReferenceType>(T)) {
+      Pointee = RT->getReferencedType();
+    }
+    return validateTypeIntegrity(Pointee, Mod);
+  }
+
+  case TypeClass::ConstantArray:
+  case TypeClass::IncompleteArray:
+  case TypeClass::VariableArray: {
+    // 数组：验证元素类型
+    const ArrayType *AT = dyn_cast<ArrayType>(T);
+    if (!AT) return false;
+    return validateTypeIntegrity(AT->getElementType(), Mod);
+  }
+
+  case TypeClass::Function: {
+    // 函数：验证返回类型和参数类型
+    const FunctionType *FT = dyn_cast<FunctionType>(T);
+    if (!FT) return false;
+    if (!validateTypeIntegrity(FT->getReturnType(), Mod)) {
+      return false;
+    }
+    for (const Type *ParamType : FT->getParamTypes()) {
+      if (!validateTypeIntegrity(ParamType, Mod)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  case TypeClass::Record: {
+    // 记录类型：验证声明存在
+    const RecordType *RT = dyn_cast<RecordType>(T);
+    if (!RT) return false;
+    RecordDecl *RD = RT->getDecl();
+    if (!RD) {
+      return false;
+    }
+    // 验证字段
+    for (FieldDecl *F : RD->fields()) {
+      if (!validateTypeIntegrity(F->getType().getTypePtr(), Mod)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  case TypeClass::Enum: {
+    // 枚举类型：验证声明存在
+    const EnumType *ET = dyn_cast<EnumType>(T);
+    if (!ET) return false;
+    EnumDecl *ED = ET->getDecl();
+    return ED != nullptr;
+  }
+
+  case TypeClass::Typedef: {
+    // typedef：验证底层类型
+    const TypedefType *TT = dyn_cast<TypedefType>(T);
+    if (!TT) return false;
+
+    // 获取底层类型
+    QualType Underlying = TT->getDecl()->getUnderlyingType();
+    return validateTypeIntegrity(Underlying.getTypePtr(), Mod);
+  }
+
+  default:
+    // 其他类型：保守处理
+    return true;
+  }
 }
 
 } // namespace blocktype

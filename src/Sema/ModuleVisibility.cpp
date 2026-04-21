@@ -32,22 +32,32 @@ bool Sema::isSymbolVisible(NamedDecl *D, ModuleDecl *CurrentMod) {
     return false;
   }
 
-  // TODO: 实现完整的可见性检查
   // 1. 获取符号所属模块
-  // ModuleDecl *OwnerMod = D->getOwningModule();
+  ModuleDecl *OwnerMod = D->getOwningModule();
 
   // 2. 如果符号没有所属模块（全局符号），则可见
-  // if (!OwnerMod) {
-  //   return true;
-  // }
+  if (!OwnerMod) {
+    return true;
+  }
 
   // 3. 同一模块内，所有符号可见
-  // if (OwnerMod == CurrentMod) {
-  //   return true;
-  // }
+  if (OwnerMod == CurrentMod) {
+    return true;
+  }
 
-  // 简化实现：所有符号都可见
-  return true;
+  // 4. 检查是否在私有模块片段中
+  // 私有模块片段的符号对外不可见
+  if (OwnerMod->isPrivateModuleFragment()) {
+    return false;
+  }
+
+  // 5. 检查符号是否被导出
+  if (!D->isExported()) {
+    return false;
+  }
+
+  // 6. 检查是否存在导入关系（直接或传递）
+  return checkTransitiveExport(CurrentMod, OwnerMod);
 }
 
 /// 检查传递导出
@@ -85,13 +95,8 @@ bool Sema::isDeclExported(NamedDecl *D) const {
     return false;
   }
 
-  // TODO: 检查声明是否在 export 块中
-  // if (D->isExported()) {
-  //   return true;
-  // }
-
-  // TODO: 检查声明是否在模块接口单元中
-  return false;
+  // 检查声明是否被标记为导出
+  return D->isExported();
 }
 
 /// 获取声明的有效模块
@@ -100,11 +105,11 @@ ModuleDecl *Sema::getEffectiveModule(NamedDecl *D) const {
     return nullptr;
   }
 
-  // TODO: 实现获取声明所属模块
-  // ModuleDecl *OwnerMod = D->getOwningModule();
-  // if (OwnerMod) {
-  //   return OwnerMod;
-  // }
+  // 获取声明所属模块
+  ModuleDecl *OwnerMod = D->getOwningModule();
+  if (OwnerMod) {
+    return OwnerMod;
+  }
 
   // 如果声明在全局作用域，检查是否在模块中
   if (ModMgr->isInModule()) {

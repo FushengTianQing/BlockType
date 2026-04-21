@@ -122,7 +122,7 @@ bool BMIReader::readDependencies(ModuleInfo &Info, const BMIHeader &H) {
     llvm::StringRef ModuleName = readString(Record.ModuleNameOff,
                                               Record.ModuleNameLen);
     if (!ModuleName.empty()) {
-      Info.Imports.push_back(ModuleName);
+      Info.Imports.push_back(ModuleName.str());
     }
   }
 
@@ -141,7 +141,7 @@ bool BMIReader::readExportedSymbols(ModuleInfo &Info, const BMIHeader &H) {
 
     llvm::StringRef SymbolName = readString(Record.NameOff, Record.NameLen);
     if (!SymbolName.empty()) {
-      Info.ExportedSymbols.push_back(SymbolName);
+      Info.ExportedSymbols.push_back(SymbolName.str());
     }
   }
 

@@ -90,40 +90,38 @@ bool Sema::mergePartitionSymbols(ModuleDecl *MainModule,
   }
 
   // 2. 合并导出符号
-  // TODO: ModuleInfo::ExportedSymbols 是 llvm::StringRef，需要修改为 NamedDecl*
-  // for (NamedDecl *Exported : Partition->ExportedSymbols) {
-  //   // 检查符号是否已经在主模块中
-  //   bool Found = false;
-  //   for (NamedDecl *MainExported : MainInfo->ExportedSymbols) {
-  //     if (MainExported->getName() == Exported->getName()) {
-  //       Found = true;
-  //       break;
-  //     }
-  //   }
-  //
-  //   // 如果不在，添加到主模块的导出符号列表
-  //   if (!Found) {
-  //     MainInfo->ExportedSymbols.push_back(Exported);
-  //   }
-  // }
+  for (const std::string &Exported : Partition->ExportedSymbols) {
+    // 检查符号是否已经在主模块中
+    bool Found = false;
+    for (const std::string &MainExported : MainInfo->ExportedSymbols) {
+      if (MainExported == Exported) {
+        Found = true;
+        break;
+      }
+    }
+
+    // 如果不在，添加到主模块的导出符号列表
+    if (!Found) {
+      MainInfo->ExportedSymbols.push_back(Exported);
+    }
+  }
 
   // 3. 合并导入依赖
-  // TODO: ModuleInfo::Imports 是 llvm::StringRef，需要修改为 std::string
-  // for (const std::string &Import : Partition->Imports) {
-  //   // 检查是否已经在主模块的导入列表中
-  //   bool Found = false;
-  //   for (const std::string &MainImport : MainInfo->Imports) {
-  //     if (MainImport == Import) {
-  //       Found = true;
-  //       break;
-  //     }
-  //   }
-  //
-  //   // 如果不在，添加到主模块的导入列表
-  //   if (!Found) {
-  //     MainInfo->Imports.push_back(Import);
-  //   }
-  // }
+  for (const std::string &Import : Partition->Imports) {
+    // 检查是否已经在主模块的导入列表中
+    bool Found = false;
+    for (const std::string &MainImport : MainInfo->Imports) {
+      if (MainImport == Import) {
+        Found = true;
+        break;
+      }
+    }
+
+    // 如果不在，添加到主模块的导入列表
+    if (!Found) {
+      MainInfo->Imports.push_back(Import);
+    }
+  }
 
   return true;
 }
@@ -157,10 +155,9 @@ void Sema::registerModulePartition(ModuleDecl *PartitionDecl) {
   std::string FullPartitionName =
       MainModuleName.str() + ":" + PartitionName.str();
   ModuleInfo *PartitionInfo = new ModuleInfo();
-  // TODO: ModuleInfo::Name 是 llvm::StringRef，需要改为 std::string
-  // PartitionInfo->Name = FullPartitionName;
+  PartitionInfo->Name = FullPartitionName;
   PartitionInfo->IsPartition = true;
-  // PartitionInfo->PrimaryModule = MainModuleName;
+  PartitionInfo->PrimaryModule = MainModuleName.str();
 
   // 注册到 ModuleManager
   ModMgr->registerModuleInfo(PartitionInfo);

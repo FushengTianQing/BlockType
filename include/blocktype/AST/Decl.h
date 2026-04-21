@@ -75,6 +75,8 @@ public:
 /// NamedDecl - Base class for declarations that have a name.
 class NamedDecl : public Decl {
   llvm::StringRef Name;
+  class ModuleDecl *OwningModule = nullptr;  // 声明所属的模块
+  bool IsExported = false;                    // 是否被导出
 
 protected:
   NamedDecl(SourceLocation Loc, llvm::StringRef Name)
@@ -82,6 +84,22 @@ protected:
 
 public:
   llvm::StringRef getName() const { return Name; }
+
+  //===------------------------------------------------------------------===//
+  // 模块支持
+  //===------------------------------------------------------------------===//
+
+  /// 获取声明所属的模块
+  ModuleDecl *getOwningModule() const { return OwningModule; }
+
+  /// 设置声明所属的模块
+  void setOwningModule(ModuleDecl *M) { OwningModule = M; }
+
+  /// 检查声明是否被导出
+  bool isExported() const { return IsExported; }
+
+  /// 标记声明为导出
+  void setExported(bool E = true) { IsExported = E; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::NamedDeclKind &&

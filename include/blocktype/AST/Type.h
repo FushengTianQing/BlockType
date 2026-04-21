@@ -19,6 +19,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 #include "blocktype/Basic/SourceLocation.h"
+#include "blocktype/AST/TypeCasting.h"
 
 namespace blocktype {
 
