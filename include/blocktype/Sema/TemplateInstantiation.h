@@ -125,14 +125,6 @@ public:
   /// \returns The instantiated expression (the Nth element), or nullptr.
   Expr *InstantiatePackIndexingExpr(PackIndexingExpr *PIE,
                                     llvm::ArrayRef<TemplateArgument> PackArgs);
-
-  /// Expand a pack pattern with given arguments.
-  ///
-  /// \param Pattern The pattern expression to expand.
-  /// \param PackArgs The pack arguments.
-  /// \returns The expanded expressions.
-  llvm::SmallVector<Expr *, 4>
-  ExpandPack(Expr *Pattern, llvm::ArrayRef<TemplateArgument> PackArgs);
 };
 
 } // namespace blocktype

@@ -108,9 +108,127 @@ Expr *TemplateInstantiator::InstantiateFoldExpr(
     return FoldExpr->getPattern();
   }
   
-  // TODO: Implement full fold expression instantiation
-  // For now, return the pattern as a placeholder
-  return FoldExpr->getPattern();
+  // Build the folded expression chain
+  // For fold expressions, we need to:
+  // 1. Instantiate the pattern for each pack element
+  // 2. Connect them with binary operators
+  // 3. Handle init values (LHS/RHS)
+  
+  ASTContext &Context = SemaRef.getASTContext();
+  Expr *Result = nullptr;
+  
+  // Helper to instantiate pattern with a template argument
+  auto InstantiatePattern = [&](const TemplateArgument &Arg) -> Expr* {
+    // For now, we handle simple cases
+    // Full implementation would need proper pattern substitution
+    
+    if (Arg.isExpression()) {
+      return Arg.getAsExpr();
+    } else if (Arg.isIntegral()) {
+      return Context.create<IntegerLiteral>(
+          FoldExpr->getLocation(),
+          Arg.getAsIntegral(),
+          Context.getIntType());
+    } else if (Arg.isType()) {
+      // Type argument in expression context
+      // This happens for patterns like sizeof(Ts), alignof(Ts)
+      // The pattern itself (e.g., sizeof) handles the type directly
+      // We need to instantiate the pattern with this type
+      
+      // For sizeof(Ts), the pattern is UnaryExprOrTypeTraitExpr
+      // We create a new UnaryExprOrTypeTraitExpr with the substituted type
+      if (auto *UnaryExpr = llvm::dyn_cast<UnaryExprOrTypeTraitExpr>(FoldExpr->getPattern())) {
+        return Context.create<UnaryExprOrTypeTraitExpr>(
+            UnaryExpr->getLocation(),
+            UnaryExpr->getTraitKind(),
+            Arg.getAsType());
+      }
+      
+      // For other type-dependent expressions, we would need more sophisticated handling
+      // For now, return the pattern as fallback
+      return FoldExpr->getPattern();
+    } else if (Arg.isDeclaration()) {
+      if (auto *Decl = llvm::dyn_cast<ValueDecl>(Arg.getAsDecl())) {
+        return Context.create<DeclRefExpr>(
+            FoldExpr->getLocation(),
+            Decl,
+            Decl->getName());
+      }
+    }
+    
+    // Fallback: return the pattern
+    return FoldExpr->getPattern();
+  };
+  
+  // Instantiate pattern for each pack element
+  llvm::SmallVector<Expr *, 8> InstantiatedElements;
+  for (const auto &Elem : PackElements) {
+    if (Expr *Instantiated = InstantiatePattern(Elem)) {
+      InstantiatedElements.push_back(Instantiated);
+    }
+  }
+  
+  if (InstantiatedElements.empty()) {
+    // No elements to fold, return init or pattern
+    if (FoldExpr->getLHS() != nullptr) {
+      return FoldExpr->getLHS();
+    }
+    if (FoldExpr->getRHS() != nullptr) {
+      return FoldExpr->getRHS();
+    }
+    return FoldExpr->getPattern();
+  }
+  
+  // Build the fold chain
+  if (FoldExpr->isRightFold()) {
+    // Right fold: e1 op (e2 op (e3 op ... [op init]))
+    // Start from the rightmost element
+    Result = InstantiatedElements.back();
+    InstantiatedElements.pop_back();
+    
+    // Add init value if present
+    if (FoldExpr->getRHS() != nullptr) {
+      Result = Context.create<BinaryOperator>(
+          Result->getLocation(),
+          Result,
+          FoldExpr->getRHS(),
+          FoldExpr->getOperator());
+    }
+    
+    // Fold from right to left
+    for (int I = InstantiatedElements.size() - 1; I >= 0; --I) {
+      Result = Context.create<BinaryOperator>(
+          InstantiatedElements[I]->getLocation(),
+          InstantiatedElements[I],
+          Result,
+          FoldExpr->getOperator());
+    }
+  } else {
+    // Left fold: (([init op] e1) op e2) op e3 ...
+    // Start from the leftmost element
+    Result = InstantiatedElements.front();
+    InstantiatedElements.erase(InstantiatedElements.begin());
+    
+    // Add init value if present
+    if (FoldExpr->getLHS() != nullptr) {
+      Result = Context.create<BinaryOperator>(
+          Result->getLocation(),
+          FoldExpr->getLHS(),
+          Result,
+          FoldExpr->getOperator());
+    }
+    
+    // Fold from left to right
+    for (Expr *Elem : InstantiatedElements) {
+      Result = Context.create<BinaryOperator>(
+          Elem->getLocation(),
+          Result,
+          Elem,
+          FoldExpr->getOperator());
+    }
+  }
+  
+  return Result;
 }
 
 Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
@@ -185,11 +303,11 @@ Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
       }
     } else if (Elem.isDeclaration()) {
       // Create a declaration reference for declaration arguments
-      if (auto *Decl = Elem.getAsDecl()) {
+      if (auto *D = Elem.getAsDecl()) {
         // DeclRefExpr expects (SourceLocation, ValueDecl*, StringRef)
         // ValueDecl is the base class for variables, functions, etc.
-        if (auto *ValueDecl = llvm::dyn_cast<ValueDecl>(Decl)) {
-          auto *DeclRef = Context.create<DeclRefExpr>(SourceLocation(1), ValueDecl, ValueDecl->getName());
+        if (auto *VD = llvm::dyn_cast<ValueDecl>(D)) {
+          auto *DeclRef = Context.create<DeclRefExpr>(SourceLocation(1), VD, VD->getName());
           SubstitutedExprs.push_back(DeclRef);
         }
       }
@@ -208,45 +326,6 @@ Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
   
   // Return the original expression if we couldn't substitute
   return PIE;
-}
-
-llvm::SmallVector<Expr *, 4>
-TemplateInstantiator::ExpandPack(Expr *Pattern,
-                                 llvm::ArrayRef<TemplateArgument> PackArgs) {
-  
-  llvm::SmallVector<Expr *, 4> Result;
-  
-  if (Pattern == nullptr) {
-    return Result;
-  }
-  
-  // Get the pack expansion arguments
-  llvm::SmallVector<TemplateArgument, 4> PackElements;
-  for (const auto &Arg : PackArgs) {
-    if (Arg.isPack()) {
-      for (const auto &Elem : Arg.getAsPack()) {
-        PackElements.push_back(Elem);
-      }
-    }
-  }
-  
-  // Expand the pattern for each pack element
-  ASTContext &Context = SemaRef.getASTContext();
-  for (size_t Idx = 0; Idx < PackElements.size(); ++Idx) {
-    // TODO: Implement proper pattern substitution
-    // For now, clone the pattern for each element
-    if (auto *IntLit = llvm::dyn_cast<IntegerLiteral>(Pattern)) {
-      auto *NewIntLit = Context.create<IntegerLiteral>(IntLit->getLocation(),
-                                                        IntLit->getValue(),
-                                                        IntLit->getType());
-      Result.push_back(NewIntLit);
-    } else {
-      // For other expressions, just add the pattern
-      Result.push_back(Pattern);
-    }
-  }
-  
-  return Result;
 }
 
 } // namespace blocktype
