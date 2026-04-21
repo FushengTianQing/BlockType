@@ -218,11 +218,12 @@ if (AttrName == "assume") {
 2. ✅ `ActOnTypeAliasTemplateDecl` - 已添加验证和注册
 3. ✅ `ActOnExplicitInstantiation` - 已集成显式实例化处理
 
-### P2（本月完成）
+### P2（已完成 ✅）
 3. ✅ `ActOnExplicitInstantiation` - 添加显式实例化处理
-4. ✅ `ActOnClassTemplatePartialSpecialization` - 确认集成
-5. ✅ `ActOnVarTemplateDecl` - 添加变量模板解析
-6. ✅ `ActOnAssumeAttr` - 添加 assume 属性解析
+4. ✅ `ActOnClassTemplatePartialSpecialization` - 已添加验证调用
+5. ✅ `ActOnVarTemplateDecl` - 已添加变量模板验证
+6. ✅ `ActOnVarTemplatePartialSpecialization` - 已添加验证调用
+7. ✅ `ActOnAssumeAttr` - 已添加 [[assume]] 属性解析（C++23）
 
 ### P3（后续规划）
 7. ⚠️ `ActOnDeclarator` - 架构选择，保留

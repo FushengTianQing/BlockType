@@ -1602,6 +1602,37 @@ AttributeListDecl *Parser::parseAttributeSpecifier(SourceLocation Loc) {
 
 normal_attribute:
 
+    // P7.1.4: Check for C++23 [[assume]] attribute
+    // [[assume]] takes a condition expression: [[assume(expr)]]
+    if (Namespace.empty() && AttrName == "assume" && Tok.is(TokenKind::l_paren)) {
+      consumeToken(); // consume '('
+      
+      // Parse the assumption condition expression
+      Expr *CondExpr = parseExpression();
+      if (!CondExpr) {
+        emitError(DiagID::err_expected);
+        return nullptr;
+      }
+      
+      if (!Tok.is(TokenKind::r_paren)) {
+        emitError(DiagID::err_expected_rparen);
+        return nullptr;
+      }
+      consumeToken(); // consume ')'
+      
+      // Validate and create AssumeAttr via Sema
+      auto *AssumeExpr = Actions.ActOnAssumeAttr(Loc, CondExpr).get();
+      if (AssumeExpr) {
+        // Create an AttributeDecl for the assume attribute
+        auto *AD = llvm::cast<AttributeDecl>(
+            Actions.ActOnAttributeDecl(Loc, "assume", CondExpr).get());
+        AttrList->addAttribute(AD);
+      }
+      
+      // Continue to check for more attributes or end
+      goto end_attributes;
+    }
+
     // Parse optional attribute argument
     if (Tok.is(TokenKind::l_paren)) {
       consumeToken(); // consume '('

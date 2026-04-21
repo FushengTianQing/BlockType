@@ -292,6 +292,11 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
           TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
       PartialSpec->setTemplateParameterList(PartialTPL);
       
+      // Validate and register the partial specialization
+      if (Actions.ActOnClassTemplatePartialSpecialization(PartialSpec).isInvalid()) {
+        return nullptr;  // Validation failed
+      }
+      
       Template = llvm::cast<ClassTemplateDecl>(
           Actions.ActOnClassTemplateDeclFactory(TemplateLoc, ClassDecl->getName(), PartialSpec).get());
       Actions.PopScope(); // Pop TemplateScope
@@ -331,6 +336,11 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
           TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
       PartialSpec->setTemplateParameterList(PartialTPL);
       
+      // Validate and register the variable template partial specialization
+      if (Actions.ActOnVarTemplatePartialSpecialization(PartialSpec).isInvalid()) {
+        return nullptr;  // Validation failed
+      }
+      
       Template = llvm::cast<VarTemplateDecl>(
           Actions.ActOnVarTemplateDeclFactory(TemplateLoc, VD->getName(), PartialSpec).get());
       Actions.PopScope(); // Pop TemplateScope
@@ -341,6 +351,11 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     // Variable template
     Template = llvm::cast<VarTemplateDecl>(
         Actions.ActOnVarTemplateDeclFactory(TemplateLoc, VD->getName(), TemplatedDecl).get());
+    
+    // Validate and register the variable template
+    if (Actions.ActOnVarTemplateDecl(llvm::cast<VarTemplateDecl>(Template)).isInvalid()) {
+      return nullptr;  // Validation failed
+    }
   } else if (auto *TAD = llvm::dyn_cast<TypeAliasDecl>(TemplatedDecl)) {
     // Type alias template
     auto *TATD = llvm::cast<TypeAliasTemplateDecl>(
