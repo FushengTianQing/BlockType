@@ -167,17 +167,13 @@ bool Parser::isMemberAccessible(ValueDecl *Member, CXXRecordDecl *AccessingClass
     return false;
   }
 
-  // For now, we assume the member is declared in a class context
-  // TODO: Add proper DeclContext support to track which class declares each member
+  // Get the declaring class of the member
+  // Fields and methods track their parent class for access control
   CXXRecordDecl *MemberClass = nullptr;
   
-  // Try to find the parent class from the member's type or other means
-  // This is a simplified approach - in full C++ implementation, 
-  // we would track the declaring context for each declaration
   if (auto *Field = llvm::dyn_cast<FieldDecl>(Member)) {
-    // Fields are always declared in a class, but we don't track it yet
-    // For now, we'll be permissive and allow access
-    return true;
+    // Fields store their parent class
+    MemberClass = Field->getParent();
   } else if (auto *Method = llvm::dyn_cast<CXXMethodDecl>(Member)) {
     // Methods have their parent class
     MemberClass = Method->getParent();

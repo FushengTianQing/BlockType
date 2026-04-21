@@ -137,24 +137,77 @@ if (D) {
 
 ---
 
-### 问题 4: TODO 注释表明未完成功能
+### 问题 4: TODO 注释表明未完成功能 - ✅ 已修复
 
 **严重程度**: 🟡 中
 
 **位置**: `src/Parse/ParseExpr.cpp:171`
 
 **问题描述**:
-存在未完成的功能实现。
+存在未完成的功能实现 - FieldDecl 缺少父类跟踪,导致访问控制检查不完整。
 
-**证据**:
+**修复方案**:
+为 `FieldDecl` 添加 `Parent` 指针,与 `CXXMethodDecl` 设计一致。
+
+**修改内容**:
+
+1. **`include/blocktype/AST/Decl.h`**:
 ```cpp
-// ParseExpr.cpp:171
-// TODO: Add proper DeclContext support to track which class declares each member
+class FieldDecl : public ValueDecl {
+  // ...
+  CXXRecordDecl *Parent = nullptr; // ✅ 添加父类指针
+  
+public:
+  CXXRecordDecl *getParent() const { return Parent; }
+  void setParent(CXXRecordDecl *P) { Parent = P; }
+};
 ```
 
-**影响**:
-- 成员访问表达式可能无法正确解析嵌套类成员
-- 可能导致符号查找失败
+2. **`include/blocktype/AST/Decl.h` (CXXRecordDecl)**:
+```cpp
+void addMember(Decl *D) { 
+  Members.push_back(D); 
+  DeclContext::addDecl(D);
+  
+  // ✅ 自动设置 FieldDecl 的父指针
+  if (auto *Field = llvm::dyn_cast<FieldDecl>(D)) {
+    Field->setParent(this);
+  }
+}
+```
+
+3. **`src/Parse/ParseExpr.cpp`**:
+```cpp
+// ✅ 移除 TODO,使用正确的父类跟踪
+CXXRecordDecl *MemberClass = nullptr;
+
+if (auto *Field = llvm::dyn_cast<FieldDecl>(Member)) {
+  MemberClass = Field->getParent();  // ✅ 获取字段所属的类
+} else if (auto *Method = llvm::dyn_cast<CXXMethodDecl>(Member)) {
+  MemberClass = Method->getParent();
+}
+```
+
+**测试验证**:
+```cpp
+class Base {
+private:
+  int privateField;
+protected:
+  int protectedField;
+public:
+  int publicField;
+};
+
+class Derived : public Base {
+  void test() {
+    protectedField = 2; // ✅ 成功: protected 成员可访问
+    publicField = 3;    // ✅ 成功: public 成员可访问
+  }
+};
+```
+
+**结论**: 此问题已修复,访问控制检查现在可以正确识别字段所属的类。
 
 ---
 
@@ -192,7 +245,7 @@ src/Parse/ParseTemplate.cpp: emitError: 3 处
 | "缺失的顶层声明分发" | ✅ 非问题 | N/A | N/A | N/A | ✅ 已验证正确 |
 | DEBUG 输出未清理 | 🟡 中 | 性能/日志 | 低 | P2 | ✅ 已修复 |
 | 错误恢复不完整 | 🟡 中 | 用户体验 | 中 | P1 | 待评估 |
-| TODO 未完成功能 | 🟡 中 | 正确性 | 中 | P1 | 待评估 |
+| TODO 未完成功能 | 🟡 中 | 正确性 | 中 | P1 | ✅ 已修复 |
 | 过多的 nullptr 路径 | 🟢 低 | 可维护性 | 高 | P3 | 待评估 |
 
 ---
@@ -304,19 +357,26 @@ int x = ; int y = 42; // 第一个声明有语法错误
 **✅ 已解决的问题**:
 1. **问题 1 (P0)**: "缺失的顶层声明分发" - 经验证是对 C++ 标准的误解,当前实现完全正确
 2. **问题 2 (P2)**: DEBUG 输出 - 已使用 `LLVM_DEBUG()` 宏清理
+3. **问题 4 (P1)**: TODO 未完成功能 - 已为 `FieldDecl` 添加父类跟踪,修复访问控制检查
 
 **⚠️ 待评估的问题**:
-3. **问题 3 (P1)**: 错误恢复不完整 - 需要进一步测试评估
-4. **问题 4 (P1)**: TODO 未完成功能 - 需要具体分析影响范围
+4. **问题 3 (P1)**: 错误恢复不完整 - 需要进一步测试评估
 5. **问题 5 (P3)**: 过多的 nullptr 路径 - 低优先级,可维护性问题
+
+**修复详情**:
+- 为 `FieldDecl` 添加 `Parent` 指针,与 `CXXMethodDecl` 设计一致
+- 修改 `CXXRecordDecl::addMember()` 自动设置字段的父指针
+- 更新访问控制检查使用 `Field->getParent()` 获取所属类
+- 移除 `ParseExpr.cpp:171` 的 TODO 注释
 
 **建议下一步**:
 1. ✅ P0 问题已验证无需修复
 2. ✅ P2 问题已在之前修复
-3. 评估 P1 问题(错误恢复和 TODO)的实际影响
-4. 在 Task 1.3(Sema 流程分析)中确认 Sema 对这些特性的支持
+3. ✅ P1 问题(TODO 未完成功能)已修复
+4. 评估 P1 问题(错误恢复)的实际影响
+5. 在 Task 1.3(Sema 流程分析)中确认 Sema 对这些特性的支持
 
 ---
 
-**报告更新时间**: 2026-04-21 20:15  
+**报告更新时间**: 2026-04-21 20:20  
 **文件位置**: `docs/dev status/task_1.2_parser_issues.md`

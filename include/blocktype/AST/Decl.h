@@ -348,6 +348,7 @@ class FieldDecl : public ValueDecl {
   Expr *InClassInitializer;
   bool IsMutable;
   AccessSpecifier Access;
+  CXXRecordDecl *Parent = nullptr; // The class this field belongs to
 
 public:
   FieldDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
@@ -364,6 +365,10 @@ public:
   
   AccessSpecifier getAccess() const { return Access; }
   void setAccess(AccessSpecifier A) { Access = A; }
+  
+  // Parent class accessors
+  CXXRecordDecl *getParent() const { return Parent; }
+  void setParent(CXXRecordDecl *P) { Parent = P; }
   
   bool isPublic() const { return Access == AccessSpecifier::AS_public; }
   bool isProtected() const { return Access == AccessSpecifier::AS_protected; }
@@ -559,7 +564,15 @@ public:
       : TagDecl(Loc, Name, TK) {}
 
   llvm::ArrayRef<FieldDecl *> fields() const { return Fields; }
-  void addField(FieldDecl *F) { Fields.push_back(F); }
+  void addField(FieldDecl *F) { 
+    Fields.push_back(F); 
+  }
+  
+  // Add field and set parent (for CXXRecordDecl)
+  void addFieldWithParent(FieldDecl *F, CXXRecordDecl *Parent) {
+    Fields.push_back(F);
+    F->setParent(Parent);
+  }
 
   NodeKind getKind() const override { return NodeKind::RecordDeclKind; }
 
@@ -631,7 +644,15 @@ public:
 
   // Members
   llvm::ArrayRef<Decl *> members() const { return Members; }
-  void addMember(Decl *D) { Members.push_back(D); DeclContext::addDecl(D); }
+  void addMember(Decl *D) { 
+    Members.push_back(D); 
+    DeclContext::addDecl(D);
+    
+    // Set parent pointer for FieldDecl
+    if (auto *Field = llvm::dyn_cast<FieldDecl>(D)) {
+      Field->setParent(this);
+    }
+  }
 
   /// Access the DeclContext interface.
   DeclContext *getDeclContext() { return this; }
