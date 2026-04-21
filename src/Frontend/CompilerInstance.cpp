@@ -259,23 +259,99 @@ bool CompilerInstance::compileFile(StringRef Filename) {
 bool CompilerInstance::compileAllFiles() {
   bool AllSucceeded = true;
 
+  // P0-2: 在循环外创建共享基础设施
+  // 这些组件在多文件编译时应该共享，以支持跨文件符号解析
+  
+  // 如果只有一个文件，使用简单路径
+  if (Invocation->FrontendOpts.InputFiles.size() == 1) {
+    return compileFile(Invocation->FrontendOpts.InputFiles[0]);
+  }
+
+  // 多文件编译：共享基础设施
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "Compiling " << Invocation->FrontendOpts.InputFiles.size() 
+           << " files with shared infrastructure\n";
+  }
+
+  // 确保基础设施已创建
+  if (!Initialized) {
+    if (!initialize(Invocation)) {
+      return false;
+    }
+  }
+
+  // 收集所有翻译单元
+  std::vector<TranslationUnitDecl *> AllTUs;
+
+  // 编译每个文件
   for (const auto &File : Invocation->FrontendOpts.InputFiles) {
-    // Create a new compiler instance for each file
-    // This ensures clean state for each file
-    CompilerInstance FileInstance;
-    
-    // Copy invocation
-    auto FileInvocation = std::make_shared<CompilerInvocation>(*Invocation);
-    FileInvocation->FrontendOpts.InputFiles = {File};
-    
-    // Initialize
-    if (!FileInstance.initialize(FileInvocation)) {
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "\nCompiling: " << File << "\n";
+    }
+
+    // 读取文件内容
+    std::string Content;
+    if (!readFileContent(File, Content)) {
       AllSucceeded = false;
       continue;
     }
 
-    // Compile
-    if (!FileInstance.compileFile(File)) {
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Source size: " << Content.size() << " bytes\n";
+    }
+
+    // 重置 Preprocessor 状态（每个文件需要独立的预处理状态）
+    PP->reset();
+    
+    // 进入源文件
+    PP->enterSourceFile(File, Content);
+
+    // 解析
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Parsing...\n";
+    }
+
+    TranslationUnitDecl *TU = ParserPtr->parseTranslationUnit();
+    if (!TU || ParserPtr->hasErrors()) {
+      errs() << "Error: Parsing failed for '" << File << "'\n";
+      setError();
+      AllSucceeded = false;
+      continue;
+    }
+
+    // 保存翻译单元
+    AllTUs.push_back(TU);
+    CurrentTU = TU;
+
+    // 执行语义分析
+    if (!performSemaAnalysis()) {
+      errs() << "Error: Semantic analysis failed for '" << File << "'\n";
+      AllSucceeded = false;
+      continue;
+    }
+
+    // Dump AST if requested
+    if (Invocation->FrontendOpts.DumpAST) {
+      dumpAST();
+    }
+
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Compilation successful\n";
+    }
+  }
+
+  // 生成代码（如果需要）
+  if (AllSucceeded && Invocation->CodeGenOpts.EmitLLVM && !AllTUs.empty()) {
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "\nGenerating LLVM IR for all translation units...\n";
+    }
+
+    // 为所有 TU 生成一个模块
+    auto Module = generateLLVMIR("multi_file_module");
+    if (Module) {
+      Module->print(outs(), nullptr);
+    } else {
+      errs() << "Error: Code generation failed\n";
       AllSucceeded = false;
     }
   }

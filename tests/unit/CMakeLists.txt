@@ -33,6 +33,9 @@ add_subdirectory(Sema)
 # CodeGen 单元测试
 add_subdirectory(CodeGen)
 
+# Frontend 单元测试
+add_subdirectory(Frontend)
+
 # D19: Performance tests
 add_executable(PerformanceTest
   PerformanceTest.cpp

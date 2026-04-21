@@ -269,6 +269,35 @@ void Preprocessor::clearTokenBuffer() {
   TokenBufferIndex = 0;
 }
 
+void Preprocessor::reset() {
+  // Clear include stack
+  IncludeStack.clear();
+  CurLexer = nullptr;
+  
+  // Clear token buffer
+  clearTokenBuffer();
+  
+  // Reset conditional compilation state
+  ConditionalStack.clear();
+  Skipping = false;
+  
+  // Reset file context
+  CurrentFilename = StringRef();
+  CurrentLine = 1;
+  CurrentFileID = static_cast<unsigned>(-1);
+  
+  // Note: We preserve Macros because macro definitions should be shared
+  // across multiple files in multi-file compilation.
+  // If you need to clear macros, call undefMacro() explicitly.
+  
+  // Clear include guards (file-specific)
+  FileIncludeGuards.clear();
+  PendingIncludeGuard = StringRef();
+  
+  // Clear pragma once tracking (file-specific)
+  PragmaOnceFiles.clear();
+}
+
 void Preprocessor::enterSourceFile(StringRef Filename, StringRef Content) {
   auto Lex = std::make_unique<Lexer>(SM, Diags, Content, SM.createMainFileID(Filename, Content));
 

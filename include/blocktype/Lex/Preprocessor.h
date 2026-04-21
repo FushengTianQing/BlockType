@@ -171,6 +171,10 @@ public:
   /// Returns true if we've reached the end of all files.
   bool isEOF() const;
 
+  /// Resets the preprocessor state for processing a new file.
+  /// This is used in multi-file compilation to share infrastructure.
+  void reset();
+
   //===--------------------------------------------------------------------===//
   // Macro management
   //===--------------------------------------------------------------------===//
