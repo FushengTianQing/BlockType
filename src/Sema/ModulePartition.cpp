@@ -211,14 +211,21 @@ Sema::getModulePartitions(ModuleDecl *Module) {
   }
 
   // 从 ModuleManager 获取分区信息
-  // TODO: 需要在 ModuleManager 中实现 getModuleInfo 方法
-  // ModuleInfo *Info = ModMgr->getModuleInfo(Module->getModuleName());
-  // if (!Info) {
-  //   return Partitions;
-  // }
+  ModuleInfo *Info = ModMgr->getModuleInfo(Module->getModuleName());
+  if (!Info) {
+    return Partitions;
+  }
 
-  // 暂时返回空列表
-  // TODO: 实现分区查找逻辑
+  // 遍历所有已加载模块,查找属于当前模块的分区
+  for (ModuleInfo *ModInfo : ModMgr->getLoadedModules()) {
+    if (ModInfo->IsPartition && ModInfo->PrimaryModule == Module->getModuleName()) {
+      // 找到分区,获取其 ModuleDecl
+      if (ModInfo->Decl) {
+        Partitions.push_back(ModInfo->Decl);
+      }
+    }
+  }
+
   return Partitions;
 }
 

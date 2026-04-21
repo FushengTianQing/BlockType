@@ -133,9 +133,6 @@ private:
   /// \param ObjectFiles 目标文件列表
   /// \param OutputPath 输出文件路径
   /// \return 完整的链接器命令行
-  std::string buildLinkerCommand(llvm::ArrayRef<std::string> ObjectFiles,
-                                 llvm::StringRef OutputPath);
-
   /// 链接标志
   llvm::SmallVector<std::string, 8> LinkerFlags;
 

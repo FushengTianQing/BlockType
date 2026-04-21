@@ -118,14 +118,13 @@ bool Sema::validateGlobalModuleFragment(ModuleDecl *MD) {
   MD->getGlobalFragmentDecls(GlobalDecls);
 
   for (Decl *D : GlobalDecls) {
-    // TODO: 添加 isExported 方法到 NamedDecl
-    // if (auto *ND = dyn_cast<NamedDecl>(D)) {
-    //   if (ND->isExported()) {
-    //     Diags.report(ND->getLocation(), DiagID::err_not_implemented,
-    //                  "declaration in global module fragment cannot be exported");
-    //     return false;
-    //   }
-    // }
+    if (auto *ND = dyn_cast<NamedDecl>(D)) {
+      if (ND->isExported()) {
+        Diags.report(ND->getLocation(), DiagID::err_not_implemented,
+                     "declaration in global module fragment cannot be exported");
+        return false;
+      }
+    }
   }
 
   return true;
@@ -145,14 +144,13 @@ bool Sema::validatePrivateModuleFragment(ModuleDecl *MD) {
   MD->getPrivateFragmentDecls(PrivateDecls);
 
   for (Decl *D : PrivateDecls) {
-    // TODO: 添加 isExported 方法到 NamedDecl
-    // if (auto *ND = dyn_cast<NamedDecl>(D)) {
-    //   if (ND->isExported()) {
-    //     Diags.report(ND->getLocation(), DiagID::err_not_implemented,
-    //                  "declaration in private module fragment cannot be exported");
-    //     return false;
-    //   }
-    // }
+    if (auto *ND = dyn_cast<NamedDecl>(D)) {
+      if (ND->isExported()) {
+        Diags.report(ND->getLocation(), DiagID::err_not_implemented,
+                     "declaration in private module fragment cannot be exported");
+        return false;
+      }
+    }
   }
 
   return true;

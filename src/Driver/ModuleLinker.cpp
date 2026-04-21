@@ -121,57 +121,56 @@ ModuleLinker::collectObjectFiles(llvm::ArrayRef<llvm::StringRef> ModuleNames) {
 
 bool ModuleLinker::invokeLinker(llvm::ArrayRef<std::string> ObjectFiles,
                                 llvm::StringRef OutputPath) {
-  // 构建命令行
-  std::string Command = buildLinkerCommand(ObjectFiles, OutputPath);
-
-  // 执行链接器
-  int ExitCode = std::system(Command.c_str());
-
-  if (ExitCode != 0) {
-    Diags.report(SourceLocation{}, DiagID::err_not_implemented,
-                 "linker failed with exit code " + std::to_string(ExitCode));
-    return false;
-  }
-
-  return true;
-}
-
-std::string
-ModuleLinker::buildLinkerCommand(llvm::ArrayRef<std::string> ObjectFiles,
-                                 llvm::StringRef OutputPath) {
-  std::string Cmd;
-
-  // 链接器路径
-  Cmd += LinkerPath;
+  // 构建参数列表
+  llvm::SmallVector<llvm::StringRef, 16> Args;
+  Args.push_back(LinkerPath);
 
   // 根据输出类型添加标志
   switch (OutType) {
   case OutputType::Executable:
-    // 可执行文件：-o <output>
-    Cmd += " -o " + OutputPath.str();
+    Args.push_back("-o");
+    Args.push_back(OutputPath);
     break;
   case OutputType::SharedLibrary:
-    // 共享库：-shared -o <output>
-    Cmd += " -shared -o " + OutputPath.str();
+    Args.push_back("-shared");
+    Args.push_back("-o");
+    Args.push_back(OutputPath);
     break;
   case OutputType::StaticLibrary:
-    // 静态库：使用 ar 命令
-    // 注意：这里简化处理，实际应该使用 ar
-    Cmd = "ar rcs " + OutputPath.str();
+    // 对于静态库,使用 ar 命令
+    // 注意:这里简化处理,实际应该单独处理
+    Args.push_back("rcs");
+    Args.push_back(OutputPath);
     break;
-  }
-
-  // 添加用户指定的链接标志
-  for (const std::string &Flag : LinkerFlags) {
-    Cmd += " " + Flag;
   }
 
   // 添加目标文件
-  for (const std::string &ObjFile : ObjectFiles) {
-    Cmd += " " + ObjFile;
+  for (const auto &ObjFile : ObjectFiles) {
+    Args.push_back(ObjFile);
   }
 
-  return Cmd;
+  // 添加用户指定的链接标志
+  for (const auto &Flag : LinkerFlags) {
+    Args.push_back(Flag);
+  }
+
+  // 使用安全的执行 API
+  std::string ErrorMessage;
+  int ExitCode = llvm::sys::ExecuteAndWait(
+      LinkerPath, Args, std::nullopt, {}, 0, 0, &ErrorMessage);
+
+  if (ExitCode != 0) {
+    if (!ErrorMessage.empty()) {
+      Diags.report(SourceLocation{}, DiagID::err_not_implemented,
+                   "linker failed: " + ErrorMessage);
+    } else {
+      Diags.report(SourceLocation{}, DiagID::err_not_implemented,
+                   "linker failed with exit code " + std::to_string(ExitCode));
+    }
+    return false;
+  }
+
+  return true;
 }
 
 } // namespace blocktype
