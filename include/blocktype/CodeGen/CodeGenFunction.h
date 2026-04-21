@@ -276,6 +276,11 @@ private:
   llvm::Value *EmitConditionalOperator(ConditionalOperator *CO);
   llvm::Value *EmitInitListExpr(InitListExpr *ILE);
   
+  // C++17/20 expressions
+  llvm::Value *EmitDesignatedInitExpr(DesignatedInitExpr *DIE);
+  llvm::Value *EmitRequiresExpr(RequiresExpr *RE);
+  llvm::Value *EmitCXXFoldExpr(CXXFoldExpr *FE);
+  
   // P7.1.5: Lambda expression
   llvm::Value *EmitLambdaExpr(LambdaExpr *LE);
   

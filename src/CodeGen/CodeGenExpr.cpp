@@ -1988,10 +1988,72 @@ llvm::Value *CodeGenFunction::EmitCXXThrowExpr(CXXThrowExpr *ThrowExpression) {
       }
     }
 
-    // 析构函数指针（异常对象销毁回调）— 简化为 null（trivial 析构）
-    // TODO: 如果类型有非 trivial 析构函数，需要生成一个适配函数
+    // 析构函数指针（异常对象销毁回调）
+    // Itanium C++ ABI: __cxa_throw 的第三个参数是析构函数指针
+    // 对于有非 trivial 析构函数的类型，需要生成一个适配函数
     llvm::Value *DtorPtr = llvm::ConstantPointerNull::get(
         llvm::PointerType::get(Ctx, 0));
+    
+    if (ThrowType->isRecordType()) {
+      if (auto *RT = llvm::dyn_cast<RecordType>(ThrowType.getTypePtr())) {
+        if (auto *CXXRD = llvm::dyn_cast<CXXRecordDecl>(RT->getDecl())) {
+          // 检查是否有析构函数
+          if (CXXRD->hasDestructor()) {
+            // 生成析构函数适配器: void dtor_adapter(void* obj)
+            // 调用: obj->~T()
+            llvm::FunctionType *DtorAdapterTy = llvm::FunctionType::get(
+                llvm::Type::getVoidTy(Ctx),
+                {llvm::PointerType::get(Ctx, 0)}, false);
+            
+            // 创建唯一的适配器函数名
+            std::string DtorAdapterName = "__exception_dtor_adapter_" + 
+                CXXRD->getName().str();
+            
+            llvm::Function *DtorAdapter = llvm::Function::Create(
+                DtorAdapterTy,
+                llvm::Function::InternalLinkage,
+                DtorAdapterName,
+                CGM.getModule());
+            
+            // 生成适配器函数体
+            llvm::BasicBlock *EntryBB = llvm::BasicBlock::Create(
+                Ctx, "entry", DtorAdapter);
+            llvm::IRBuilder<> AdapterBuilder(EntryBB);
+            
+            // 参数: void* obj
+            llvm::Argument *ObjArg = &*DtorAdapter->arg_begin();
+            
+            // BitCast to T*
+            llvm::Type *ObjTy = CGM.getTypes().ConvertType(ThrowType);
+            llvm::PointerType *ObjPtrTy = llvm::PointerType::getUnqual(ObjTy);
+            llvm::Value *Obj = AdapterBuilder.CreateBitCast(ObjArg, ObjPtrTy, "obj");
+            
+            // 查找析构函数（遍历methods查找destructor）
+            CXXDestructorDecl *Dtor = nullptr;
+            for (auto *Method : CXXRD->methods()) {
+              if (auto *DD = llvm::dyn_cast<CXXDestructorDecl>(Method)) {
+                Dtor = DD;
+                break;
+              }
+            }
+            
+            // 调用析构函数
+            if (Dtor) {
+              if (auto *DtorFn = CGM.GetOrCreateFunctionDecl(Dtor)) {
+                llvm::FunctionType *DtorFnTy = llvm::FunctionType::get(
+                    llvm::Type::getVoidTy(Ctx),
+                    {ObjPtrTy}, false);
+                AdapterBuilder.CreateCall(DtorFnTy, DtorFn, {Obj});
+              }
+            }
+            
+            AdapterBuilder.CreateRetVoid();
+            
+            DtorPtr = DtorAdapter;
+          }
+        }
+      }
+    }
 
     // 声明 __cxa_throw(void*, typeinfo*, dtor*) → noreturn
     llvm::FunctionType *ThrowTy = llvm::FunctionType::get(
@@ -2373,4 +2435,81 @@ llvm::Value *CodeGenFunction::EmitPackIndexingExpr(PackIndexingExpr *PIE) {
   // Return a placeholder null value
   // The real value will be filled in during instantiation
   return IndexVal;
+}
+
+//===----------------------------------------------------------------------===//
+// C++17/20 Expression Code Generation
+//===----------------------------------------------------------------------===//
+
+llvm::Value *CodeGenFunction::EmitDesignatedInitExpr(DesignatedInitExpr *DIE) {
+  if (!DIE) {
+    return nullptr;
+  }
+  
+  // Designated initializer: Point p = {.x = 1, .y = 2};
+  // Similar to InitListExpr but with field/array designators
+  
+  llvm::Type *AllocType = CGM.getTypes().ConvertType(DIE->getType());
+  if (!AllocType) {
+    return nullptr;
+  }
+  
+  llvm::AllocaInst *Alloca = CreateAlloca(DIE->getType(), "desiginit");
+  
+  // Get the initializer expression
+  Expr *Init = DIE->getInit();
+  if (!Init) {
+    return nullptr;
+  }
+  
+  // For now, treat it similar to InitListExpr
+  // Full implementation would handle each designator individually
+  llvm::Value *InitValue = EmitExpr(Init);
+  if (InitValue) {
+    // Store to the allocated space
+    Builder.CreateStore(InitValue, Alloca);
+  }
+  
+  return Builder.CreateLoad(AllocType, Alloca, "desiginit.val");
+}
+
+llvm::Value *CodeGenFunction::EmitRequiresExpr(RequiresExpr *RE) {
+  if (!RE) {
+    return nullptr;
+  }
+  
+  // Requires expression: requires { requirement1; requirement2; ... }
+  // Evaluates to a bool prvalue indicating whether the requirements are satisfied
+  // For compile-time evaluation, this should be handled by Sema during constraint checking
+  // At runtime, requires expressions are always true (if they passed Sema validation)
+  
+  // Return a constant true value
+  return llvm::ConstantInt::getTrue(CGM.getLLVMContext());
+}
+
+llvm::Value *CodeGenFunction::EmitCXXFoldExpr(CXXFoldExpr *FE) {
+  if (!FE) {
+    return nullptr;
+  }
+  
+  // Fold expression: (pack op ...) or (... op pack) or (init op ... op pack)
+  // At this point, the fold should have been instantiated by TemplateInstantiator
+  // We just emit the pattern or the already-expanded expression
+  
+  // If the fold has been instantiated, it should have a pattern that's already expanded
+  // For now, emit the pattern
+  Expr *Pattern = FE->getPattern();
+  if (Pattern) {
+    return EmitExpr(Pattern);
+  }
+  
+  // If there's an init value, emit it
+  if (FE->getLHS()) {
+    return EmitExpr(FE->getLHS());
+  }
+  if (FE->getRHS()) {
+    return EmitExpr(FE->getRHS());
+  }
+  
+  return nullptr;
 }

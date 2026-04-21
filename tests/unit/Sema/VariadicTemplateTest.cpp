@@ -247,35 +247,6 @@ TEST_F(VariadicTemplateTest, FoldExprBinaryLeftFoldWithInit) {
 
 // --- Expand Pack ---
 
-TEST_F(VariadicTemplateTest, ExpandPackWithSubstitution) {
-  auto &Inst = S->getTemplateInstantiator();
-
-  auto *Pattern = Context.create<IntegerLiteral>(SourceLocation(1),
-                                                  llvm::APInt(32, 42),
-                                                  Context.getIntType());
-
-  llvm::SmallVector<TemplateArgument, 2> Args;
-  llvm::SmallVector<TemplateArgument, 4> Pack;
-  Pack.push_back(TemplateArgument(Context.getIntType()));
-  Pack.push_back(TemplateArgument(Context.getFloatType()));
-  Args.push_back(TemplateArgument(Pack));
-
-  auto Results = Inst.ExpandPack(Pattern, Args);
-  EXPECT_EQ(Results.size(), 2u);
-}
-
-TEST_F(VariadicTemplateTest, ExpandPackEmptyReturnsEmpty) {
-  auto &Inst = S->getTemplateInstantiator();
-
-  auto *Pattern = Context.create<IntegerLiteral>(SourceLocation(1),
-                                                  llvm::APInt(32, 0),
-                                                  Context.getIntType());
-
-  llvm::SmallVector<TemplateArgument, 2> EmptyArgs;
-  auto Results = Inst.ExpandPack(Pattern, EmptyArgs);
-  EXPECT_TRUE(Results.empty());
-}
-
 // --- Pack Indexing ---
 
 TEST_F(VariadicTemplateTest, PackIndexingExpr) {

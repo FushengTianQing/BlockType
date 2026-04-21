@@ -16,6 +16,7 @@
 #include "blocktype/AST/DeclContext.h"
 #include "blocktype/AST/TemplateParameterList.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/Parse/DeclSpec.h" // For StorageClass enum
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -194,6 +195,7 @@ class FunctionDecl : public ValueDecl, public DeclContext {
   bool NoexceptValue; // true if noexcept(true), false if noexcept(false)
   Expr *NoexceptExpr; // noexcept(expression)
   class AttributeListDecl *Attrs = nullptr; // [[noreturn]], [[nodiscard]] etc.
+  StorageClass SC = StorageClass::None; // Storage class specifier
 
   // P7.1.1: Deducing this (P0847R7) - Explicit object parameter
   ParmVarDecl *ExplicitObjectParam = nullptr;
@@ -230,6 +232,11 @@ public:
   bool hasNoexceptSpec() const { return HasNoexceptSpec; }
   bool getNoexceptValue() const { return NoexceptValue; }
   Expr *getNoexceptExpr() const { return NoexceptExpr; }
+  
+  /// Storage class access.
+  StorageClass getStorageClass() const { return SC; }
+  void setStorageClass(StorageClass S) { SC = S; }
+  bool isStatic() const { return SC == StorageClass::Static; }
 
   /// Whether this function is variadic (has ... parameter).
   bool isVariadic() const;

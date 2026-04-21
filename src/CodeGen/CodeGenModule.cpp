@@ -287,9 +287,10 @@ CodeGenModule::GetFunctionLinkage(const FunctionDecl *FD) {
   }
 
   // 默认：ExternalLinkage
-  // static 函数应由 Sema 标记 isStatic()，这里检查
-  // Note: 当前 FunctionDecl 没有 isStatic() 方法（只有 VarDecl 有）
-  // TODO: 当 FunctionDecl 支持 StorageClass 时添加检查
+  // static 函数使用 InternalLinkage
+  if (FD->isStatic()) {
+    return llvm::Function::InternalLinkage;
+  }
   return llvm::Function::ExternalLinkage;
 }
 

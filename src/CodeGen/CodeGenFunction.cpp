@@ -341,6 +341,14 @@ llvm::Value *CodeGenFunction::EmitExpr(Expr *Expression) {
   case ASTNode::NodeKind::InitListExprKind:
     return EmitInitListExpr(llvm::cast<InitListExpr>(Expression));
 
+  // C++17/20 expressions
+  case ASTNode::NodeKind::DesignatedInitExprKind:
+    return EmitDesignatedInitExpr(llvm::cast<DesignatedInitExpr>(Expression));
+  case ASTNode::NodeKind::RequiresExprKind:
+    return EmitRequiresExpr(llvm::cast<RequiresExpr>(Expression));
+  case ASTNode::NodeKind::CXXFoldExprKind:
+    return EmitCXXFoldExpr(llvm::cast<CXXFoldExpr>(Expression));
+
   // P7.1.5: Lambda expression
   case ASTNode::NodeKind::LambdaExprKind:
     return EmitLambdaExpr(llvm::cast<LambdaExpr>(Expression));
