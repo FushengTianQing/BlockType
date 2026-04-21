@@ -1,0 +1,13 @@
+311:  if (!D)
+422:  if (!D) return StmtResult::getInvalid();
+2047:    if (!D) {
+2094:    if (!D) {
+2135:      if (!D) {
+src/Sema/Sema.cpp:2105:        FD = DeduceAndInstantiateFunctionTemplate(FTD, Args, LParenLoc);
+src/Sema/Sema.cpp:2115:          llvm::errs() << "DEBUG [Sema L2096]: Found template '" << Name.str() << "', calling DeduceAndInstantiateFunctionTemplate\n";
+src/Sema/Sema.cpp:2119:              FD = DeduceAndInstantiateFunctionTemplate(FuncFTD, Args, LParenLoc);
+src/Sema/Sema.cpp:2120:              llvm::errs() << "DEBUG [Sema L2100]: DeduceAndInstantiateFunctionTemplate returned " 
+src/Sema/SemaTemplate.cpp:184:    // DeduceAndInstantiateFunctionTemplate.
+src/Sema/SemaTemplate.cpp:669:FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
+src/Parse/ParseType.cpp:741:/// parseTrailingReturnType - Parse a trailing return type.
+src/Parse/ParseType.cpp:745:QualType Parser::parseTrailingReturnType() {
