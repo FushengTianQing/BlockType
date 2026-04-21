@@ -32,6 +32,7 @@
 #include "blocktype/Sema/ConstraintSatisfaction.h"
 #include "blocktype/Sema/TypeDeduction.h"
 #include "blocktype/Sema/SemaCXX.h"
+#include "blocktype/Module/ModuleManager.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <memory>
@@ -192,6 +193,9 @@ class Sema {
   /// Type deduction engine for auto/decltype
   std::unique_ptr<TypeDeduction> TypeDeduce;
 
+  /// Module manager - manages C++20 modules
+  std::unique_ptr<ModuleManager> ModMgr;
+
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;
 
@@ -274,6 +278,9 @@ public:
 
   /// Access the template deduction engine.
   TemplateDeduction &getTemplateDeduction() { return *Deduction; }
+
+  /// Access the module manager.
+  ModuleManager &getModuleManager() { return *ModMgr; }
 
   //===------------------------------------------------------------------===//
   // Template Instantiation

@@ -1040,6 +1040,7 @@ ImportDecl *Parser::parseImportDeclaration() {
 /// parseExportDeclaration - Parse an export declaration.
 ///
 /// export-declaration ::= 'export' declaration
+///                      | 'export' '{' declaration-seq '}'
 ExportDecl *Parser::parseExportDeclaration() {
   // Expect 'export' keyword
   if (!Tok.is(TokenKind::kw_export)) {
@@ -1050,7 +1051,43 @@ ExportDecl *Parser::parseExportDeclaration() {
   SourceLocation ExportLoc = Tok.getLocation();
   consumeToken(); // consume 'export'
 
-  // Parse the exported declaration
+  // Check for export block: export { decl1; decl2; ... }
+  if (Tok.is(TokenKind::l_brace)) {
+    consumeToken(); // consume '{'
+
+    // Parse multiple declarations until '}'
+    llvm::SmallVector<Decl*, 8> ExportedDecls;
+    while (!Tok.is(TokenKind::r_brace) && !Tok.is(TokenKind::eof)) {
+      Decl *D = parseDeclaration();
+      if (D) {
+        ExportedDecls.push_back(D);
+      } else {
+        // Skip to next token on error
+        skipUntil({TokenKind::r_brace, TokenKind::semicolon, TokenKind::eof});
+        if (Tok.is(TokenKind::semicolon)) {
+          consumeToken();
+        }
+      }
+    }
+
+    if (!Tok.is(TokenKind::r_brace)) {
+      emitError(DiagID::err_expected);
+      return nullptr;
+    }
+    consumeToken(); // consume '}'
+
+    // Create ExportDecl for the block (using first decl as representative)
+    // TODO: Consider creating a CompoundExportDecl to hold multiple declarations
+    if (ExportedDecls.empty()) {
+      return nullptr;
+    }
+
+    // For now, export the first declaration
+    // Future: should mark all declarations as exported
+    return llvm::cast<ExportDecl>(Actions.ActOnExportDecl(ExportLoc, ExportedDecls[0]).get());
+  }
+
+  // Parse single exported declaration
   Decl *ExportedDecl = parseDeclaration();
   if (!ExportedDecl) {
     LLVM_DEBUG(llvm::dbgs() << "parseExportDeclaration: sub-declaration failed\n");

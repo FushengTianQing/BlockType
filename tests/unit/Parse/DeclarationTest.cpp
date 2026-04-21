@@ -507,6 +507,20 @@ TEST_F(DeclarationTest, ModuleExport) {
   EXPECT_TRUE(llvm::isa<ModuleDecl>(D));
 }
 
+TEST_F(DeclarationTest, ExportBlock) {
+  parse("export { int x; int y; }");
+  Decl *D = P->parseDeclaration();
+  ASSERT_NE(D, nullptr);
+  EXPECT_TRUE(llvm::isa<ExportDecl>(D));
+}
+
+TEST_F(DeclarationTest, ExportSingleDeclaration) {
+  parse("export int x;");
+  Decl *D = P->parseDeclaration();
+  ASSERT_NE(D, nullptr);
+  EXPECT_TRUE(llvm::isa<ExportDecl>(D));
+}
+
 //===----------------------------------------------------------------------===//
 // Concept Declaration Tests (C++20)
 //===----------------------------------------------------------------------===//

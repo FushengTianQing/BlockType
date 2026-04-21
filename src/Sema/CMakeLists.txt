@@ -21,4 +21,5 @@ add_library(blocktype-sema
 target_link_libraries(blocktype-sema
   PUBLIC
     blocktype-ast
+    blocktype-module
 )

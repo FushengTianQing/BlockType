@@ -105,8 +105,10 @@ public:
   void setType(QualType NewType) { T = NewType; }
 
   static bool classof(const ASTNode *N) {
+    // ValueDecl includes: ValueDecl, VarDecl, ParmVarDecl, FunctionDecl,
+    // FieldDecl, EnumConstantDecl. LabelDecl inherits NamedDecl, not ValueDecl.
     return N->getKind() >= NodeKind::ValueDeclKind &&
-           N->getKind() < NodeKind::TypeDeclKind;
+           N->getKind() <= NodeKind::EnumConstantDeclKind;
   }
 };
 

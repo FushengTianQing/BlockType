@@ -30,6 +30,9 @@ add_subdirectory(Parse)
 # Sema 单元测试
 add_subdirectory(Sema)
 
+# Module 单元测试
+add_subdirectory(Module)
+
 # CodeGen 单元测试
 add_subdirectory(CodeGen)
 

@@ -72,7 +72,8 @@ Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
     Instantiator(std::make_unique<TemplateInstantiator>(*this)),
     Deduction(std::make_unique<TemplateDeduction>(*this)),
     ConstraintChecker(std::make_unique<ConstraintSatisfaction>(*this)),
-    TypeDeduce(std::make_unique<TypeDeduction>(C, &D)) {
+    TypeDeduce(std::make_unique<TypeDeduction>(C, &D)),
+    ModMgr(std::make_unique<ModuleManager>(C, D)) {
   PushScope(ScopeFlags::TranslationUnitScope);
   
   // Initialize std namespace and std::get for structured bindings
@@ -347,9 +348,7 @@ DeclResult Sema::ActOnFunctionDecl(SourceLocation Loc, llvm::StringRef Name,
                                     QualType T,
                                     llvm::ArrayRef<ParmVarDecl *> Params,
                                     Stmt *Body) {
-  // Auto return type deduction is deferred to template instantiation.
-  // For non-template functions with auto return type, we still need to deduce.
-  // But for now, keep the AutoType as-is and let TypeCheck handle it.
+  // Auto return type deduction is handled in ActOnFinishOfFunctionDef.
   QualType ActualReturnType = T;
   
   auto *FD = Context.create<FunctionDecl>(Loc, Name, ActualReturnType, Params, Body);
@@ -551,6 +550,8 @@ DeclResult Sema::ActOnModuleDecl(SourceLocation Loc, llvm::StringRef Name,
   auto *MD = Context.create<ModuleDecl>(Loc, Name, IsExported, Partition,
                                          IsPartition, IsGlobalFragment,
                                          IsPrivateFragment);
+  registerDecl(MD);
+  if (CurContext) CurContext->addDecl(MD);
   return DeclResult(MD);
 }
 
@@ -559,6 +560,8 @@ DeclResult Sema::ActOnImportDecl(SourceLocation Loc, llvm::StringRef ModuleName,
                                  llvm::StringRef Header, bool IsHeader) {
   auto *ID = Context.create<ImportDecl>(Loc, ModuleName, IsExported, Partition,
                                          Header, IsHeader);
+  registerDecl(ID);
+  if (CurContext) CurContext->addDecl(ID);
   return DeclResult(ID);
 }
 

@@ -536,8 +536,9 @@ void Parser::emitError(DiagID ID, llvm::StringRef Expected, llvm::StringRef Got)
 Expr *Parser::createRecoveryExpr(SourceLocation Loc) {
   HasRecoveryExpr = true;
 
-  // Create a placeholder integer literal for recovery
-  // This prevents cascading errors
+  // FIXME: RecoveryExpr class is defined in Expr.h but never instantiated.
+  // Currently returns IntegerLiteral(0) as placeholder. Should create actual
+  // RecoveryExpr node for better error recovery semantics and diagnostics.
   return Actions.ActOnIntegerLiteral(Loc, llvm::APInt(32, 0)).get();
 }
 
