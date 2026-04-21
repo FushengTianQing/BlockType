@@ -772,44 +772,40 @@ Stmt *Parser::parseForStatement() {
   }
 
   // Check for range-based for: for (decl : range)
-  // Use tentative parsing to disambiguate between range-based and traditional for
+  // Simple lookahead: if we see pattern "type identifier :", it's range-based
+  // Avoid complex parsing in tentative mode
+  
   bool IsRangeBased = false;
-
-  // Use tentative parsing to check if this is a range-based for
-  // Save current state
-  TentativeParsingAction TPA(*this);
-
-  // Try to parse as a range-based for declaration
-  // A range-based for has pattern: type? identifier ':'
-  // Try to parse type (optional)
-  if (Tok.is(TokenKind::kw_auto) || Tok.is(TokenKind::kw_const) ||
-      Tok.is(TokenKind::kw_volatile) || Tok.is(TokenKind::kw_int) ||
-      Tok.is(TokenKind::kw_float) || Tok.is(TokenKind::kw_double) ||
-      Tok.is(TokenKind::kw_char) || Tok.is(TokenKind::kw_bool) ||
-      Tok.is(TokenKind::kw_void) || Tok.is(TokenKind::kw_long) ||
-      Tok.is(TokenKind::kw_short) || Tok.is(TokenKind::kw_signed) ||
-      Tok.is(TokenKind::kw_unsigned) || Tok.is(TokenKind::identifier)) {
-    // Try to parse type using DeclSpec + Declarator
-    DeclSpec TmpDS;
-    parseDeclSpecifierSeq(TmpDS);
-    QualType Type;
-    if (TmpDS.hasTypeSpecifier()) {
-      Type = TmpDS.Type;
+  
+  // Simple check: look for colon after identifier
+  // Pattern: for (type? identifier : ...)
+  {
+    TentativeParsingAction TPA(*this);
+    
+    // Skip type specifiers (optional)
+    while (Tok.is(TokenKind::kw_auto) || Tok.is(TokenKind::kw_const) ||
+           Tok.is(TokenKind::kw_volatile) || Tok.is(TokenKind::kw_int) ||
+           Tok.is(TokenKind::kw_float) || Tok.is(TokenKind::kw_double) ||
+           Tok.is(TokenKind::kw_char) || Tok.is(TokenKind::kw_bool) ||
+           Tok.is(TokenKind::kw_void) || Tok.is(TokenKind::kw_long) ||
+           Tok.is(TokenKind::kw_short) || Tok.is(TokenKind::kw_signed) ||
+           Tok.is(TokenKind::kw_unsigned)) {
+      consumeToken();
     }
-
+    
     // Check for identifier
     if (Tok.is(TokenKind::identifier)) {
       consumeToken();
-
+      
       // Check for ':' - this confirms it's a range-based for
       if (Tok.is(TokenKind::colon)) {
         IsRangeBased = true;
       }
     }
+    
+    // Restore state
+    TPA.abort();
   }
-
-  // Restore state
-  TPA.abort();
 
   if (IsRangeBased) {
     // Parse range-based for: for (decl : range)

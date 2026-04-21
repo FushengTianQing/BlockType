@@ -45,7 +45,8 @@ Stmt *Parser::parseDeclarationStatement() {
       consumeToken(); // consume 'auto'
       SourceLocation AutoLoc = Tok.getLocation();
       bool IsReference = false;
-      Stmt *SBDecl = parseStructuredBindingDeclaration(AutoLoc, IsReference);
+      // Expect semicolon at end of declaration statement
+      Stmt *SBDecl = parseStructuredBindingDeclaration(AutoLoc, IsReference, /*ExpectSemicolon=*/true);
       popContext();
       return SBDecl;  // Return DeclStmt directly
     }
@@ -293,15 +294,6 @@ Decl *Parser::parseDeclaration(
                << (DS.hasTypeSpecifier() ? "true" : "false") << "\n";
   if (!DS.hasTypeSpecifier()) {
     emitError(DiagID::err_expected_type);
-    return nullptr;
-  }
-
-  // P7.4.3: Check for structured binding syntax: auto [x, y] = expr
-  // After parsing 'auto', check if next token is '['
-  if (Tok.is(TokenKind::l_square)) {
-    // This is a structured binding declaration
-    // Note: Structured bindings should be handled in parseDeclarationStatement,
-    // not here. Return nullptr to indicate this is not a regular declaration.
     return nullptr;
   }
 
