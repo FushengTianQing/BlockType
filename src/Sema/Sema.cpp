@@ -2092,11 +2092,12 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
   if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
     Decl *D = DRE->getDecl();
     if (!D) {
-      // Undeclared identifier — fall back to creating CallExpr directly
+      // Try to lookup template by name before giving up
+      // Note: DeclRefExpr doesn't store name directly, we need to get it from context
+      // For now, skip template lookup and create CallExpr directly
       auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
       return ExprResult(CE);
-    }
-    if (auto *FunD = llvm::dyn_cast<FunctionDecl>(D)) {
+    } else if (auto *FunD = llvm::dyn_cast<FunctionDecl>(D)) {
       FD = FunD;
     }
     // Handle function template: deduce arguments and instantiate

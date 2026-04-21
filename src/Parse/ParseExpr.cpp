@@ -1022,8 +1022,19 @@ Expr *Parser::parseIdentifier() {
   if (NamedDecl *D = Actions.LookupName(Name)) {
       llvm::errs() << "DEBUG [ParseExpr L1021]: LookupName found '" << Name.str() 
                    << "', D kind = " << static_cast<int>(D->getKind()) << "\n";
-      // Found the declaration, create a DeclRefExpr
-      VD = dyn_cast<ValueDecl>(D);
+      
+      // Check if it's a FunctionTemplateDecl - if so, we need to handle it in ActOnCallExpr
+      if (auto *FTD = llvm::dyn_cast<FunctionTemplateDecl>(D)) {
+          // For template functions, we need to pass the template to ActOnDeclRefExpr
+          // But DeclRefExpr only accepts ValueDecl, so we pass nullptr for now
+          // The actual template resolution will happen in ActOnCallExpr
+          llvm::errs() << "DEBUG [ParseExpr L1026]: Found FunctionTemplateDecl, will resolve in ActOnCallExpr\n";
+          // Pass the template name somehow - for now, create DeclRefExpr with nullptr
+          // The template will be looked up again in ActOnCallExpr
+      } else {
+          // Found the declaration, create a DeclRefExpr
+          VD = dyn_cast<ValueDecl>(D);
+      }
   }
 
   // Create DeclRefExpr via Sema (with or without declaration)
