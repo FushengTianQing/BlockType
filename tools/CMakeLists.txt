@@ -3,6 +3,7 @@ add_executable(blocktype
 )
 
 target_link_libraries(blocktype PRIVATE
+  blocktypeFrontend
   blocktype-basic
   blocktype-lex
   blocktype-parse

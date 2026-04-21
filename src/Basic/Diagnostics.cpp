@@ -398,4 +398,149 @@ void DiagnosticsEngine::printRangeIndicator(unsigned StartCol, unsigned EndCol, 
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Fix-It Hints support
+//===----------------------------------------------------------------------===//
+
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
+                                llvm::ArrayRef<FixItHint> Hints) {
+  DiagLevel Level = getDiagnosticLevel(ID);
+  llvm::StringRef Message = getDiagnosticMessage(ID, Lang);
+  report(Loc, Level, Message, Hints);
+}
+
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
+                                llvm::StringRef Arg0,
+                                llvm::ArrayRef<FixItHint> Hints) {
+  DiagLevel Level = getDiagnosticLevel(ID);
+  llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
+  std::string Formatted = formatMessage(RawMsg, {Arg0});
+  if (RawMsg.find("%0") == llvm::StringRef::npos && !Arg0.empty()) {
+    Formatted += ": " + Arg0.str();
+  }
+  report(Loc, Level, Formatted, Hints);
+}
+
+void DiagnosticsEngine::report(SourceLocation Loc, DiagID ID,
+                                llvm::StringRef Arg0, llvm::StringRef Arg1,
+                                llvm::ArrayRef<FixItHint> Hints) {
+  DiagLevel Level = getDiagnosticLevel(ID);
+  llvm::StringRef RawMsg = getDiagnosticMessage(ID, Lang);
+  std::string Formatted = formatMessage(RawMsg, {Arg0, Arg1});
+  report(Loc, Level, Formatted, Hints);
+}
+
+void DiagnosticsEngine::report(SourceLocation Loc, DiagLevel Level,
+                                llvm::StringRef Message,
+                                llvm::ArrayRef<FixItHint> Hints) {
+  // SFINAE suppression
+  if (SuppressCount > 0) {
+    if (Level == DiagLevel::Error || Level == DiagLevel::Fatal)
+      ++NumErrors;
+    else if (Level == DiagLevel::Warning)
+      ++NumWarnings;
+    return;
+  }
+
+  // Print the diagnostic
+  printDiagnostic(Loc, Level, Message);
+  
+  // Print source line if available
+  if (SM && Loc.isValid()) {
+    printSourceLine(Loc);
+  }
+  
+  // Print Fix-It hints
+  if (!Hints.empty()) {
+    printFixItHints(Hints);
+  }
+  
+  if (Level == DiagLevel::Error || Level == DiagLevel::Fatal)
+    ++NumErrors;
+  else if (Level == DiagLevel::Warning)
+    ++NumWarnings;
+}
+
+void DiagnosticsEngine::printFixItHints(llvm::ArrayRef<FixItHint> Hints) {
+  OS << "\n";
+  if (OS.has_colors()) {
+    OS.changeColor(llvm::raw_ostream::GREEN);
+  }
+  OS << "Fix-It hints:\n";
+  if (OS.has_colors()) {
+    OS.resetColor();
+  }
+  
+  for (const FixItHint &Hint : Hints) {
+    printFixItHint(Hint);
+  }
+}
+
+void DiagnosticsEngine::printFixItHint(const FixItHint &Hint) {
+  OS << "  ";
+  
+  switch (Hint.getKind()) {
+  case FixItHint::Kind::Insert: {
+    SourceLocation Loc = Hint.getInsertionLoc();
+    if (SM && Loc.isValid()) {
+      auto [Line, Col] = SM->getLineAndColumn(Loc);
+      OS << "Insert '" << Hint.getCodeToInsert() << "' at line " << Line 
+         << ", column " << Col << "\n";
+      
+      // Show the insertion point
+      OS << "    ";
+      if (OS.has_colors()) {
+        OS.changeColor(llvm::raw_ostream::GREEN, true);
+      }
+      OS << Hint.getCodeToInsert();
+      if (OS.has_colors()) {
+        OS.resetColor();
+      }
+      OS << "\n";
+    } else {
+      OS << "Insert '" << Hint.getCodeToInsert() << "'\n";
+    }
+    break;
+  }
+  
+  case FixItHint::Kind::Remove: {
+    SourceRange Range = Hint.getRemoveRange();
+    if (SM && Range.isValid()) {
+      auto [StartLine, StartCol] = SM->getLineAndColumn(Range.getBegin());
+      auto [EndLine, EndCol] = SM->getLineAndColumn(Range.getEnd());
+      OS << "Remove from line " << StartLine << ", column " << StartCol
+         << " to line " << EndLine << ", column " << EndCol << "\n";
+    } else {
+      OS << "Remove range\n";
+    }
+    break;
+  }
+  
+  case FixItHint::Kind::Replace: {
+    SourceRange Range = Hint.getRemoveRange();
+    if (SM && Range.isValid()) {
+      auto [StartLine, StartCol] = SM->getLineAndColumn(Range.getBegin());
+      auto [EndLine, EndCol] = SM->getLineAndColumn(Range.getEnd());
+      OS << "Replace from line " << StartLine << ", column " << StartCol
+         << " to line " << EndLine << ", column " << EndCol 
+         << " with '" << Hint.getCodeToInsert() << "'\n";
+      
+      // Show the replacement
+      OS << "    ";
+      if (OS.has_colors()) {
+        OS.changeColor(llvm::raw_ostream::GREEN, true);
+      }
+      OS << Hint.getCodeToInsert();
+      if (OS.has_colors()) {
+        OS.resetColor();
+      }
+      OS << "\n";
+    } else {
+      OS << "Replace with '" << Hint.getCodeToInsert() << "'\n";
+    }
+    break;
+  }
+  }
+}
+
 } // namespace blocktype

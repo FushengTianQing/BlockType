@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="16" failures="1" disabled="0" errors="0" time="0." timestamp="2026-04-21T18:06:28.317" name="AllTests">
+  <testsuite name="LexerFixTest" tests="16" failures="1" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-04-21T18:06:28.318">
+    <testcase name="HexLiteralWithoutDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="32" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="HexLiteralWithDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="40" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="BinaryLiteralWithoutDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="49" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="BinaryLiteralWithDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="58" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="HexFloatWithoutExponentDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="67" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="HexFloatWithExponentDigits" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="76" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedLiteralValid" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="87" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedLiteralOnlyUnderscore" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="96" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedLiteralStartsWithDigit" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="105" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedFloatLiteral" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="114" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedStringLiteral" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="123" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedCharLiteral" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="132" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="UserDefinedCharLiteralInvalid" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="141" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="HexLiteralWithDigitSeparator" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="152" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest">
+      <failure message="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp:158&#x0A;Value of: Diags.hasErrorOccurred()&#x0A;  Actual: true&#x0A;Expected: false&#x0A;" type=""><![CDATA[/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp:158
+Value of: Diags.hasErrorOccurred()
+  Actual: true
+Expected: false
+]]></failure>
+    </testcase>
+    <testcase name="BinaryLiteralWithDigitSeparator" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="161" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+    <testcase name="StandardSuffixes" file="/Users/yuan/Documents/BlockType/tests/unit/Lex/LexerFixTest.cpp" line="170" status="run" result="completed" time="0." timestamp="2026-04-21T18:06:28.318" classname="LexerFixTest" />
+  </testsuite>
+</testsuites>

@@ -5,6 +5,7 @@ add_library(blocktype-basic
   SourceManager.cpp
   Translation.cpp
   Unicode.cpp
+  UTF8Validator.cpp
 )
 
 target_include_directories(blocktype-basic PUBLIC

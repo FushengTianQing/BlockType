@@ -1,6 +1,8 @@
 add_executable(blocktype-tests
   Basic/SourceLocationTest.cpp
   Basic/DiagnosticsTest.cpp
+  Basic/FixItHintTest.cpp
+  Basic/UTF8ValidatorTest.cpp
   AI/ResponseCacheTest.cpp
   AI/CostTrackerTest.cpp
   AI/AIOrchestratorTest.cpp

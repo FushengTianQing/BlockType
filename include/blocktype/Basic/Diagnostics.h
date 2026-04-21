@@ -2,6 +2,7 @@
 
 #include "blocktype/Basic/SourceLocation.h"
 #include "blocktype/Basic/DiagnosticIDs.h"
+#include "blocktype/Basic/FixItHint.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
@@ -73,6 +74,27 @@ public:
               SourceLocation RangeStart, SourceLocation RangeEnd,
               llvm::StringRef ExtraText = "");
 
+  //===------------------------------------------------------------------===//
+  // Fix-It Hints support
+  //===------------------------------------------------------------------===//
+
+  /// Report a diagnostic with Fix-It hints.
+  void report(SourceLocation Loc, DiagID ID,
+              llvm::ArrayRef<FixItHint> Hints);
+
+  /// Report a diagnostic with one parameter and Fix-It hints.
+  void report(SourceLocation Loc, DiagID ID,
+              llvm::StringRef Arg0, llvm::ArrayRef<FixItHint> Hints);
+
+  /// Report a diagnostic with two parameters and Fix-It hints.
+  void report(SourceLocation Loc, DiagID ID,
+              llvm::StringRef Arg0, llvm::StringRef Arg1,
+              llvm::ArrayRef<FixItHint> Hints);
+
+  /// Report a custom diagnostic with Fix-It hints.
+  void report(SourceLocation Loc, DiagLevel Level, 
+              llvm::StringRef Message, llvm::ArrayRef<FixItHint> Hints);
+
   unsigned getNumErrors() const { return NumErrors; }
   unsigned getNumWarnings() const { return NumWarnings; }
   bool hasErrorOccurred() const { return NumErrors > 0; }
@@ -121,6 +143,12 @@ private:
   void printSourceRange(SourceLocation Start, SourceLocation End);
   void printErrorContext(SourceLocation Loc, unsigned ContextLines = 2);
   void printRangeIndicator(unsigned StartCol, unsigned EndCol, llvm::StringRef Indicator = "~");
+  
+  /// Print Fix-It hints after a diagnostic
+  void printFixItHints(llvm::ArrayRef<FixItHint> Hints);
+  
+  /// Print a single Fix-It hint
+  void printFixItHint(const FixItHint &Hint);
 };
 
 } // namespace blocktype

@@ -1,28 +1,20 @@
 #include "blocktype/Config/Version.h"
+#include "blocktype/Frontend/CompilerInstance.h"
+#include "blocktype/Frontend/CompilerInvocation.h"
 #include "blocktype/AI/AIOrchestrator.h"
 #include "blocktype/AI/Providers/OpenAIProvider.h"
 #include "blocktype/AI/Providers/ClaudeProvider.h"
 #include "blocktype/AI/Providers/LocalProvider.h"
 #include "blocktype/AI/Providers/QwenProvider.h"
-#include "blocktype/Basic/SourceManager.h"
-#include "blocktype/Basic/Diagnostics.h"
-#include "blocktype/Lex/Preprocessor.h"
-#include "blocktype/Parse/Parser.h"
-#include "blocktype/Sema/Sema.h"
-#include "blocktype/AST/ASTContext.h"
-#include "blocktype/AST/ASTDumper.h"
-#include "blocktype/AST/Decl.h"
-#include "blocktype/CodeGen/CodeGenModule.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/FileSystem.h"
+#include "llvm/TargetParser/Host.h"
 #include <memory>
 
 using namespace llvm;
 using namespace blocktype;
 
-// 命令行选项
+// Command-line options (will be migrated to CompilerInvocation)
 static cl::OptionCategory BlockTypeCategory("BlockType Options");
 
 static cl::list<std::string> InputFiles(cl::Positional, cl::desc("<input files>"), cl::cat(BlockTypeCategory));
@@ -87,43 +79,69 @@ static cl::opt<bool> Verbose(
   cl::cat(BlockTypeCategory)
 );
 
+static cl::opt<std::string> OutputFile(
+  "o",
+  cl::desc("Output file"),
+  cl::value_desc("file"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<unsigned> CXXStandard(
+  "std",
+  cl::desc("C++ standard version (11, 14, 17, 20, 23, 26)"),
+  cl::value_desc("version"),
+  cl::init(26),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<std::string> TargetTriple(
+  "target",
+  cl::desc("Target triple for code generation"),
+  cl::value_desc("triple"),
+  cl::init(""),
+  cl::cat(BlockTypeCategory)
+);
+
 // 创建 AI 编排器
-std::unique_ptr<AIOrchestrator> createAIOrchestrator() {
+std::unique_ptr<AIOrchestrator> createAIOrchestrator(const CompilerInvocation &CI) {
   AIConfig Config;
-  Config.EnableCache = AICache;
-  Config.MaxCostPerDay = AICostLimit;
+  Config.EnableCache = CI.AIOpts.EnableCache;
+  Config.MaxCostPerDay = CI.AIOpts.MaxCostPerDay;
   
   auto Orchestrator = std::make_unique<AIOrchestrator>(Config);
   
+  const std::string &ProviderName = CI.AIOpts.Provider;
+  const std::string &Model = CI.AIOpts.Model;
+  
   // 根据选择注册提供者
-  if (AIProviderName == "openai" || AIProviderName == "all") {
+  if (ProviderName == "openai" || ProviderName == "all") {
     const char* Key = std::getenv("OPENAI_API_KEY");
     if (Key) {
-      std::string Model = AIModel.empty() ? "gpt-4" : AIModel.getValue();
-      Orchestrator->registerProvider(std::make_unique<OpenAIProvider>(Key, Model));
-      outs() << "Registered OpenAI provider (model: " << Model << ")\n";
+      std::string UseModel = Model.empty() ? "gpt-4" : Model;
+      Orchestrator->registerProvider(std::make_unique<OpenAIProvider>(Key, UseModel));
+      outs() << "Registered OpenAI provider (model: " << UseModel << ")\n";
     } else {
       errs() << "Warning: OPENAI_API_KEY not set, OpenAI provider disabled\n";
     }
   }
   
-  if (AIProviderName == "claude" || AIProviderName == "all") {
+  if (ProviderName == "claude" || ProviderName == "all") {
     const char* Key = std::getenv("ANTHROPIC_API_KEY");
     if (Key) {
-      std::string Model = AIModel.empty() ? "claude-3-5-sonnet-20241022" : AIModel.getValue();
-      Orchestrator->registerProvider(std::make_unique<ClaudeProvider>(Key, Model));
-      outs() << "Registered Claude provider (model: " << Model << ")\n";
+      std::string UseModel = Model.empty() ? "claude-3-5-sonnet-20241022" : Model;
+      Orchestrator->registerProvider(std::make_unique<ClaudeProvider>(Key, UseModel));
+      outs() << "Registered Claude provider (model: " << UseModel << ")\n";
     } else {
       errs() << "Warning: ANTHROPIC_API_KEY not set, Claude provider disabled\n";
     }
   }
   
-  if (AIProviderName == "qwen" || AIProviderName == "all") {
+  if (ProviderName == "qwen" || ProviderName == "all") {
     const char* Key = std::getenv("QWEN_API_KEY");
     if (Key) {
-      std::string Model = AIModel.empty() ? "qwen-plus" : AIModel.getValue();
-      Orchestrator->registerProvider(std::make_unique<QwenProvider>(Key, Model));
-      outs() << "Registered Qwen provider (model: " << Model << ")\n";
+      std::string UseModel = Model.empty() ? "qwen-plus" : Model;
+      Orchestrator->registerProvider(std::make_unique<QwenProvider>(Key, UseModel));
+      outs() << "Registered Qwen provider (model: " << UseModel << ")\n";
     } else {
       errs() << "Warning: QWEN_API_KEY not set, Qwen provider disabled\n";
     }
@@ -131,12 +149,48 @@ std::unique_ptr<AIOrchestrator> createAIOrchestrator() {
   
   // 始终注册本地提供者作为回退
   {
-    std::string Model = AIModel.empty() ? "codellama" : AIModel.getValue();
-    Orchestrator->registerProvider(std::make_unique<LocalProvider>(OllamaEndpoint, Model));
-    outs() << "Registered Local provider (endpoint: " << OllamaEndpoint << ", model: " << Model << ")\n";
+    std::string UseModel = Model.empty() ? "codellama" : Model;
+    Orchestrator->registerProvider(std::make_unique<LocalProvider>(CI.AIOpts.OllamaEndpoint, UseModel));
+    outs() << "Registered Local provider (endpoint: " << CI.AIOpts.OllamaEndpoint << ", model: " << UseModel << ")\n";
   }
   
   return Orchestrator;
+}
+
+/// Create CompilerInvocation from command-line options.
+std::shared_ptr<CompilerInvocation> createCompilerInvocation() {
+  auto CI = std::make_shared<CompilerInvocation>();
+  
+  // Language options
+  CI->LangOpts.CXXStandard = CXXStandard;
+  
+  // AI options
+  CI->AIOpts.Enable = AIAssist;
+  CI->AIOpts.Provider = AIProviderName;
+  CI->AIOpts.EnableCache = AICache;
+  CI->AIOpts.MaxCostPerDay = AICostLimit;
+  CI->AIOpts.Model = AIModel;
+  CI->AIOpts.OllamaEndpoint = OllamaEndpoint;
+  
+  // CodeGen options
+  CI->CodeGenOpts.EmitLLVM = EmitLLVM;
+  CI->CodeGenOpts.OutputFile = OutputFile;
+  if (!TargetTriple.empty()) {
+    CI->CodeGenOpts.TargetTriple = TargetTriple;
+  }
+  
+  // Frontend options
+  for (const auto &File : InputFiles) {
+    CI->FrontendOpts.InputFiles.push_back(File);
+  }
+  CI->FrontendOpts.OutputFile = OutputFile;
+  CI->FrontendOpts.DumpAST = ASTDump;
+  CI->FrontendOpts.Verbose = Verbose;
+  
+  // Set default target triple
+  CI->setDefaultTargetTriple();
+  
+  return CI;
 }
 
 int main(int argc, char *argv[]) {
@@ -144,22 +198,11 @@ int main(int argc, char *argv[]) {
   cl::HideUnrelatedOptions(BlockTypeCategory);
   cl::ParseCommandLineOptions(argc, argv, "BlockType - A C++26 compiler with bilingual support\n");
   
-  // 初始化 AI 功能
-  std::unique_ptr<AIOrchestrator> Orchestrator;
-  if (AIAssist) {
-    outs() << "AI-assisted compilation enabled\n";
-    Orchestrator = createAIOrchestrator();
-    
-    if (Orchestrator->getProviderCount() == 0) {
-      errs() << "Error: No AI providers available\n";
-      return 1;
-    }
-    
-    outs() << "AI providers registered: " << Orchestrator->getProviderCount() << "\n";
-  }
+  // 创建 CompilerInvocation
+  auto CI = createCompilerInvocation();
   
   // 检查输入文件
-  if (InputFiles.empty()) {
+  if (CI->FrontendOpts.InputFiles.empty()) {
     outs() << "BlockType - A C++26 compiler with bilingual support\n";
     outs() << "Usage: blocktype [options] <source files>\n";
     outs() << "\nAI Options:\n";
@@ -169,116 +212,63 @@ int main(int argc, char *argv[]) {
     outs() << "  --ai-cost-limit=<$>  Maximum daily cost in USD (default: 10.0)\n";
     outs() << "  --ai-model=<model>   AI model to use\n";
     outs() << "  --ollama-endpoint=<url>  Ollama API endpoint (default: http://localhost:11434)\n";
+    outs() << "\nCompilation Options:\n";
+    outs() << "  --std=<version>      C++ standard version (11, 14, 17, 20, 23, 26, default: 26)\n";
+    outs() << "  --target=<triple>    Target triple for code generation\n";
+    outs() << "  -o <file>            Output file\n";
+    outs() << "  --ast-dump           Dump AST after parsing\n";
+    outs() << "  --emit-llvm          Emit LLVM IR\n";
+    outs() << "  -v                   Enable verbose output\n";
     return 0;
   }
   
-  // 编译输入文件
-  for (const auto& File : InputFiles) {
-    if (Verbose) {
-      outs() << "Compiling: " << File << "\n";
+  // 验证选项
+  if (!CI->validate()) {
+    return 1;
+  }
+  
+  // 初始化 AI 功能（可选）
+  std::unique_ptr<AIOrchestrator> Orchestrator;
+  if (CI->AIOpts.Enable) {
+    outs() << "AI-assisted compilation enabled\n";
+    Orchestrator = createAIOrchestrator(*CI);
+    
+    if (Orchestrator->getProviderCount() == 0) {
+      errs() << "Error: No AI providers available\n";
+      return 1;
     }
     
-    // 1. 读取源文件
-    auto BufferOrErr = llvm::MemoryBuffer::getFile(File);
-    if (!BufferOrErr) {
-      errs() << "Error: Cannot read file '" << File << "'\n";
-      continue;
-    }
-    
-    std::unique_ptr<llvm::MemoryBuffer> Buffer = std::move(*BufferOrErr);
-    StringRef SourceCode = Buffer->getBuffer();
-    
-    if (Verbose) {
-      outs() << "  Source size: " << SourceCode.size() << " bytes\n";
-    }
-    
-    // 2. 创建编译基础设施
-    SourceManager SM;
-    DiagnosticsEngine Diags;
-    ASTContext Context;
-    
-    // 3. 创建预处理器并进入源文件（enterSourceFile 会内部调用 createMainFileID）
-    Preprocessor PP(SM, Diags);
-    PP.enterSourceFile(File, SourceCode);
-    
-    // 5. 创建 Sema 实例（在 Parser 之前，以便 Parser 可以委托 Sema 创建节点）
-    Sema S(Context, Diags);
-
-    // 6. 创建解析器并解析翻译单元
-    Parser P(PP, Context, S);
-
-    if (Verbose) {
-      outs() << "  Parsing...\n";
-    }
-
-    TranslationUnitDecl *TU = P.parseTranslationUnit();
-
-    llvm::errs() << "DEBUG: After parseTranslationUnit, P.hasErrors() = " 
-                 << (P.hasErrors() ? "true" : "false") << "\n";
-
-    // 7. Post-parse diagnostics: unused declarations, unreachable code
-    S.DiagnoseUnusedDecls(TU);
-
-    llvm::errs() << "DEBUG: After DiagnoseUnusedDecls, P.hasErrors() = " 
-                 << (P.hasErrors() ? "true" : "false") << "\n";
-
-    // 8. 报告错误
-    if (P.hasErrors()) {
-      errs() << "Error: Parsing failed for '" << File << "'\n";
-      continue;
-    }
-
-    // 8. 可选：输出 AST
-    if (ASTDump && TU) {
-      outs() << "\n=== AST Dump for " << File << " ===\n";
-      TU->dump(outs());
-      outs() << "=== End AST Dump ===\n\n";
-    }
-    
-    // 9. 可选：生成 LLVM IR
-    if (EmitLLVM && TU) {
-      if (Verbose) {
-        outs() << "  Generating LLVM IR...\n";
-      }
-      
-      llvm::LLVMContext LLVMCtx;
-      std::string ModuleName = File;
-      // 使用默认目标三元组（当前平台）
-#ifdef __APPLE__
-#ifdef __aarch64__
-      std::string TargetTriple = "arm64-apple-darwin";
-#else
-      std::string TargetTriple = "x86_64-apple-darwin";
-#endif
-#else
-      std::string TargetTriple = "x86_64-unknown-linux-gnu";
-#endif
-      // P0 修复：传递 SourceManager 给 CodeGenModule
-      blocktype::CodeGenModule CGM(Context, LLVMCtx, SM, ModuleName, TargetTriple);
-      CGM.EmitTranslationUnit(TU);
-      
-      // 输出 LLVM IR
-      CGM.getModule()->print(llvm::outs(), nullptr);
-    }
-    
-    // 10. AI 辅助分析（可选）
-    if (AIAssist && Orchestrator) {
+    outs() << "AI providers registered: " << Orchestrator->getProviderCount() << "\n";
+  }
+  
+  // 创建 CompilerInstance
+  CompilerInstance Instance;
+  
+  // 初始化
+  if (!Instance.initialize(CI)) {
+    errs() << "Error: Failed to initialize compiler\n";
+    return 1;
+  }
+  
+  // 编译所有输入文件
+  bool Success = Instance.compileAllFiles();
+  
+  // AI 辅助分析（可选）
+  if (CI->AIOpts.Enable && Orchestrator) {
+    for (const auto &File : CI->FrontendOpts.InputFiles) {
       AIRequest Request;
       Request.TaskType = AITaskType::SecurityCheck;
       Request.Lang = AILanguage::Auto;
       Request.SourceFile = File;
       Request.Query = "Analyze this code for potential issues";
       
-      if (Verbose) {
+      if (CI->FrontendOpts.Verbose) {
         outs() << "  AI analysis requested for " << File << "\n";
       }
-      // 实际调用会在语义分析完成后添加
-    }
-    
-    if (Verbose) {
-      outs() << "  Compilation successful\n";
+      
+      // TODO: 实际调用 Orchestrator->sendRequest(Request)
     }
   }
   
-  return 0;
+  return Success ? 0 : 1;
 }

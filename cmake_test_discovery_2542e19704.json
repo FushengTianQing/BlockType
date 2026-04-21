@@ -1,5 +1,5 @@
 {
-  "tests": 46,
+  "tests": 73,
   "name": "AllTests",
   "testsuites": [
     {
@@ -107,6 +107,153 @@
           "name": "InvalidYAMLFile",
           "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/DiagnosticsTest.cpp",
           "line": 216
+        }
+      ]
+    },
+    {
+      "name": "FixItHintTest",
+      "tests": 14,
+      "testsuite": [
+        {
+          "name": "CreateInsertion",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 38
+        },
+        {
+          "name": "CreateRemoval",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 51
+        },
+        {
+          "name": "CreateReplacement",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 66
+        },
+        {
+          "name": "GetStartEndLoc",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 86
+        },
+        {
+          "name": "AffectsLocation",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 102
+        },
+        {
+          "name": "ToString",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 119
+        },
+        {
+          "name": "ReportWithInsertion",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 137
+        },
+        {
+          "name": "ReportWithReplacement",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 154
+        },
+        {
+          "name": "ReportWithMultipleFixIts",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 177
+        },
+        {
+          "name": "ReportWithRemoval",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 192
+        },
+        {
+          "name": "EmptyCodeToInsert",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 215
+        },
+        {
+          "name": "MultiLineCode",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 222
+        },
+        {
+          "name": "UnicodeInCode",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 229
+        },
+        {
+          "name": "VeryLongCode",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/FixItHintTest.cpp",
+          "line": 236
+        }
+      ]
+    },
+    {
+      "name": "UTF8ValidatorTest",
+      "tests": 13,
+      "testsuite": [
+        {
+          "name": "ValidateEmpty",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 101
+        },
+        {
+          "name": "ValidateASCII",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 106
+        },
+        {
+          "name": "ValidateUTF8_2Byte",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 112
+        },
+        {
+          "name": "ValidateUTF8_3Byte",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 124
+        },
+        {
+          "name": "ValidateUTF8_4Byte",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 138
+        },
+        {
+          "name": "ValidateMixed",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 153
+        },
+        {
+          "name": "ValidateInvalid",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 158
+        },
+        {
+          "name": "FindInvalid",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 178
+        },
+        {
+          "name": "PerformanceASCII",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 195
+        },
+        {
+          "name": "PerformanceMixed",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 215
+        },
+        {
+          "name": "PerformanceCJK",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 235
+        },
+        {
+          "name": "SingleByte",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 259
+        },
+        {
+          "name": "BoundaryCodePoints",
+          "file": "\/Users\/yuan\/Documents\/BlockType\/tests\/unit\/Basic\/UTF8ValidatorTest.cpp",
+          "line": 265
         }
       ]
     },

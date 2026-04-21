@@ -13,6 +13,7 @@
 #include "blocktype/Lex/Lexer.h"
 #include "blocktype/Basic/SourceManager.h"
 #include "blocktype/Basic/Diagnostics.h"
+#include "blocktype/Basic/UTF8Validator.h"
 #include "blocktype/Unicode/UnicodeData.h"
 #include <cctype>
 #include <unordered_map>
@@ -158,6 +159,13 @@ bool Lexer::lexToken(Token &Result) {
     if (BufferPtr < BufferEnd && *BufferPtr == '#') {
       consumeChar();
       return formToken(Result, TokenKind::hashhash, TokStart);
+    }
+    // #@ is an MSVC extension for charizing operator
+    if (BufferPtr < BufferEnd && *BufferPtr == '@') {
+      consumeChar();
+      Diags.report(getSourceLocation(), DiagLevel::Warning,
+                   "#@ is a Microsoft extension for charizing operator");
+      return formToken(Result, TokenKind::hashat, TokStart);
     }
     return formToken(Result, TokenKind::hash, TokStart);
 
@@ -456,6 +464,29 @@ bool Lexer::formIdentifierToken(Token &Result, const char *TokStart) {
 bool Lexer::lexIdentifier(Token &Result, const char *Start) {
   // Check for UTF-8 multi-byte character (Unicode identifier)
   if (static_cast<unsigned char>(*BufferPtr) >= 0x80) {
+    // Validate UTF-8 sequence first
+    const char *UTF8Start = BufferPtr;
+    
+    // Find the length of the potential UTF-8 sequence
+    while (BufferPtr < BufferEnd && 
+           static_cast<unsigned char>(*BufferPtr) >= 0x80) {
+      ++BufferPtr;
+    }
+    size_t SeqLen = BufferPtr - UTF8Start;
+    
+    // Validate the UTF-8 sequence
+    if (!blocktype::UTF8Validator::validate(UTF8Start, SeqLen)) {
+      // Invalid UTF-8 - report error with Fix-It hint
+      SourceLocation ErrorLoc = getSourceLocation();
+      Diags.report(ErrorLoc, DiagLevel::Error, 
+                   "invalid UTF-8 sequence in identifier");
+      BufferPtr = UTF8Start + 1; // Skip one byte and continue
+      return formToken(Result, TokenKind::unknown, Start);
+    }
+    
+    // Reset and process with validated UTF-8
+    BufferPtr = UTF8Start;
+    
     // Unicode identifier - use UAX #31 rules
     bool isFirst = true;
     while (BufferPtr < BufferEnd) {
@@ -514,6 +545,7 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
     if (Next == 'x' || Next == 'X') {
       // Hexadecimal (integer or floating-point)
       BufferPtr += 2;
+      const char *HexStart = BufferPtr;  // 记录十六进制数字开始位置
       while (BufferPtr < BufferEnd) {
         char C = std::tolower(static_cast<unsigned char>(*BufferPtr));
         if (std::isxdigit(static_cast<unsigned char>(C)) || C == '\'') {
@@ -521,6 +553,12 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
         } else {
           break;
         }
+      }
+      
+      // 错误恢复：检查0x后是否有十六进制数字
+      if (BufferPtr == HexStart) {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "hexadecimal literal requires at least one hexadecimal digit after '0x'");
       }
       
       // Check for hexadecimal floating-point fraction
@@ -541,6 +579,7 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
         char C = std::tolower(static_cast<unsigned char>(*BufferPtr));
         if (C == 'p') {
           ++BufferPtr;
+          const char *ExpStart = BufferPtr;  // 记录指数数字开始位置
           if (BufferPtr < BufferEnd && (*BufferPtr == '+' || *BufferPtr == '-')) {
             ++BufferPtr;
           }
@@ -552,11 +591,18 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
               break;
             }
           }
+          // 错误恢复：检查p/P后是否有指数数字
+          if (BufferPtr == ExpStart || (BufferPtr == ExpStart + 1 && 
+              (*ExpStart == '+' || *ExpStart == '-'))) {
+            Diags.report(getSourceLocation(), DiagLevel::Error,
+                         "hexadecimal floating literal requires exponent digits after 'p'");
+          }
         }
       }
     } else if (Next == 'b' || Next == 'B') {
       // Binary (C++14)
       BufferPtr += 2;
+      const char *BinStart = BufferPtr;  // 记录二进制数字开始位置
       while (BufferPtr < BufferEnd) {
         char C = *BufferPtr;
         if (C == '0' || C == '1' || C == '\'') {
@@ -564,6 +610,11 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
         } else {
           break;
         }
+      }
+      // 错误恢复：检查0b后是否有二进制数字
+      if (BufferPtr == BinStart) {
+        Diags.report(getSourceLocation(), DiagLevel::Error,
+                     "binary literal requires at least one binary digit after '0b'");
       }
     } else if (std::isdigit(static_cast<unsigned char>(Next))) {
       // Octal
@@ -699,6 +750,23 @@ bool Lexer::lexNumericConstant(Token &Result, const char *Start) {
       break;
     }
   }
+  
+  // 验证用户定义字面量后缀
+  if (HasUserDefinedSuffix) {
+    StringRef Suffix(SuffixStart, BufferPtr - SuffixStart);
+    // 后缀必须以_开头（已检查）
+    // 后缀必须至少有2个字符（_ + 至少一个字符）
+    if (Suffix.size() < 2) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix must have at least one character after '_'");
+    }
+    // 后续字符必须是有效的标识符字符（已由上面的循环保证）
+    // 检查第二个字符是否为数字（不允许：_123）
+    if (Suffix.size() >= 2 && std::isdigit(static_cast<unsigned char>(Suffix[1]))) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix cannot start with a digit after '_'");
+    }
+  }
 
   // Determine token kind based on suffix
   TokenKind Kind = TokenKind::numeric_constant;
@@ -743,6 +811,7 @@ bool Lexer::lexCharConstant(Token &Result, const char *Start) {
 
   // B2.4: Check for user-defined literal suffix
   if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+    const char *SuffixStart = BufferPtr;
     while (BufferPtr < BufferEnd) {
       char C = *BufferPtr;
       if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
@@ -750,6 +819,16 @@ bool Lexer::lexCharConstant(Token &Result, const char *Start) {
       } else {
         break;
       }
+    }
+    // 验证用户定义字面量后缀
+    StringRef Suffix(SuffixStart, BufferPtr - SuffixStart);
+    if (Suffix.size() < 2) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix must have at least one character after '_'");
+    }
+    if (Suffix.size() >= 2 && std::isdigit(static_cast<unsigned char>(Suffix[1]))) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix cannot start with a digit after '_'");
     }
     return formToken(Result, TokenKind::user_defined_char_literal, Start);
   }
@@ -782,6 +861,7 @@ bool Lexer::lexStringLiteral(Token &Result, const char *Start) {
 
   // B2.4: Check for user-defined literal suffix
   if (BufferPtr < BufferEnd && *BufferPtr == '_') {
+    const char *SuffixStart = BufferPtr;
     while (BufferPtr < BufferEnd) {
       char C = *BufferPtr;
       if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
@@ -789,6 +869,16 @@ bool Lexer::lexStringLiteral(Token &Result, const char *Start) {
       } else {
         break;
       }
+    }
+    // 验证用户定义字面量后缀
+    StringRef Suffix(SuffixStart, BufferPtr - SuffixStart);
+    if (Suffix.size() < 2) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix must have at least one character after '_'");
+    }
+    if (Suffix.size() >= 2 && std::isdigit(static_cast<unsigned char>(Suffix[1]))) {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "user-defined literal suffix cannot start with a digit after '_'");
     }
     return formToken(Result, TokenKind::user_defined_string_literal, Start);
   }
@@ -808,6 +898,34 @@ bool Lexer::lexWideOrUTFLiteral(Token &Result, const char *Start) {
   }
 
   // Check for raw string literal (R"...")
+  // For UTF-8 prefix (u8), check after consuming '8'
+  // For other prefixes (L, u, U), check if next char is 'R'
+  if (BufferPtr < BufferEnd && *BufferPtr == 'R') {
+    ++BufferPtr;
+    if (BufferPtr < BufferEnd && *BufferPtr == '"') {
+      // This is a raw string literal with UTF prefix
+      if (!lexRawStringLiteral(Result, Start)) {
+        return false;
+      }
+      // Change the token kind to the appropriate UTF string kind
+      if (Result.getKind() == TokenKind::string_literal) {
+        if (IsUTF8) {
+          Result.setKind(TokenKind::utf8_string_literal);
+        } else if (Prefix == 'L') {
+          Result.setKind(TokenKind::wide_string_literal);
+        } else if (Prefix == 'u') {
+          Result.setKind(TokenKind::utf16_string_literal);
+        } else if (Prefix == 'U') {
+          Result.setKind(TokenKind::utf32_string_literal);
+        }
+      }
+      return true;
+    }
+    // Not a raw string, backtrack
+    --BufferPtr;
+  }
+  
+  // Check for raw string literal without UTF prefix (just R"...")
   if (Prefix == 'R' && BufferPtr < BufferEnd && *BufferPtr == '"') {
     return lexRawStringLiteral(Result, Start);
   }
