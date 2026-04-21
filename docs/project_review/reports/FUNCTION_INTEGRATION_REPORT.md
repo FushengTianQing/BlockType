@@ -29,9 +29,9 @@
 #### 2. ActOnCXXNamedCastExpr
 - **文件**: src/Sema/Sema.cpp
 - **功能**: 处理命名类型转换（static_cast, dynamic_cast等）
-- **状态**: ✅ 功能已工作
-- **备注**: Parser 使用 `ActOnCXXNamedCastExprWithType`（带类型参数），此函数是无类型版本
-- **建议**: 保留作为辅助函数，或重构为内部调用
+- **状态**: ❌ 未集成
+- **影响**: C-style cast 可能工作，但命名 cast 不工作
+- **优先级**: P1（重要功能缺失）
 
 #### 3. ActOnClassTemplatePartialSpecialization
 - **文件**: src/Sema/SemaTemplate.cpp
@@ -85,9 +85,9 @@
 #### 10. ActOnMemberExpr
 - **文件**: src/Sema/Sema.cpp
 - **功能**: 处理成员访问表达式
-- **状态**: ✅ 功能已工作
-- **备注**: Parser 使用 `ActOnMemberExprDirect`（Parser 负责成员查找），此函数是 Sema 负责查找的版本
-- **建议**: 保留作为替代接口，或重构为内部调用
+- **状态**: ❌ 未集成
+- **影响**: 成员访问可能在 Parser 层直接构建
+- **优先级**: P1（如果确实未工作，严重影响）
 
 #### 11. ActOnTypeAliasTemplateDecl
 - **文件**: src/Sema/SemaTemplate.cpp
@@ -110,9 +110,10 @@
 #### 1. parseCXXForRangeStatement
 - **文件**: src/Parse/ParseStmt.cpp
 - **功能**: 解析 range-based for 循环
-- **状态**: ✅ 已集成
-- **修复**: 重构 `parseForStatement` 调用此函数，提高代码模块化
-- **架构优势**: 符合单一职责原则，便于维护和测试
+- **状态**: ❌ 未集成
+- **影响**: `for (auto x : vec)` 语法无法解析
+- **优先级**: P0（C++11 核心功能，应该已工作？）
+- **备注**: 需要确认是否有其他路径实现
 
 #### 2. parseCoawaitExpression
 - **文件**: src/Parse/ParseExpr.cpp

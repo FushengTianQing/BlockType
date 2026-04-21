@@ -628,8 +628,6 @@ public:
   // Expression handling
   //===------------------------------------------------------------------===//
 
-  ExprResult ActOnExpr(Expr *E);
-
   // Literal expressions (Phase 2A)
   ExprResult ActOnIntegerLiteral(SourceLocation Loc, llvm::APInt Value);
   ExprResult ActOnFloatingLiteral(SourceLocation Loc, llvm::APFloat Value);
@@ -812,7 +810,6 @@ public:
   StmtResult ActOnCompoundStmt(llvm::ArrayRef<Stmt *> Stmts,
                                SourceLocation LBraceLoc,
                                SourceLocation RBraceLoc);
-  StmtResult ActOnDeclStmt(Decl *D);
   StmtResult ActOnNullStmt(SourceLocation Loc);
 
   // Label and expression statements (Phase 2B)
