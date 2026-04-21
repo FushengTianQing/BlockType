@@ -811,48 +811,8 @@ Stmt *Parser::parseForStatement() {
   }
 
   if (IsRangeBased) {
-    // Parse range-based for: for (decl : range)
-    // Parse full declaration with complete type specifier
-    DeclSpec RangeDS;
-    parseDeclSpecifierSeq(RangeDS);
-    QualType VarType = RangeDS.Type;
-    if (VarType.isNull()) {
-      emitError(DiagID::err_expected_type);
-      VarType = Context.getAutoType(); // Recovery
-    }
-
-    StringRef VarName;
-    SourceLocation VarLoc;
-    if (Tok.is(TokenKind::identifier)) {
-      VarLoc = Tok.getLocation();
-      VarName = Tok.getText();
-      consumeToken();
-    }
-
-    // Consume ':'
-    if (!tryConsumeToken(TokenKind::colon)) {
-      emitError(DiagID::err_expected);
-      return Actions.ActOnNullStmt(ForLoc).get();
-    }
-
-    // Parse range expression
-    Expr *Range = parseExpression();
-    if (!Range) {
-      Range = createRecoveryExpr(ForLoc);
-    }
-
-    if (!tryConsumeToken(TokenKind::r_paren)) {
-      emitError(DiagID::err_expected_rparen);
-    }
-
-    // Parse body
-    Stmt *Body = parseStatement();
-    if (!Body) {
-      Body = Actions.ActOnNullStmt(ForLoc).get();
-    }
-
-    // Create CXXForRangeStmt (VarDecl created internally by Sema)
-    return Actions.ActOnCXXForRangeStmt(ForLoc, VarLoc, VarName, VarType, Range, Body).get();
+    // Delegate to parseCXXForRangeStatement for better modularity
+    return parseCXXForRangeStatement(ForLoc);
   }
 
   // Parse traditional for loop
@@ -918,15 +878,9 @@ Stmt *Parser::parseForStatement() {
 // C++11 range-based for statement parsing
 //===----------------------------------------------------------------------===//
 
-Stmt *Parser::parseCXXForRangeStatement() {
-  SourceLocation ForLoc = Tok.getLocation();
-  consumeToken(); // consume 'for'
-
-  if (!tryConsumeToken(TokenKind::l_paren)) {
-    emitError(DiagID::err_expected_lparen);
-    return Actions.ActOnNullStmt(ForLoc).get();
-  }
-
+Stmt *Parser::parseCXXForRangeStatement(SourceLocation ForLoc) {
+  // Note: 'for' and '(' have already been consumed by parseForStatement
+  
   // Parse range declaration
   QualType VarType;
   if (Tok.is(TokenKind::kw_auto)) {

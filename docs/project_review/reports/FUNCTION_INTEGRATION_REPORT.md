@@ -110,10 +110,9 @@
 #### 1. parseCXXForRangeStatement
 - **文件**: src/Parse/ParseStmt.cpp
 - **功能**: 解析 range-based for 循环
-- **状态**: ❌ 未集成
-- **影响**: `for (auto x : vec)` 语法无法解析
-- **优先级**: P0（C++11 核心功能，应该已工作？）
-- **备注**: 需要确认是否有其他路径实现
+- **状态**: ✅ 已集成
+- **修复**: 重构 `parseForStatement` 调用此函数，提高代码模块化
+- **架构优势**: 符合单一职责原则，便于维护和测试
 
 #### 2. parseCoawaitExpression
 - **文件**: src/Parse/ParseExpr.cpp

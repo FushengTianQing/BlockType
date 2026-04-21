@@ -703,7 +703,8 @@ public:
   Stmt *parseForStatement();
 
   /// Parses a C++11 range-based for statement.
-  Stmt *parseCXXForRangeStatement();
+  /// \param ForLoc The location of the 'for' keyword (already consumed).
+  Stmt *parseCXXForRangeStatement(SourceLocation ForLoc);
 
   /// Parses a C++ try statement.
   Stmt *parseCXXTryStatement();
