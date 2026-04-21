@@ -1554,11 +1554,13 @@ ExprResult Sema::ActOnCXXNullPtrLiteral(SourceLocation Loc) {
 // Expression factory methods (Phase 2C)
 //===----------------------------------------------------------------------===//
 
-ExprResult Sema::ActOnDeclRefExpr(SourceLocation Loc, ValueDecl *D) {
+ExprResult Sema::ActOnDeclRefExpr(SourceLocation Loc, ValueDecl *D,
+                                   llvm::StringRef Name) {
   llvm::errs() << "DEBUG [Sema L1557]: ActOnDeclRefExpr called, D = " 
-               << (D ? std::to_string(static_cast<int>(D->getKind())) : "NULL") << "\n";
+               << (D ? std::to_string(static_cast<int>(D->getKind())) : "NULL")
+               << ", Name = '" << Name.str() << "'\n";
   
-  auto *DRE = Context.create<DeclRefExpr>(Loc, D);
+  auto *DRE = Context.create<DeclRefExpr>(Loc, D, Name);
   // Mark the declaration as used (for warn_unused_variable/function diagnostics)
   if (D)
     D->setUsed();
@@ -2091,12 +2093,28 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
 
   if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
     Decl *D = DRE->getDecl();
+    llvm::StringRef Name = DRE->getName();  // Get name from DeclRefExpr
+    
     if (!D) {
-      // Try to lookup template by name before giving up
-      // Note: DeclRefExpr doesn't store name directly, we need to get it from context
-      // For now, skip template lookup and create CallExpr directly
-      auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
-      return ExprResult(CE);
+      // D is nullptr - this happens for FunctionTemplateDecl
+      // Try to lookup template by name
+      if (!Name.empty()) {
+        llvm::errs() << "DEBUG [Sema L2096]: D is nullptr, looking up template '" << Name.str() << "'\n";
+        if (auto *FTD = Symbols.lookupTemplate(Name)) {
+          llvm::errs() << "DEBUG [Sema L2098]: Found template '" << Name.str() << "'\n";
+          if (auto *FuncFTD = llvm::dyn_cast_or_null<FunctionTemplateDecl>(FTD)) {
+            llvm::errs() << "DEBUG [Sema L2100]: Calling DeduceAndInstantiateFunctionTemplate\n";
+            FD = DeduceAndInstantiateFunctionTemplate(FuncFTD, Args, LParenLoc);
+            llvm::errs() << "DEBUG [Sema L2102]: DeduceAndInstantiateFunctionTemplate returned " 
+                         << (FD ? "valid FD" : "NULL") << "\n";
+          }
+        }
+      }
+      if (!FD) {
+        // Still no FD, create CallExpr for error recovery
+        auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
+        return ExprResult(CE);
+      }
     } else if (auto *FunD = llvm::dyn_cast<FunctionDecl>(D)) {
       FD = FunD;
     }
@@ -2107,23 +2125,14 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
       }
     }
     // Also check if the DeclRefExpr refers to a TemplateDecl by name
-    if (!FD) {
-      llvm::StringRef Name;
-      if (auto *ND = llvm::dyn_cast<NamedDecl>(D))
-        Name = ND->getName();
-      if (!Name.empty()) {
-        if (auto *FTD = Symbols.lookupTemplate(Name)) {
-          llvm::errs() << "DEBUG [Sema L2096]: Found template '" << Name.str() << "', calling DeduceAndInstantiateFunctionTemplate\n";
-          if (FTD) {
-            if (auto *FuncFTD = llvm::dyn_cast_or_null<FunctionTemplateDecl>(FTD)) {
-              llvm::errs() << "DEBUG [Sema L2098]: dyn_cast succeeded, FuncFTD is valid\n";
-              FD = DeduceAndInstantiateFunctionTemplate(FuncFTD, Args, LParenLoc);
-              llvm::errs() << "DEBUG [Sema L2100]: DeduceAndInstantiateFunctionTemplate returned " 
-                           << (FD ? "valid FD" : "NULL") << "\n";
-            } else {
-              llvm::errs() << "DEBUG [Sema L2099]: dyn_cast FAILED for FunctionTemplateDecl\n";
-            }
-          }
+    if (!FD && !Name.empty()) {
+      if (auto *FTD = Symbols.lookupTemplate(Name)) {
+        llvm::errs() << "DEBUG [Sema L2116]: Found template '" << Name.str() << "', calling DeduceAndInstantiateFunctionTemplate\n";
+        if (auto *FuncFTD = llvm::dyn_cast_or_null<FunctionTemplateDecl>(FTD)) {
+          llvm::errs() << "DEBUG [Sema L2118]: dyn_cast succeeded, FuncFTD is valid\n";
+          FD = DeduceAndInstantiateFunctionTemplate(FuncFTD, Args, LParenLoc);
+          llvm::errs() << "DEBUG [Sema L2120]: DeduceAndInstantiateFunctionTemplate returned " 
+                       << (FD ? "valid FD" : "NULL") << "\n";
         }
       }
     }
@@ -2132,14 +2141,7 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
   // If not a direct function reference, try overload resolution
   if (!FD) {
     if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Fn)) {
-      Decl *D = DRE->getDecl();
-      if (!D) {
-        auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
-        return ExprResult(CE);
-      }
-      llvm::StringRef Name;
-      if (auto *ND = llvm::dyn_cast<NamedDecl>(D))
-        Name = ND->getName();
+      llvm::StringRef Name = DRE->getName();
       if (Name.empty()) {
         auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
         return ExprResult(CE);

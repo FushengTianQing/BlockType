@@ -74,6 +74,13 @@ enum class ParsingContext {
   TemplateArgument,  // Parsing a template argument
 };
 
+/// RecoveryLevel - Error recovery strategy levels
+enum class RecoveryLevel {
+  Minimal,    // Skip to next semicolon (fine-grained)
+  Moderate,   // Skip to next declaration boundary
+  Aggressive  // Skip to next top-level scope (r_brace)
+};
+
 /// Parser - Parses C++ source code into an AST.
 class Parser {
   Preprocessor &PP;
@@ -93,6 +100,7 @@ class Parser {
   // Error recovery state
   unsigned ErrorCount = 0;
   bool HasRecoveryExpr = false;
+  unsigned ConsecutiveErrors = 0;  // Track consecutive errors for adaptive recovery
 
   friend class TentativeParsingAction;
 
@@ -168,6 +176,19 @@ public:
   /// Otherwise returns false and the caller should do its own recovery.
   bool tryRecoverMissingSemicolon();
 
+  /// Recovers from a parsing error using the specified recovery level.
+  /// Returns true if recovery was successful, false if EOF was reached.
+  /// This is the main entry point for error recovery.
+  bool recoverFromError(RecoveryLevel Level);
+
+  /// Determines the appropriate recovery level based on context.
+  /// Uses heuristics like error count, current token, and parsing context.
+  RecoveryLevel determineRecoveryLevel();
+
+  /// Skips to the next statement boundary (semicolon or closing brace).
+  /// More fine-grained than skipUntilNextDeclaration().
+  bool skipUntilNextStatement();
+
   /// Emits an error at the given location.
   void emitError(SourceLocation Loc, DiagID ID);
 
@@ -208,6 +229,12 @@ public:
 
   /// Returns true if any errors have been encountered.
   bool hasErrors() const { return ErrorCount > 0 || Diags.hasErrorOccurred(); }
+
+  /// Returns the number of consecutive errors.
+  unsigned getConsecutiveErrors() const { return ConsecutiveErrors; }
+
+  /// Resets the consecutive error counter (call after successful parse).
+  void resetConsecutiveErrors() { ConsecutiveErrors = 0; }
 
   //===--------------------------------------------------------------------===//
   // Parsing context

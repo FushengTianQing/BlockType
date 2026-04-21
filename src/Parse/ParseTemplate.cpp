@@ -77,6 +77,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     llvm::SmallVector<TemplateArgument, 4> SpecTemplateArgs;
     Decl *SpecializedDecl = parseDeclaration(&SpecTemplateArgs);
     if (!SpecializedDecl) {
+      LLVM_DEBUG(llvm::dbgs() << "parseTemplateDeclaration: failed\n");
       return nullptr;
     }
 
@@ -172,6 +173,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   if (Tok.is(TokenKind::kw_concept)) {
     ConceptDecl *Concept = parseConceptDefinition(TemplateLoc, Params);
     if (!Concept) {
+      LLVM_DEBUG(llvm::dbgs() << "parseConceptDefinition: failed\n");
       Actions.PopScope(); // Pop TemplateScope
       Actions.PopScope(); // Pop TemplateParamScope
       return nullptr;
@@ -220,6 +222,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
   // Parse the templated declaration
   Decl *TemplatedDecl = parseDeclaration();
   if (!TemplatedDecl) {
+    LLVM_DEBUG(llvm::dbgs() << "parseTemplateDeclaration: failed\n");
     Actions.PopScope(); // Pop TemplateScope
     Actions.PopScope(); // Pop TemplateParamScope
     return nullptr;
@@ -244,6 +247,7 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     // Register the function template
     auto Result = Actions.ActOnFunctionTemplateDecl(FTD);
     if (Result.isUsable()) {
+    LLVM_DEBUG(llvm::dbgs() << "parseTemplateDeclaration: failed\n");
       Template = FTD;
     } else {
       Actions.PopScope(); // Pop TemplateScope
@@ -434,6 +438,7 @@ NamedDecl *Parser::parseTemplateParameter() {
     consumeToken(); // consume potential concept name
 
     if (Tok.is(TokenKind::less)) {
+ LLVM_DEBUG(llvm::dbgs() << "parseTemplateParameter: failed\n");
       // Could be a constrained parameter: Concept<Args> ParamName
       // Try to parse the template argument list
       TPA.abort(); // restore state
@@ -539,6 +544,7 @@ NonTypeTemplateParmDecl *Parser::parseNonTypeTemplateParameter() {
   }
 
   // Parse declarator (handles pointers, references, arrays, etc.)
+  LLVM_DEBUG(llvm::dbgs() << "parseNonTypeTemplateParameter: failed\n");
   Declarator D(DS, DeclaratorContext::TemplateParamContext);
   parseDeclarator(D);
 

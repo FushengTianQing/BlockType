@@ -16,6 +16,8 @@
 #include "blocktype/Sema/Sema.h"
 #include "llvm/Support/raw_ostream.h"
 
+#define DEBUG_TYPE "parse-stmt"
+
 namespace blocktype {
 
 //===----------------------------------------------------------------------===//
@@ -389,6 +391,7 @@ Stmt *Parser::parseExpressionStatement() {
   Expr *E = parseExpression();
   if (!E) {
     // Error recovery: skip to semicolon
+    LLVM_DEBUG(llvm::dbgs() << "parseExpressionStatement: expression parsing failed\n");
     skipUntil({TokenKind::semicolon});
     tryConsumeToken(TokenKind::semicolon);
     return nullptr;

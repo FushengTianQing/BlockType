@@ -17,6 +17,8 @@
 #include "blocktype/Sema/Sema.h"
 #include "llvm/Support/raw_ostream.h"
 
+#define DEBUG_TYPE "parser"
+
 namespace blocktype {
 
 Parser::Parser(Preprocessor &PP, ASTContext &Ctx, Sema &S)
@@ -49,9 +51,11 @@ TranslationUnitDecl *Parser::parseTranslationUnit() {
     if (D) {
       // Sema's ActOn methods already register to CurContext (which is TU at top level)
       // No need to call TU->addDecl() again
+      resetConsecutiveErrors();  // Reset error counter on successful parse
     } else {
-      // Error recovery: skip to next declaration boundary
-      if (!skipUntilNextDeclaration()) {
+      // Error recovery: determine appropriate recovery level
+      RecoveryLevel Level = determineRecoveryLevel();
+      if (!recoverFromError(Level)) {
         // Reached EOF during recovery
         break;
       }
@@ -261,6 +265,123 @@ bool Parser::tryRecoverMissingSemicolon() {
   return false;
 }
 
+//===----------------------------------------------------------------------===//
+// Advanced Error Recovery
+//===----------------------------------------------------------------------===//
+
+RecoveryLevel Parser::determineRecoveryLevel() {
+  // Adaptive recovery based on error patterns
+  
+  // If we've had many consecutive errors, use aggressive recovery
+  if (ConsecutiveErrors >= 3) {
+    LLVM_DEBUG(llvm::dbgs() << "Error recovery: Aggressive (consecutive errors: "
+                            << ConsecutiveErrors << ")\n");
+    return RecoveryLevel::Aggressive;
+  }
+  
+  // If current token looks like a declaration start, use minimal recovery
+  if (isDeclarationStart()) {
+    LLVM_DEBUG(llvm::dbgs() << "Error recovery: Minimal (declaration start found)\n");
+    return RecoveryLevel::Minimal;
+  }
+  
+  // If current token is a statement start, use minimal recovery
+  if (isStatementStart()) {
+    LLVM_DEBUG(llvm::dbgs() << "Error recovery: Minimal (statement start found)\n");
+    return RecoveryLevel::Minimal;
+  }
+  
+  // If we're in a class or function body, prefer moderate recovery
+  if (!ContextStack.empty()) {
+    ParsingContext Ctx = getCurrentContext();
+    if (Ctx == ParsingContext::Statement || Ctx == ParsingContext::Declaration) {
+      LLVM_DEBUG(llvm::dbgs() << "Error recovery: Moderate (in nested context)\n");
+      return RecoveryLevel::Moderate;
+    }
+  }
+  
+  // Default to moderate recovery
+  LLVM_DEBUG(llvm::dbgs() << "Error recovery: Moderate (default)\n");
+  return RecoveryLevel::Moderate;
+}
+
+bool Parser::recoverFromError(RecoveryLevel Level) {
+  ++ConsecutiveErrors;
+  
+  switch (Level) {
+  case RecoveryLevel::Minimal:
+    // Try to recover at the finest granularity - next statement
+    if (skipUntilNextStatement()) {
+      return true;
+    }
+    // Fall through to moderate recovery if minimal fails
+    LLVM_DEBUG(llvm::dbgs() << "Error recovery: Minimal failed, trying Moderate\n");
+    [[fallthrough]];
+    
+  case RecoveryLevel::Moderate:
+    // Skip to next declaration boundary
+    if (skipUntilNextDeclaration()) {
+      return true;
+    }
+    // Fall through to aggressive recovery if moderate fails
+    LLVM_DEBUG(llvm::dbgs() << "Error recovery: Moderate failed, trying Aggressive\n");
+    [[fallthrough]];
+    
+  case RecoveryLevel::Aggressive:
+    // Skip to next top-level scope (closing brace or EOF)
+    skipUntil({TokenKind::r_brace, TokenKind::eof});
+    return !Tok.is(TokenKind::eof);
+  }
+  
+  return false;
+}
+
+bool Parser::skipUntilNextStatement() {
+  // Skip to the next statement boundary (semicolon or closing brace)
+  // This is more fine-grained than skipUntilNextDeclaration()
+  
+  while (!Tok.is(TokenKind::eof)) {
+    // If we see a semicolon at the top level, consume it and stop
+    if (Tok.is(TokenKind::semicolon)) {
+      consumeToken();
+      return true;
+    }
+    
+    // If we see '}' at the top level, stop (don't consume it)
+    if (Tok.is(TokenKind::r_brace)) {
+      return true;
+    }
+    
+    // If we see '{', skip the entire balanced block
+    if (Tok.is(TokenKind::l_brace)) {
+      consumeToken();
+      skipUntilBalanced({TokenKind::r_brace});
+      if (Tok.is(TokenKind::r_brace)) {
+        consumeToken();
+      }
+      // After the block, check for semicolon or declaration start
+      if (Tok.is(TokenKind::semicolon)) {
+        consumeToken();
+        return true;
+      }
+      if (isDeclarationStart() || isStatementStart()) {
+        return true;
+      }
+      continue;
+    }
+    
+    // If we see a declaration or statement start, stop
+    if (isDeclarationStart() || isStatementStart()) {
+      return true;
+    }
+    
+    // Skip this token
+    consumeToken();
+  }
+  
+  return false;
+}
+
 bool Parser::isDeclarationStart() {
   // Check if the current token (or token sequence) can start a declaration.
   TokenKind K = Tok.getKind();
@@ -375,16 +496,20 @@ bool Parser::isStatementStart() {
 void Parser::emitError(SourceLocation Loc, DiagID ID) {
   Diags.report(Loc, ID);
   ++ErrorCount;
+  ++ConsecutiveErrors;
 }
 
 void Parser::emitError(DiagID ID) {
-  emitError(Tok.getLocation(), ID);
+  Diags.report(Tok.getLocation(), ID);
+  ++ErrorCount;
+  ++ConsecutiveErrors;
 }
 
 void Parser::emitError(DiagID ID, llvm::StringRef Expected, llvm::StringRef Got) {
   std::string Extra = std::string("'") + Expected.str() + "' but got '" + Got.str() + "'";
   Diags.report(Tok.getLocation(), ID, Extra);
   ++ErrorCount;
+  ++ConsecutiveErrors;
 }
 
 Expr *Parser::createRecoveryExpr(SourceLocation Loc) {

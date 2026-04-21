@@ -639,7 +639,8 @@ public:
   ExprResult ActOnCXXNullPtrLiteral(SourceLocation Loc);
 
   // Expression factory methods (Phase 2C)
-  ExprResult ActOnDeclRefExpr(SourceLocation Loc, ValueDecl *D);
+  ExprResult ActOnDeclRefExpr(SourceLocation Loc, ValueDecl *D, 
+                              llvm::StringRef Name = "");
   ExprResult ActOnUnaryExprOrTypeTraitExpr(SourceLocation Loc,
                                            UnaryExprOrTypeTrait Kind,
                                            QualType T);

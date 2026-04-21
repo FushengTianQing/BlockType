@@ -59,8 +59,10 @@ Stmt *Parser::parseDeclarationStatement() {
   
   popContext();
   
-  if (!D)
+  if (!D) {
+    LLVM_DEBUG(llvm::dbgs() << "parseDeclarationStatement: sub-declaration failed\n");
     return nullptr;
+  }
   
   // Create DeclStmt
   return Actions.ActOnDeclStmtFromDecl(D).get();
@@ -977,6 +979,7 @@ ExportDecl *Parser::parseExportDeclaration() {
   // Parse the exported declaration
   Decl *ExportedDecl = parseDeclaration();
   if (!ExportedDecl) {
+    LLVM_DEBUG(llvm::dbgs() << "parseExportDeclaration: sub-declaration failed\n");
     return nullptr;
   }
 
@@ -1753,6 +1756,7 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
   }
   
   if (!Result.isUsable()) {
+    LLVM_DEBUG(llvm::dbgs() << "parseStructuredBindingDeclaration: ActOnDecompositionDecl failed\n");
     return nullptr;
   }
   
@@ -1772,8 +1776,10 @@ Stmt *Parser::parseStructuredBindingDeclaration(SourceLocation AutoLoc,
 /// Handles: initializer parsing (= expr, (exprs), {list}), semicolon.
 VarDecl *Parser::buildVarDecl(Declarator &D) {
   QualType T = D.buildType(Context);
-  if (T.isNull())
+  if (T.isNull()) {
+    LLVM_DEBUG(llvm::dbgs() << "buildVarDecl: failed to build type\n");
     return nullptr;
+  }
 
   llvm::StringRef Name = D.getName().getIdentifier();
   SourceLocation NameLoc = D.getNameLoc();
@@ -1803,8 +1809,10 @@ VarDecl *Parser::buildVarDecl(Declarator &D) {
       Init = Actions.ActOnCXXConstructExpr(NameLoc, T, Args).get();
     } else if (Tok.is(TokenKind::l_brace)) {
       Init = parseInitializerList(T);
-      if (!Init)
+      if (!Init) {
+        LLVM_DEBUG(llvm::dbgs() << "buildVarDecl: initializer list failed\n");
         return nullptr;
+      }
     }
 
     // Expect semicolon
@@ -1816,8 +1824,10 @@ VarDecl *Parser::buildVarDecl(Declarator &D) {
 
     // Create placeholder variable - not added to symbol table
     DeclResult Result = Actions.ActOnPlaceholderVarDecl(NameLoc, T, Init);
-    if (Result.isInvalid())
+    if (Result.isInvalid()) {
+      LLVM_DEBUG(llvm::dbgs() << "buildVarDecl: ActOnPlaceholderVarDecl failed\n");
       return nullptr;
+    }
     return llvm::cast<VarDecl>(Result.get());
   }
 
@@ -1874,8 +1884,10 @@ VarDecl *Parser::buildVarDecl(Declarator &D) {
 /// Handles: function body, = delete, = default, semicolon.
 FunctionDecl *Parser::buildFunctionDecl(Declarator &D) {
   QualType T = D.buildType(Context);
-  if (T.isNull())
+  if (T.isNull()) {
+    LLVM_DEBUG(llvm::dbgs() << "buildFunctionDecl: failed to build type\n");
     return nullptr;
+  }
 
   llvm::StringRef Name = D.getName().getIdentifier();
   SourceLocation NameLoc = D.getNameLoc();
@@ -1901,7 +1913,10 @@ FunctionDecl *Parser::buildFunctionDecl(Declarator &D) {
 
   // Phase 1: Create FunctionDecl without body
   auto Result = Actions.ActOnFunctionDecl(NameLoc, Name, T, Params, nullptr);
-  if (!Result) return nullptr;
+  if (!Result) {
+    LLVM_DEBUG(llvm::dbgs() << "buildFunctionDecl: ActOnFunctionDecl failed\n");
+    return nullptr;
+  }
   
   auto *FD = llvm::cast<FunctionDecl>(Result.get());
   

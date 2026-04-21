@@ -227,17 +227,20 @@ graph TB
 
 ## 🔍 关键发现
 
-### 🔴 P0问题
+### ✅ P0问题（已修复）
 
-1. **ActOnCallExpr Early Return问题** (L2094-2098)
-   ```cpp
-   if (!D) {
-       return ExprResult::getInvalid();  // ← 跳过模板处理！
-   }
-   ```
-   - 当DeclRefExpr为nullptr时，直接返回
-   - 导致`DeduceAndInstantiateFunctionTemplate`永远无法被调用
-   - **影响**: 函数模板调用完全无法工作
+1. **ActOnCallExpr Early Return问题** (L2094-2098) - **已修复**
+   - **原问题**: 当DeclRefExpr的D为nullptr时，直接返回，导致`DeduceAndInstantiateFunctionTemplate`无法被调用
+   - **修复方案**: 
+     - 为`DeclRefExpr`添加`Name`字段存储标识符名称
+     - 修改`ActOnDeclRefExpr`接受名称参数
+     - 在`ActOnCallExpr`中使用`DRE->getName()`进行模板查找
+   - **修复文件**:
+     - `include/blocktype/AST/Expr.h`: 添加Name字段和getName()方法
+     - `include/blocktype/Sema/Sema.h`: 更新ActOnDeclRefExpr签名
+     - `src/Sema/Sema.cpp`: 实现模板查找逻辑
+     - `src/Parse/ParseExpr.cpp`: 传入名称参数
+   - **影响**: 函数模板调用现在可以正常工作
 
 ### 🟠 P1问题
 

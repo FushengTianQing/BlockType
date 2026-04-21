@@ -310,13 +310,20 @@ public:
 /// DeclRefExpr - Reference to a declared value (variable, function, etc.).
 class DeclRefExpr : public Expr {
   ValueDecl *D;
+  llvm::StringRef Name;  // Store name for template lookup when D is nullptr
 
 public:
-  DeclRefExpr(SourceLocation Loc, ValueDecl *D)
+  DeclRefExpr(SourceLocation Loc, ValueDecl *D, llvm::StringRef Name = "")
       : Expr(Loc, D ? D->getType() : QualType(), ExprValueKind::VK_LValue),
-        D(D) {}
+        D(D), Name(Name) {}
 
   ValueDecl *getDecl() const { return D; }
+  llvm::StringRef getName() const { 
+    // Prefer stored name, fall back to declaration name
+    if (!Name.empty()) return Name;
+    if (D) return D->getName();
+    return "";
+  }
 
   NodeKind getKind() const override { return NodeKind::DeclRefExprKind; }
 

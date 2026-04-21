@@ -21,6 +21,8 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
+#define DEBUG_TYPE "parse-expr"
+
 namespace blocktype {
 
 //===----------------------------------------------------------------------===//
@@ -43,6 +45,7 @@ ValueDecl *Parser::lookupMemberInType(llvm::StringRef MemberName, QualType BaseT
   // Check if the base type is valid
   if (BaseType.isNull()) {
     // Type inference not yet implemented
+    LLVM_DEBUG(llvm::dbgs() << "lookupMemberInType: base type is null (type inference not implemented)\n");
     return nullptr;
   }
 
@@ -58,12 +61,14 @@ ValueDecl *Parser::lookupMemberInType(llvm::StringRef MemberName, QualType BaseT
   auto *RT = llvm::dyn_cast_or_null<RecordType>(Ty);
   if (!RT) {
     // Not a record type, cannot look up members
+    LLVM_DEBUG(llvm::dbgs() << "lookupMemberInType: not a record type\n");
     return nullptr;
   }
 
   // Get the record declaration
   RecordDecl *RD = RT->getDecl();
   if (!RD) {
+    LLVM_DEBUG(llvm::dbgs() << "lookupMemberInType: record declaration is null\n");
     return nullptr;
   }
 
@@ -123,6 +128,8 @@ ValueDecl *Parser::lookupMemberInType(llvm::StringRef MemberName, QualType BaseT
   }
 
   // Member not found
+  LLVM_DEBUG(llvm::dbgs() << "lookupMemberInType: member '" << MemberName 
+                          << "' not found in type\n");
   return nullptr;
 }
 
@@ -218,6 +225,7 @@ Expr *Parser::parseExpression() {
   llvm::errs() << "DEBUG [ParseExpr L221]: parseExpression called\n";
   pushContext(ParsingContext::Expression);
 
+  LLVM_DEBUG(llvm::dbgs() << "parseRHS: failed\n");
   Expr *LHS = parseUnaryExpression();
   llvm::errs() << "DEBUG [ParseExpr L225]: After parseUnaryExpression, LHS = " 
                << (LHS ? std::to_string(static_cast<int>(LHS->getKind())) : "NULL") << "\n";
@@ -237,6 +245,7 @@ Expr *Parser::parseAssignmentExpression() {
   // C++11: braced-init-list can appear in assignment-expression context
   // (function arguments, return statements, assignment RHS, etc.)
   if (Tok.is(TokenKind::l_brace)) {
+    LLVM_DEBUG(llvm::dbgs() << "parseExpression: failed\n");
     Expr *Result = parseInitializerList();
     popContext();
     return Result;
@@ -250,6 +259,7 @@ Expr *Parser::parseAssignmentExpression() {
 
   // Stop at comma (Assignment precedence is higher than Comma)
   Expr *Result = parseRHS(LHS, PrecedenceLevel::Assignment);
+  LLVM_DEBUG(llvm::dbgs() << "parseExpressionWithPrecedence: failed\n");
   popContext();
   return Result;
 }
@@ -377,6 +387,7 @@ Expr *Parser::parseUnaryExpression() {
     }
 
     // Create unary operator via Sema
+    LLVM_DEBUG(llvm::dbgs() << "parsePostfixExpression: failed\n");
     UnaryOpKind UOK = getUnaryOpKind(OpKind);
     auto Result = Actions.ActOnUnaryOperator(UOK, Operand, OpLoc);
     return Result.isUsable() ? Result.get() : nullptr;
@@ -1025,8 +1036,8 @@ Expr *Parser::parseIdentifier() {
           // But DeclRefExpr only accepts ValueDecl, so we pass nullptr for now
           // The actual template resolution will happen in ActOnCallExpr
           llvm::errs() << "DEBUG [ParseExpr L1026]: Found FunctionTemplateDecl, will resolve in ActOnCallExpr\n";
-          // Pass the template name somehow - for now, create DeclRefExpr with nullptr
-          // The template will be looked up again in ActOnCallExpr
+          // Pass the template name for lookup in ActOnCallExpr
+          // VD remains nullptr, but Name will be stored in DeclRefExpr
       } else {
           // Found the declaration, create a DeclRefExpr
           VD = dyn_cast<ValueDecl>(D);
@@ -1035,9 +1046,10 @@ Expr *Parser::parseIdentifier() {
 
   // Create DeclRefExpr via Sema (with or without declaration)
   // If VD is nullptr, it's an undefined identifier (error recovery)
+  // Pass Name so that ActOnCallExpr can lookup templates when D is nullptr
   llvm::errs() << "DEBUG [ParseExpr L1032]: Calling ActOnDeclRefExpr with VD=" 
                << (VD ? std::to_string(static_cast<int>(VD->getKind())) : "NULL") << "\n";
-  ExprResult Result = Actions.ActOnDeclRefExpr(Loc, VD);
+  ExprResult Result = Actions.ActOnDeclRefExpr(Loc, VD, Name);
   llvm::errs() << "DEBUG [ParseExpr L1034]: ActOnDeclRefExpr returned, calling .get()\n";
   return Result.get();
 }
@@ -1587,6 +1599,7 @@ Expr *Parser::parseDesignatedInitializer(QualType ExpectedType) {
     if (auto *RT = llvm::dyn_cast<RecordType>(ExpectedType.getTypePtr())) {
       for (auto *F : RT->getDecl()->fields()) {
         if (F->getName() == FieldName) {
+          LLVM_DEBUG(llvm::dbgs() << "parseInitializerClause: failed\n");
           FieldType = F->getType();
           break;
         }

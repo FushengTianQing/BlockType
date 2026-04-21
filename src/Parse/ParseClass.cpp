@@ -23,6 +23,8 @@
 #include "blocktype/Lex/Token.h"
 #include "llvm/ADT/SmallVector.h"
 
+#define DEBUG_TYPE "parse-class"
+
 namespace blocktype {
 
 //===----------------------------------------------------------------------===//
@@ -423,6 +425,7 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
         if (Tok.is(TokenKind::semicolon)) {
           consumeToken();
         }
+        LLVM_DEBUG(llvm::dbgs() << "parseClassMember: error recovery, skipping to next boundary\n");
         return nullptr;
       }
     }
