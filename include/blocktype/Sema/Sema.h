@@ -30,6 +30,7 @@
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
 #include "blocktype/Sema/ConstraintSatisfaction.h"
+#include "blocktype/Sema/TypeDeduction.h"
 #include "blocktype/Sema/SemaCXX.h"
 #include "llvm/ADT/DenseMap.h"
 
@@ -187,6 +188,9 @@ class Sema {
 
   /// Concept constraint satisfaction checker [Stage 5.4]
   std::unique_ptr<ConstraintSatisfaction> ConstraintChecker;
+
+  /// Type deduction engine for auto/decltype
+  std::unique_ptr<TypeDeduction> TypeDeduce;
 
   /// Scope stack - tracks the current lexical scope chain.
   Scope *CurrentScope = nullptr;

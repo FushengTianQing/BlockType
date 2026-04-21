@@ -9,6 +9,7 @@
 #include "blocktype/Sema/Sema.h"
 #include "blocktype/Sema/SemaCXX.h"
 #include "blocktype/Sema/SemaReflection.h"
+#include "blocktype/Sema/TypeDeduction.h"
 #include "blocktype/AST/Attr.h"
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/Sema/TemplateDeduction.h"
@@ -70,7 +71,8 @@ Sema::Sema(ASTContext &C, DiagnosticsEngine &D)
     TC(C, D), ConstEval(C),
     Instantiator(std::make_unique<TemplateInstantiator>(*this)),
     Deduction(std::make_unique<TemplateDeduction>(*this)),
-    ConstraintChecker(std::make_unique<ConstraintSatisfaction>(*this)) {
+    ConstraintChecker(std::make_unique<ConstraintSatisfaction>(*this)),
+    TypeDeduce(std::make_unique<TypeDeduction>(C, &D)) {
   PushScope(ScopeFlags::TranslationUnitScope);
   
   // Initialize std namespace and std::get for structured bindings
@@ -373,6 +375,54 @@ void Sema::ActOnStartOfFunctionDef(FunctionDecl *FD) {
 }
 
 void Sema::ActOnFinishOfFunctionDef(FunctionDecl *FD) {
+  if (FD) {
+    // Deduce auto return type if needed
+    QualType FnType = FD->getType();
+    if (auto *FT = llvm::dyn_cast_or_null<FunctionType>(FnType.getTypePtr())) {
+      QualType RetType = QualType(FT->getReturnType(), Qualifier::None);
+      
+      // Check if return type is AutoType
+      if (RetType.getTypePtr() && RetType->getTypeClass() == TypeClass::Auto) {
+        QualType DeducedType = deduceReturnTypeFromBody(FD->getBody(), FD->getLocation());
+        
+        if (!DeducedType.isNull()) {
+          // For auto return type deduction, we use the deduced type directly
+          // TypeDeduction::deduceAutoType handles stripping references, cv-qualifiers, etc.
+          // We need to create a dummy expression for the deduction
+          // Since we already have the type from return statement, use deduceAutoType
+          // with a synthesized expression
+          
+          // Create a dummy IntegerLiteral for type deduction purposes
+          // (the actual value doesn't matter, only the type)
+          auto *DummyExpr = Context.create<IntegerLiteral>(FD->getLocation(), 
+                                                            llvm::APSInt(32), 
+                                                            DeducedType);
+          DeducedType = TypeDeduce->deduceAutoType(RetType, DummyExpr);
+          
+          if (!DeducedType.isNull()) {
+            // Update the function's return type
+            // Create a new function type with the deduced return type
+            QualType NewFnType = Context.getFunctionType(DeducedType.getTypePtr(), 
+                                                          FT->getParamTypes(),
+                                                          FT->isVariadic(),
+                                                          FT->isConst(),
+                                                          FT->isVolatile());
+            FD->setType(NewFnType);
+          }
+        } else {
+          // No return statement or return; -> deduce as void
+          QualType VoidType = Context.getVoidType();
+          QualType NewFnType = Context.getFunctionType(VoidType.getTypePtr(),
+                                                        FT->getParamTypes(),
+                                                        FT->isVariadic(),
+                                                        FT->isConst(),
+                                                        FT->isVolatile());
+          FD->setType(NewFnType);
+        }
+      }
+    }
+  }
+  
   CurFunction = nullptr;
   PopScope();
 }

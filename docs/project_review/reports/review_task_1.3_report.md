@@ -306,20 +306,23 @@ if (!TC.CheckXXX(...))
 **现象**: 当DeclRefExpr的Decl为nullptr时，直接返回  
 **影响**: 跳过了L2104的FunctionTemplateDecl处理  
 **严重性**: P0（阻塞函数模板调用）  
-**根因**: parseIdentifier创建了无效的DeclRefExpr(nullptr)
+**根因**: parseIdentifier创建了无效的DeclRefExpr(nullptr)  
+**状态**: ✅ 已修复 - 添加了模板查找和实例化逻辑
 
 ### 问题2: Auto返回类型推导未实现
 **位置**: ActOnFunctionDecl L348-350  
 **现象**: 注释说明"Auto return type deduction is deferred"  
 **影响**: 非模板函数的auto返回类型无法推导  
 **严重性**: P1  
-**建议**: 需要在函数体解析后调用deduceReturnTypeFromBody
+**建议**: 需要在函数体解析后调用deduceReturnTypeFromBody  
+**状态**: ✅ 已修复 - 在ActOnFinishOfFunctionDef中实现了返回类型推导
 
 ### 问题3: 重载决议简化
 **位置**: ActOnCallExpr L2150  
 **现象**: ResolveOverload的实现可能不完整  
 **影响**: 复杂的重载场景可能无法正确处理  
-**严重性**: P2
+**严重性**: P2  
+**状态**: ✅ 已实现 - 完整的重载决议逻辑已实现
 
 ---
 
