@@ -13,6 +13,7 @@
 #include "blocktype/Basic/Diagnostics.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Program.h"
 
 namespace blocktype {
 
@@ -51,10 +52,44 @@ ModuleInfo *ModuleManager::loadModule(llvm::StringRef Name) {
 }
 
 ModuleInfo *ModuleManager::compileModule(llvm::StringRef SourcePath) {
-  // TODO: 实现从源文件编译模块
-  // 这需要调用编译器前端进行解析和语义分析
-  Diags.report(SourceLocation{}, DiagID::err_not_implemented, "compileModule");
-  return nullptr;
+  // 检查源文件是否存在
+  if (!llvm::sys::fs::exists(SourcePath)) {
+    Diags.report(SourceLocation{}, DiagID::err_pp_file_not_found, SourcePath);
+    return nullptr;
+  }
+
+  // 构建输出 BMI 文件路径
+  llvm::SmallString<256> BMIPath(SourcePath);
+  llvm::sys::path::replace_extension(BMIPath, ".bmi");
+
+  // 构建编译命令
+  // 使用 blocktype 编译器编译模块
+  llvm::SmallVector<llvm::StringRef, 8> Args;
+  Args.push_back("blocktype");
+  Args.push_back("-emit-bmi");
+  Args.push_back("-o");
+  Args.push_back(BMIPath);
+  Args.push_back(SourcePath);
+
+  // 执行编译
+  std::string ErrorMessage;
+  int ExitCode = llvm::sys::ExecuteAndWait(
+      "blocktype", Args, std::nullopt, {}, 0, 0, &ErrorMessage);
+
+  if (ExitCode != 0) {
+    if (!ErrorMessage.empty()) {
+      Diags.report(SourceLocation{}, DiagID::err_not_implemented,
+                   "module compilation failed: " + ErrorMessage);
+    } else {
+      Diags.report(SourceLocation{}, DiagID::err_not_implemented,
+                   "module compilation failed with exit code " +
+                       std::to_string(ExitCode));
+    }
+    return nullptr;
+  }
+
+  // 加载生成的 BMI 文件
+  return loadModule(llvm::sys::path::stem(BMIPath).str());
 }
 
 std::string ModuleManager::findModuleBMI(llvm::StringRef Name) {

@@ -538,15 +538,24 @@ bool Sema::checkTemplateArgumentEquivalence(const TemplateArgument &Arg1,
     return TD1->getName() == TD2->getName();
   }
 
-  case TemplateArgumentKind::TemplateExpansion:
+  case TemplateArgumentKind::TemplateExpansion: {
     // 模板展开参数:比较模板
-    // TODO: 实现模板展开比较
-    return false;
+    TemplateDecl *TD1 = Arg1.getAsTemplateOrTemplateExpansion();
+    TemplateDecl *TD2 = Arg2.getAsTemplateOrTemplateExpansion();
+    if (!TD1 || !TD2) return TD1 == TD2;
+    return TD1->getName() == TD2->getName();
+  }
 
   case TemplateArgumentKind::Expression: {
-    // 表达式参数:需要求值后比较
-    // TODO: 实现表达式求值和比较
-    return false;
+    // 表达式参数:尝试求值后比较
+    // 简化实现:比较表达式类型
+    Expr *E1 = Arg1.getAsExpr();
+    Expr *E2 = Arg2.getAsExpr();
+    if (!E1 || !E2) return E1 == E2;
+
+    // 如果表达式类型相同,保守认为等价
+    // 完整实现需要常量表达式求值
+    return E1->getType() == E2->getType();
   }
 
   case TemplateArgumentKind::Pack: {
