@@ -343,6 +343,12 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
       
       Template = llvm::cast<VarTemplateDecl>(
           Actions.ActOnVarTemplateDeclFactory(TemplateLoc, VD->getName(), PartialSpec).get());
+      
+      // Validate the wrapper VarTemplateDecl
+      if (Actions.ActOnVarTemplateDecl(llvm::cast<VarTemplateDecl>(Template)).isInvalid()) {
+        return nullptr;  // Validation failed
+      }
+      
       Actions.PopScope(); // Pop TemplateScope
       Actions.PopScope(); // Pop TemplateParamScope
       return Template;
