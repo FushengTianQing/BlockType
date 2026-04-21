@@ -84,11 +84,26 @@ struct CodeGenOptions {
   /// Emit assembly instead of object file.
   bool EmitAssembly = false;
 
+  /// Emit object file (.o).
+  bool EmitObject = false;
+
   /// Output file name.
   std::string OutputFile;
 
   /// Target triple for code generation.
   std::string TargetTriple;
+
+  /// Stop after preprocessing (-E).
+  bool PreprocessOnly = false;
+
+  /// Stop after parsing (-fsyntax-only).
+  bool SyntaxOnly = false;
+
+  /// Stop after LLVM IR generation (-emit-llvm).
+  bool EmitLLVMOnly = false;
+
+  /// Link into executable (default behavior).
+  bool LinkExecutable = true;
 };
 
 /// DiagnosticOptions - Diagnostic options.
@@ -155,6 +170,18 @@ struct FrontendOptions {
 
   /// Show version.
   bool ShowVersion = false;
+
+  /// Include search paths.
+  std::vector<std::string> IncludePaths;
+
+  /// Library search paths for linking.
+  std::vector<std::string> LibraryPaths;
+
+  /// Libraries to link.
+  std::vector<std::string> Libraries;
+
+  /// Additional linker flags.
+  std::vector<std::string> LinkerFlags;
 };
 
 /// CompilerInvocation - Encapsulates all compiler options.

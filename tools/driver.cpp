@@ -73,6 +73,53 @@ static cl::opt<bool> EmitLLVM(
   cl::cat(BlockTypeCategory)
 );
 
+static cl::opt<bool> EmitObject(
+  "c",
+  cl::desc("Compile and assemble, but do not link"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<bool> PreprocessOnly(
+  "E",
+  cl::desc("Preprocess only"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<bool> SyntaxOnly(
+  "fsyntax-only",
+  cl::desc("Check syntax only, do not generate code"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<unsigned> OptimizationLevel(
+  "O",
+  cl::desc("Optimization level (0-3)"),
+  cl::value_desc("level"),
+  cl::init(0),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::list<std::string> IncludePaths(
+  "I",
+  cl::desc("Add directory to include search path"),
+  cl::value_desc("directory"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::list<std::string> LibraryPaths(
+  "L",
+  cl::desc("Add directory to library search path"),
+  cl::value_desc("directory"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::list<std::string> Libraries(
+  "l",
+  cl::desc("Link library"),
+  cl::value_desc("library"),
+  cl::cat(BlockTypeCategory)
+);
+
 static cl::opt<bool> Verbose(
   "v",
   cl::desc("Enable verbose output"),
@@ -174,7 +221,13 @@ std::shared_ptr<CompilerInvocation> createCompilerInvocation() {
   
   // CodeGen options
   CI->CodeGenOpts.EmitLLVM = EmitLLVM;
+  CI->CodeGenOpts.EmitObject = EmitObject;
+  CI->CodeGenOpts.PreprocessOnly = PreprocessOnly;
+  CI->CodeGenOpts.SyntaxOnly = SyntaxOnly;
+  CI->CodeGenOpts.OptimizationLevel = OptimizationLevel;
   CI->CodeGenOpts.OutputFile = OutputFile;
+  CI->CodeGenOpts.LinkExecutable = !EmitObject && !PreprocessOnly && !SyntaxOnly && !EmitLLVM;
+  
   if (!TargetTriple.empty()) {
     CI->CodeGenOpts.TargetTriple = TargetTriple;
   }
@@ -186,6 +239,21 @@ std::shared_ptr<CompilerInvocation> createCompilerInvocation() {
   CI->FrontendOpts.OutputFile = OutputFile;
   CI->FrontendOpts.DumpAST = ASTDump;
   CI->FrontendOpts.Verbose = Verbose;
+  
+  // Include paths
+  for (const auto &Path : IncludePaths) {
+    CI->FrontendOpts.IncludePaths.push_back(Path);
+  }
+  
+  // Library paths
+  for (const auto &Path : LibraryPaths) {
+    CI->FrontendOpts.LibraryPaths.push_back(Path);
+  }
+  
+  // Libraries
+  for (const auto &Lib : Libraries) {
+    CI->FrontendOpts.Libraries.push_back(Lib);
+  }
   
   // Set default target triple
   CI->setDefaultTargetTriple();

@@ -17,6 +17,15 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include <cstdlib>
 
 using namespace llvm;
 using namespace blocktype;
@@ -189,6 +198,36 @@ bool CompilerInstance::performSemaAnalysis() {
   return !hasErrors();
 }
 
+bool CompilerInstance::performPreprocessing() {
+  if (!Initialized || !PP) {
+    errs() << "Error: Compiler not initialized\n";
+    return false;
+  }
+
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "  Preprocessing...\n";
+  }
+
+  // Process all tokens from preprocessor
+  Token Tok;
+  while (!PP->isEOF()) {
+    if (!PP->lexToken(Tok)) {
+      break;
+    }
+    
+    // For -E mode, output preprocessed tokens
+    if (Invocation->CodeGenOpts.PreprocessOnly) {
+      outs() << Tok.getText() << " ";
+    }
+  }
+
+  if (Invocation->CodeGenOpts.PreprocessOnly) {
+    outs() << "\n";
+  }
+
+  return !hasErrors();
+}
+
 std::unique_ptr<llvm::Module> CompilerInstance::generateLLVMIR(StringRef ModuleName) {
   if (!CurrentTU) {
     errs() << "Error: No translation unit to generate code for\n";
@@ -209,6 +248,87 @@ std::unique_ptr<llvm::Module> CompilerInstance::generateLLVMIR(StringRef ModuleN
   return std::unique_ptr<llvm::Module>(CGM.getModule());
 }
 
+bool CompilerInstance::runOptimizationPasses(llvm::Module &Module) {
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "  Running optimization passes (O" 
+           << Invocation->CodeGenOpts.OptimizationLevel << ")...\n";
+  }
+
+  // TODO: Implement optimization passes using LLVM's PassManager
+  // For now, we skip optimization
+  if (Invocation->CodeGenOpts.OptimizationLevel > 0) {
+    errs() << "Warning: Optimization passes not yet implemented\n";
+  }
+
+  return true;
+}
+
+bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef OutputPath) {
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "  Generating object file: " << OutputPath << "\n";
+  }
+
+  // TODO: Implement object file generation using LLVM's TargetMachine
+  // For now, we just emit LLVM IR
+  errs() << "Warning: Object file generation not yet implemented\n";
+  
+  // Fallback: emit LLVM IR to file
+  std::error_code EC;
+  llvm::raw_fd_ostream Out(OutputPath, EC);
+  if (EC) {
+    errs() << "Error: Cannot open output file '" << OutputPath << "'\n";
+    return false;
+  }
+  
+  Module.print(Out, nullptr);
+  return true;
+}
+
+bool CompilerInstance::linkExecutable(const std::vector<std::string> &ObjectFiles,
+                                      StringRef OutputPath) {
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "  Linking executable: " << OutputPath << "\n";
+  }
+
+  // TODO: Implement linking by invoking system linker
+  // For now, we skip linking
+  errs() << "Warning: Linking not yet implemented\n";
+  
+  // Build linker command
+  std::string LinkerCmd = "clang++";  // Use clang++ as linker
+  
+  // Add output file
+  LinkerCmd += " -o " + OutputPath.str();
+  
+  // Add object files
+  for (const auto &ObjFile : ObjectFiles) {
+    LinkerCmd += " " + ObjFile;
+  }
+  
+  // Add library paths
+  for (const auto &LibPath : Invocation->FrontendOpts.LibraryPaths) {
+    LinkerCmd += " -L" + LibPath;
+  }
+  
+  // Add libraries
+  for (const auto &Lib : Invocation->FrontendOpts.Libraries) {
+    LinkerCmd += " -l" + Lib;
+  }
+  
+  // Add additional linker flags
+  for (const auto &Flag : Invocation->FrontendOpts.LinkerFlags) {
+    LinkerCmd += " " + Flag;
+  }
+  
+  if (Invocation->FrontendOpts.Verbose) {
+    outs() << "  Linker command: " << LinkerCmd << "\n";
+  }
+  
+  // Execute linker
+  int Result = std::system(LinkerCmd.c_str());
+  return Result == 0;
+}
+
 bool CompilerInstance::compileFile(StringRef Filename) {
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "Compiling: " << Filename << "\n";
@@ -219,17 +339,30 @@ bool CompilerInstance::compileFile(StringRef Filename) {
     return false;
   }
 
-  // Parse
+  // === Stage 1: Preprocessing ===
+  if (Invocation->CodeGenOpts.PreprocessOnly) {
+    return performPreprocessing();
+  }
+
+  // === Stage 2: Parsing ===
   TranslationUnitDecl *TU = parseTranslationUnit();
   if (!TU) {
     errs() << "Error: Parsing failed for '" << Filename << "'\n";
     return false;
   }
 
-  // Perform semantic analysis
+  // === Stage 3: Semantic Analysis ===
   if (!performSemaAnalysis()) {
     errs() << "Error: Semantic analysis failed for '" << Filename << "'\n";
     return false;
+  }
+
+  // Stop after syntax analysis if requested
+  if (Invocation->CodeGenOpts.SyntaxOnly) {
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Syntax check passed\n";
+    }
+    return true;
   }
 
   // Dump AST if requested
@@ -237,15 +370,60 @@ bool CompilerInstance::compileFile(StringRef Filename) {
     dumpAST();
   }
 
-  // Generate LLVM IR if requested
-  if (Invocation->CodeGenOpts.EmitLLVM) {
-    auto Module = generateLLVMIR(Filename);
-    if (!Module) {
-      errs() << "Error: Code generation failed for '" << Filename << "'\n";
+  // === Stage 4: LLVM IR Generation ===
+  auto Module = generateLLVMIR(Filename);
+  if (!Module) {
+    errs() << "Error: Code generation failed for '" << Filename << "'\n";
+    return false;
+  }
+
+  // Stop after LLVM IR generation if requested
+  if (Invocation->CodeGenOpts.EmitLLVM || Invocation->CodeGenOpts.EmitLLVMOnly) {
+    if (Invocation->CodeGenOpts.EmitLLVMOnly) {
+      // Emit LLVM IR to stdout
+      Module->print(outs(), nullptr);
+      return true;
+    }
+  }
+
+  // === Stage 5: Optimization ===
+  if (Invocation->CodeGenOpts.OptimizationLevel > 0) {
+    if (!runOptimizationPasses(*Module)) {
+      errs() << "Error: Optimization failed for '" << Filename << "'\n";
+      return false;
+    }
+  }
+
+  // === Stage 6: Object File Generation ===
+  if (Invocation->CodeGenOpts.EmitObject || Invocation->CodeGenOpts.LinkExecutable) {
+    // Determine output file name
+    std::string OutputPath;
+    if (!Invocation->CodeGenOpts.OutputFile.empty()) {
+      OutputPath = Invocation->CodeGenOpts.OutputFile;
+    } else {
+      // Generate default output file name
+      OutputPath = Filename.str();
+      // Replace extension with .o
+      size_t DotPos = OutputPath.rfind('.');
+      if (DotPos != std::string::npos) {
+        OutputPath = OutputPath.substr(0, DotPos) + ".o";
+      } else {
+        OutputPath += ".o";
+      }
+    }
+
+    if (!generateObjectFile(*Module, OutputPath)) {
+      errs() << "Error: Object file generation failed for '" << Filename << "'\n";
       return false;
     }
 
-    // Output LLVM IR
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Object file generated: " << OutputPath << "\n";
+    }
+  }
+
+  // Emit LLVM IR if requested (even with object file generation)
+  if (Invocation->CodeGenOpts.EmitLLVM) {
     Module->print(outs(), nullptr);
   }
 
@@ -282,6 +460,9 @@ bool CompilerInstance::compileAllFiles() {
 
   // 收集所有翻译单元
   std::vector<TranslationUnitDecl *> AllTUs;
+  
+  // 收集生成的对象文件（用于链接）
+  std::vector<std::string> ObjectFiles;
 
   // 编译每个文件
   for (const auto &File : Invocation->FrontendOpts.InputFiles) {
@@ -335,24 +516,70 @@ bool CompilerInstance::compileAllFiles() {
       dumpAST();
     }
 
+    // 生成 LLVM IR
+    auto Module = generateLLVMIR(File);
+    if (!Module) {
+      errs() << "Error: Code generation failed for '" << File << "'\n";
+      AllSucceeded = false;
+      continue;
+    }
+
+    // 优化
+    if (Invocation->CodeGenOpts.OptimizationLevel > 0) {
+      if (!runOptimizationPasses(*Module)) {
+        AllSucceeded = false;
+        continue;
+      }
+    }
+
+    // 生成对象文件
+    if (Invocation->CodeGenOpts.EmitObject || Invocation->CodeGenOpts.LinkExecutable) {
+      std::string ObjectPath = File;
+      size_t DotPos = ObjectPath.rfind('.');
+      if (DotPos != std::string::npos) {
+        ObjectPath = ObjectPath.substr(0, DotPos) + ".o";
+      } else {
+        ObjectPath += ".o";
+      }
+
+      if (!generateObjectFile(*Module, ObjectPath)) {
+        AllSucceeded = false;
+        continue;
+      }
+
+      ObjectFiles.push_back(ObjectPath);
+      
+      if (Invocation->FrontendOpts.Verbose) {
+        outs() << "  Object file: " << ObjectPath << "\n";
+      }
+    }
+
     if (Invocation->FrontendOpts.Verbose) {
       outs() << "  Compilation successful\n";
     }
   }
 
-  // 生成代码（如果需要）
-  if (AllSucceeded && Invocation->CodeGenOpts.EmitLLVM && !AllTUs.empty()) {
-    if (Invocation->FrontendOpts.Verbose) {
-      outs() << "\nGenerating LLVM IR for all translation units...\n";
+  // === Stage 7: Linking ===
+  if (AllSucceeded && Invocation->CodeGenOpts.LinkExecutable && !ObjectFiles.empty()) {
+    // Determine output file name
+    std::string OutputPath;
+    if (!Invocation->FrontendOpts.OutputFile.empty()) {
+      OutputPath = Invocation->FrontendOpts.OutputFile;
+    } else {
+      OutputPath = "a.out";  // Default executable name
     }
 
-    // 为所有 TU 生成一个模块
-    auto Module = generateLLVMIR("multi_file_module");
-    if (Module) {
-      Module->print(outs(), nullptr);
-    } else {
-      errs() << "Error: Code generation failed\n";
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "\nLinking " << ObjectFiles.size() << " object files...\n";
+    }
+
+    if (!linkExecutable(ObjectFiles, OutputPath)) {
+      errs() << "Error: Linking failed\n";
       AllSucceeded = false;
+    } else {
+      if (Invocation->FrontendOpts.Verbose) {
+        outs() << "Executable generated: " << OutputPath << "\n";
+      }
     }
   }
 
