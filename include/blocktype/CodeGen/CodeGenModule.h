@@ -61,6 +61,51 @@ struct GlobalDeclAttributes {
 };
 
 //===----------------------------------------------------------------------===//
+// Unified Attribute Query Interface — 统一属性查询接口
+//===----------------------------------------------------------------------===//
+
+/// AttributeQuery - 统一的属性查询结果结构
+struct AttributeQuery {
+  // 链接相关属性
+  bool IsWeak = false;
+  bool IsUsed = false;
+  bool IsDLLImport = false;
+  bool IsDLLExport = false;
+  
+  // 可见性属性
+  bool IsHiddenVisibility = false;
+  bool IsDefaultVisibility = true;
+  llvm::StringRef VisibilityValue; // "default", "hidden", "protected"
+  
+  // 优化相关属性
+  bool IsDeprecated = false;
+  bool IsNoreturn = false;
+  bool IsNoInline = false;
+  bool IsAlwaysInline = false;
+  bool IsConst = false;       // __attribute__((const))
+  bool IsPure = false;        // __attribute__((pure))
+  
+  /// 检查是否有任何属性被设置
+  [[nodiscard]] bool hasAnyAttribute() const {
+    return IsWeak || IsUsed || IsDLLImport || IsDLLExport ||
+           IsHiddenVisibility || !IsDefaultVisibility ||
+           IsDeprecated || IsNoreturn || IsNoInline || IsAlwaysInline ||
+           IsConst || IsPure;
+  }
+  
+  /// 获取 visibility 字符串值
+  [[nodiscard]] llvm::StringRef getVisibilityString() const {
+    if (IsHiddenVisibility) {
+      return "hidden";
+    }
+    if (!VisibilityValue.empty()) {
+      return VisibilityValue;
+    }
+    return "default";
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // InitKind — 全局变量初始化分类
 //===----------------------------------------------------------------------===//
 
@@ -136,6 +181,15 @@ public:
   // 属性处理（参照 Clang CodeGenModule::getGlobalValueAttributes）
   //===------------------------------------------------------------------===//
 
+  /// 统一的属性查询接口 - 从 Decl 中提取所有属性
+  [[nodiscard]] AttributeQuery QueryAttributes(const Decl *Decl);
+  
+  /// 检查 Decl 是否有特定名称的属性
+  [[nodiscard]] bool HasAttribute(const Decl *Decl, llvm::StringRef AttrName);
+  
+  /// 获取属性的参数表达式（如果有）
+  [[nodiscard]] Expr *GetAttributeArgument(const Decl *Decl, llvm::StringRef AttrName);
+
   /// 收集全局声明上的属性（从 AST 或 Decl 属性）。
   GlobalDeclAttributes GetGlobalDeclAttributes(const Decl *D);
 
@@ -155,6 +209,9 @@ public:
 
   /// 计算全局符号的 Visibility。
   llvm::GlobalValue::VisibilityTypes GetVisibility(const GlobalDeclAttributes &Attrs);
+  
+  /// 基于 AttributeQuery 计算 Visibility（支持 visibility 参数解析）
+  [[nodiscard]] llvm::GlobalValue::VisibilityTypes GetVisibilityFromQuery(const AttributeQuery &Query);
 
   //===------------------------------------------------------------------===//
   // 初始化分类

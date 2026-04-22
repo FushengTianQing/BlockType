@@ -145,6 +145,9 @@ protected:
 
   // P7.4.2: Placeholder variable `_` (P2169R4)
   bool IsPlaceholder = false;
+  
+  // Attributes: [[deprecated]], [[nodiscard]], __attribute__((used)), etc.
+  class AttributeListDecl *Attrs = nullptr;
 
 public:
   VarDecl(SourceLocation Loc, llvm::StringRef Name, QualType T, 
@@ -158,6 +161,10 @@ public:
   void setStatic(bool S) { IsStatic = S; }
   bool isConstexpr() const { return IsConstexpr; }
   void setConstexpr(bool C = true) { IsConstexpr = C; }
+  
+  /// Get the attribute list for this variable declaration.
+  class AttributeListDecl *getAttrs() const { return Attrs; }
+  void setAttrs(class AttributeListDecl *A) { Attrs = A; }
 
   //===------------------------------------------------------------------===//
   // P7.4.2: Placeholder variable `_` (P2169R4)
@@ -377,6 +384,9 @@ class FieldDecl : public ValueDecl {
   bool IsMutable;
   AccessSpecifier Access;
   CXXRecordDecl *Parent = nullptr; // The class this field belongs to
+  
+  // Attributes: [[deprecated]], [[nodiscard]], etc.
+  class AttributeListDecl *Attrs = nullptr;
 
 public:
   FieldDecl(SourceLocation Loc, llvm::StringRef Name, QualType T,
@@ -393,6 +403,10 @@ public:
   
   AccessSpecifier getAccess() const { return Access; }
   void setAccess(AccessSpecifier A) { Access = A; }
+  
+  /// Get the attribute list for this field declaration.
+  class AttributeListDecl *getAttrs() const { return Attrs; }
+  void setAttrs(class AttributeListDecl *A) { Attrs = A; }
   
   // Parent class accessors
   CXXRecordDecl *getParent() const { return Parent; }

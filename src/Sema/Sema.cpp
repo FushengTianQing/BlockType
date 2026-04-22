@@ -327,8 +327,14 @@ void Sema::ActOnFinishDecl(Decl *D) {
 }
 
 DeclResult Sema::ActOnVarDecl(SourceLocation Loc, llvm::StringRef Name,
-                               QualType T, Expr *Init) {
+                               QualType T, Expr *Init,
+                               class AttributeListDecl *Attrs) {
   auto *VD = Context.create<VarDecl>(Loc, Name, T, Init);
+  
+  // Set attributes if provided
+  if (Attrs) {
+    VD->setAttrs(Attrs);
+  }
 
   // Check initializer if present
   if (Init) {
@@ -631,7 +637,8 @@ DeclResult Sema::ActOnAttributeDeclWithNamespace(SourceLocation Loc,
 }
 
 DeclResult Sema::ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
-                                  QualType T, Expr *Init, bool IsStatic) {
+                                  QualType T, Expr *Init, bool IsStatic,
+                                  class AttributeListDecl *Attrs) {
   // Check if type needs template instantiation
   QualType ActualType = T;
   if (T.getTypePtr() && T->getTypeClass() == TypeClass::TemplateSpecialization) {
@@ -663,6 +670,12 @@ DeclResult Sema::ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
   }
   
   auto *VD = Context.create<VarDecl>(Loc, Name, ActualType, Init, IsStatic);
+  
+  // Set attributes if provided
+  if (Attrs) {
+    VD->setAttrs(Attrs);
+  }
+  
   registerDecl(VD);
   if (CurContext) CurContext->addDecl(VD);
   return DeclResult(VD);
@@ -1521,9 +1534,16 @@ DeclResult Sema::ActOnConceptDeclFactory(SourceLocation Loc, llvm::StringRef Nam
 DeclResult Sema::ActOnFieldDeclFactory(SourceLocation Loc, llvm::StringRef Name,
                                        QualType Type, Expr *BitWidth,
                                        bool IsMutable, Expr *InClassInit,
-                                       AccessSpecifier Access) {
+                                       AccessSpecifier Access,
+                                       class AttributeListDecl *Attrs) {
   auto *FD = Context.create<FieldDecl>(Loc, Name, Type, BitWidth, IsMutable,
                                         InClassInit, Access);
+  
+  // Set attributes if provided
+  if (Attrs) {
+    FD->setAttrs(Attrs);
+  }
+  
   registerDecl(FD);
   return DeclResult(FD);
 }

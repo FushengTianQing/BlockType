@@ -175,6 +175,300 @@ void CodeGenModule::EmitDeferred() {
 // 属性处理
 //===----------------------------------------------------------------------===//
 
+AttributeQuery CodeGenModule::QueryAttributes(const Decl *Decl) {
+  AttributeQuery Result;
+  
+  if (!Decl) {
+    return Result;
+  }
+  
+  // 1. 检查 FunctionDecl 上的直接属性
+  if (auto *FD = llvm::dyn_cast<FunctionDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        auto Name = Attr->getAttributeName();
+        
+        // 链接相关属性
+        if (Name == "weak") {
+          Result.IsWeak = true;
+        } else if (Name == "used") {
+          Result.IsUsed = true;
+        } else if (Name == "dllimport") {
+          Result.IsDLLImport = true;
+        } else if (Name == "dllexport") {
+          Result.IsDLLExport = true;
+        }
+        // 可见性属性
+        else if (Name == "visibility") {
+          Result.IsHiddenVisibility = true;
+          Result.IsDefaultVisibility = false;
+          
+          // 解析 visibility 参数
+          if (auto *Arg = Attr->getArgumentExpr()) {
+            if (auto *SL = llvm::dyn_cast<StringLiteral>(Arg)) {
+              llvm::StringRef VisValue = SL->getValue();
+              Result.VisibilityValue = VisValue;
+              
+              // 根据值设置标志
+              if (VisValue == "hidden") {
+                Result.IsHiddenVisibility = true;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "protected") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "default") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = true;
+              }
+            }
+          }
+        }
+        // 优化相关属性
+        else if (Name == "deprecated") {
+          Result.IsDeprecated = true;
+        } else if (Name == "noreturn") {
+          Result.IsNoreturn = true;
+        } else if (Name == "noinline" || Name == "noinline_") {
+          Result.IsNoInline = true;
+        } else if (Name == "always_inline" || Name == "forceinline") {
+          Result.IsAlwaysInline = true;
+        } else if (Name == "const") {
+          Result.IsConst = true;
+        } else if (Name == "pure") {
+          Result.IsPure = true;
+        }
+      }
+    }
+  }
+  // 2. 检查 VarDecl 上的属性（新增）
+  else if (auto *VD = llvm::dyn_cast<VarDecl>(Decl)) {
+    if (auto *AttrList = VD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        auto Name = Attr->getAttributeName();
+        
+        if (Name == "weak") {
+          Result.IsWeak = true;
+        } else if (Name == "used") {
+          Result.IsUsed = true;
+        } else if (Name == "dllimport") {
+          Result.IsDLLImport = true;
+        } else if (Name == "dllexport") {
+          Result.IsDLLExport = true;
+        } else if (Name == "deprecated") {
+          Result.IsDeprecated = true;
+        } else if (Name == "visibility") {
+          Result.IsHiddenVisibility = true;
+          Result.IsDefaultVisibility = false;
+          
+          // 解析 visibility 参数
+          if (auto *Arg = Attr->getArgumentExpr()) {
+            if (auto *SL = llvm::dyn_cast<StringLiteral>(Arg)) {
+              llvm::StringRef VisValue = SL->getValue();
+              Result.VisibilityValue = VisValue;
+              
+              if (VisValue == "hidden") {
+                Result.IsHiddenVisibility = true;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "protected") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "default") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // 3. 检查 FieldDecl 上的属性（新增）
+  else if (auto *FD = llvm::dyn_cast<FieldDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        auto Name = Attr->getAttributeName();
+        
+        if (Name == "deprecated") {
+          Result.IsDeprecated = true;
+        } else if (Name == "visibility") {
+          Result.IsHiddenVisibility = true;
+          Result.IsDefaultVisibility = false;
+          
+          // 解析 visibility 参数
+          if (auto *Arg = Attr->getArgumentExpr()) {
+            if (auto *SL = llvm::dyn_cast<StringLiteral>(Arg)) {
+              llvm::StringRef VisValue = SL->getValue();
+              Result.VisibilityValue = VisValue;
+              
+              if (VisValue == "hidden") {
+                Result.IsHiddenVisibility = true;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "protected") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = false;
+              } else if (VisValue == "default") {
+                Result.IsHiddenVisibility = false;
+                Result.IsDefaultVisibility = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // 4. 检查 CXXRecordDecl 的成员属性（类级别的属性）
+  if (auto *RD = llvm::dyn_cast<CXXRecordDecl>(Decl)) {
+    for (auto *Member : RD->members()) {
+      if (auto *AttrList = llvm::dyn_cast<AttributeListDecl>(Member)) {
+        for (auto *Attr : AttrList->getAttributes()) {
+          auto Name = Attr->getAttributeName();
+          
+          if (Name == "weak") {
+            Result.IsWeak = true;
+          } else if (Name == "used") {
+            Result.IsUsed = true;
+          } else if (Name == "dllimport") {
+            Result.IsDLLImport = true;
+          } else if (Name == "dllexport") {
+            Result.IsDLLExport = true;
+          } else if (Name == "deprecated") {
+            Result.IsDeprecated = true;
+          } else if (Name == "visibility") {
+            Result.IsHiddenVisibility = true;
+            Result.IsDefaultVisibility = false;
+            
+            // 解析 visibility 参数
+            if (auto *Arg = Attr->getArgumentExpr()) {
+              if (auto *SL = llvm::dyn_cast<StringLiteral>(Arg)) {
+                llvm::StringRef VisValue = SL->getValue();
+                Result.VisibilityValue = VisValue;
+                
+                if (VisValue == "hidden") {
+                  Result.IsHiddenVisibility = true;
+                  Result.IsDefaultVisibility = false;
+                } else if (VisValue == "protected") {
+                  Result.IsHiddenVisibility = false;
+                  Result.IsDefaultVisibility = false;
+                } else if (VisValue == "default") {
+                  Result.IsHiddenVisibility = false;
+                  Result.IsDefaultVisibility = true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return Result;
+}
+
+bool CodeGenModule::HasAttribute(const Decl *Decl, llvm::StringRef AttrName) {
+  if (!Decl) {
+    return false;
+  }
+  
+  // 检查 FunctionDecl 上的属性
+  if (auto *FD = llvm::dyn_cast<FunctionDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return true;
+        }
+      }
+    }
+  }
+  // 检查 VarDecl 上的属性（新增）
+  else if (auto *VD = llvm::dyn_cast<VarDecl>(Decl)) {
+    if (auto *AttrList = VD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return true;
+        }
+      }
+    }
+  }
+  // 检查 FieldDecl 上的属性（新增）
+  else if (auto *FD = llvm::dyn_cast<FieldDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  // 检查 CXXRecordDecl 的成员属性
+  if (auto *RD = llvm::dyn_cast<CXXRecordDecl>(Decl)) {
+    for (auto *Member : RD->members()) {
+      if (auto *AttrList = llvm::dyn_cast<AttributeListDecl>(Member)) {
+        for (auto *Attr : AttrList->getAttributes()) {
+          if (Attr->getAttributeName() == AttrName) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  
+  return false;
+}
+
+Expr *CodeGenModule::GetAttributeArgument(const Decl *Decl, llvm::StringRef AttrName) {
+  if (!Decl) {
+    return nullptr;
+  }
+  
+  // 检查 FunctionDecl 上的属性
+  if (auto *FD = llvm::dyn_cast<FunctionDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return Attr->getArgumentExpr();
+        }
+      }
+    }
+  }
+  // 检查 VarDecl 上的属性（新增）
+  else if (auto *VD = llvm::dyn_cast<VarDecl>(Decl)) {
+    if (auto *AttrList = VD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return Attr->getArgumentExpr();
+        }
+      }
+    }
+  }
+  // 检查 FieldDecl 上的属性（新增）
+  else if (auto *FD = llvm::dyn_cast<FieldDecl>(Decl)) {
+    if (auto *AttrList = FD->getAttrs()) {
+      for (auto *Attr : AttrList->getAttributes()) {
+        if (Attr->getAttributeName() == AttrName) {
+          return Attr->getArgumentExpr();
+        }
+      }
+    }
+  }
+  
+  // 检查 CXXRecordDecl 的成员属性
+  if (auto *RD = llvm::dyn_cast<CXXRecordDecl>(Decl)) {
+    for (auto *Member : RD->members()) {
+      if (auto *AttrList = llvm::dyn_cast<AttributeListDecl>(Member)) {
+        for (auto *Attr : AttrList->getAttributes()) {
+          if (Attr->getAttributeName() == AttrName) {
+            return Attr->getArgumentExpr();
+          }
+        }
+      }
+    }
+  }
+  
+  return nullptr;
+}
+
 GlobalDeclAttributes CodeGenModule::GetGlobalDeclAttributes(const Decl *D) {
   GlobalDeclAttributes Attrs;
 
@@ -212,9 +506,8 @@ GlobalDeclAttributes CodeGenModule::GetGlobalDeclAttributes(const Decl *D) {
     }
   }
 
-  // 对于 FunctionDecl / VarDecl，检查其 DeclContext 中的属性
-  // 当前简化实现：通过 NamedDecl 的属性查找
-  // TODO: 当 Sema 支持属性传播时，直接从 FunctionDecl/VarDecl 获取
+  // 注意：GetGlobalDeclAttributes 是旧API，建议使用新的 QueryAttributes()
+  // QueryAttributes() 支持 FunctionDecl, VarDecl, FieldDecl, CXXRecordDecl
 
   return Attrs;
 }
@@ -324,6 +617,27 @@ CodeGenModule::GetVisibility(const GlobalDeclAttributes &Attrs) {
     return llvm::GlobalValue::HiddenVisibility;
   }
   return llvm::GlobalValue::DefaultVisibility;
+}
+
+// 新增：基于 AttributeQuery 的 visibility 计算
+llvm::GlobalValue::VisibilityTypes
+CodeGenModule::GetVisibilityFromQuery(const AttributeQuery &Query) {
+  llvm::StringRef VisValue = Query.getVisibilityString();
+  
+  if (VisValue == "hidden") {
+    return llvm::GlobalValue::HiddenVisibility;
+  } else if (VisValue == "protected") {
+    // LLVM 不直接支持 protected，降级为 default
+    // 在 ELF 平台上可以通过其他方式实现
+    return llvm::GlobalValue::DefaultVisibility;
+  } else if (VisValue == "default") {
+    return llvm::GlobalValue::DefaultVisibility;
+  }
+  
+  // 默认行为
+  return Query.IsHiddenVisibility ? 
+         llvm::GlobalValue::HiddenVisibility : 
+         llvm::GlobalValue::DefaultVisibility;
 }
 
 //===----------------------------------------------------------------------===//

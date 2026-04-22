@@ -2014,7 +2014,7 @@ VarDecl *Parser::buildVarDecl(Declarator &D) {
                << Name.str() << "', T class = " << (T.getTypePtr() ? std::to_string(static_cast<int>(T->getTypeClass())) : "null")
                << ", Init = " << (Init ? std::to_string(static_cast<int>(Init->getKind())) : "null")
                << "\n";
-  DeclResult Result = Actions.ActOnVarDeclFull(NameLoc, Name, T, Init, IsStatic);
+  DeclResult Result = Actions.ActOnVarDeclFull(NameLoc, Name, T, Init, IsStatic, DS.AttrList);
   if (Result.isInvalid())
     return nullptr;
   return llvm::cast<VarDecl>(Result.get());

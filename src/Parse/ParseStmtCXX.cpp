@@ -82,7 +82,7 @@ Stmt *Parser::parseCXXCatchClause() {
         consumeToken();
       }
       // Create VarDecl for exception declaration
-      ExceptionDecl = llvm::cast<VarDecl>(Actions.ActOnVarDecl(VarLoc, VarName, ExceptionType, nullptr).get());
+      ExceptionDecl = llvm::cast<VarDecl>(Actions.ActOnVarDecl(VarLoc, VarName, ExceptionType, nullptr, nullptr).get());
     }
   }
 

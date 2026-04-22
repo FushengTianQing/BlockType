@@ -193,7 +193,7 @@ std::pair<Expr *, VarDecl *> Parser::parseCondition() {
 
   // Create VarDecl
   auto *VD = llvm::cast<VarDecl>(
-      Actions.ActOnVarDecl(VarLoc, VarName, VarType, Init).get());
+      Actions.ActOnVarDecl(VarLoc, VarName, VarType, Init, DS.AttrList).get());
 
   // Condition expression: reference to the variable (will be converted to bool)
   Expr *Cond = Actions.ActOnDeclRefExpr(VarLoc, VD).get();

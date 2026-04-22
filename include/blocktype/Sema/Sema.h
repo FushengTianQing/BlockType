@@ -396,7 +396,8 @@ public:
   void ActOnFinishDecl(Decl *D);
 
   DeclResult ActOnVarDecl(SourceLocation Loc, llvm::StringRef Name,
-                          QualType T, Expr *Init = nullptr);
+                          QualType T, Expr *Init = nullptr,
+                          class AttributeListDecl *Attrs = nullptr);
 
   // P7.4.2: Placeholder variable `_` (P2169R4)
   /// Handle placeholder variable declaration `_`
@@ -671,7 +672,8 @@ public:
                                              llvm::StringRef Namespace,
                                              llvm::StringRef Name, Expr *Arg);
   DeclResult ActOnVarDeclFull(SourceLocation Loc, llvm::StringRef Name,
-                              QualType T, Expr *Init, bool IsStatic);
+                              QualType T, Expr *Init, bool IsStatic,
+                              class AttributeListDecl *Attrs = nullptr);
   DeclResult ActOnFunctionDeclFull(SourceLocation Loc, llvm::StringRef Name,
                                    QualType T,
                                    llvm::ArrayRef<ParmVarDecl *> Params,
@@ -719,7 +721,8 @@ public:
   DeclResult ActOnFieldDeclFactory(SourceLocation Loc, llvm::StringRef Name,
                                    QualType Type, Expr *BitWidth,
                                    bool IsMutable, Expr *InClassInit,
-                                   AccessSpecifier Access);
+                                   AccessSpecifier Access,
+                                   class AttributeListDecl *Attrs = nullptr);
   DeclResult ActOnAccessSpecDeclFactory(SourceLocation Loc,
                                         AccessSpecifier Access,
                                         SourceLocation ColonLoc);

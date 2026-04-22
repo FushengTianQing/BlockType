@@ -797,14 +797,14 @@ Decl *Parser::parseClassMember(CXXRecordDecl *Class) {
 
   // Create VarDecl for static members, FieldDecl for non-static
   if (IsStatic) {
-    VarDecl *VD = llvm::cast<VarDecl>(Actions.ActOnVarDeclFull(NameLoc, Name, Type, InClassInit, true).get());
+    VarDecl *VD = llvm::cast<VarDecl>(Actions.ActOnVarDeclFull(NameLoc, Name, Type, InClassInit, true, DS.AttrList).get());
     // VD registered by Sema
     return VD;
   }
   
   AccessSpecifier Access =
       static_cast<AccessSpecifier>(Class->getCurrentAccess());
-  FieldDecl *FD = llvm::cast<FieldDecl>(Actions.ActOnFieldDeclFactory(NameLoc, Name, Type, BitWidth, IsMutable, InClassInit, Access).get());
+  FieldDecl *FD = llvm::cast<FieldDecl>(Actions.ActOnFieldDeclFactory(NameLoc, Name, Type, BitWidth, IsMutable, InClassInit, Access, DS.AttrList).get());
   
   // Add field to the class's Fields array
   Class->addField(FD);
