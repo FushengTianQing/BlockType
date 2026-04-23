@@ -328,10 +328,63 @@ ExprResult Sema::ActOnCXXNamedCastExprWithType(SourceLocation CastLoc,
 
 ExprResult Sema::ActOnPackIndexingExpr(SourceLocation Loc, Expr *Pack,
                                        Expr *Index) {
+  // 1. Validate that Pack references a parameter pack
+  bool IsPack = false;
+  if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Pack)) {
+    if (auto *D = DRE->getDecl()) {
+      // Check if the declaration is a parameter pack
+      if (auto *TTPD = llvm::dyn_cast<TemplateTypeParmDecl>(D)) {
+        IsPack = TTPD->isParameterPack();
+      } else if (auto *NTTPD = llvm::dyn_cast<NonTypeTemplateParmDecl>(D)) {
+        IsPack = NTTPD->isParameterPack();
+      } else if (auto *TTPD = llvm::dyn_cast<TemplateTemplateParmDecl>(D)) {
+        IsPack = TTPD->isParameterPack();
+      } else if (llvm::isa<VarTemplateDecl>(D) ||
+                 llvm::isa<FunctionTemplateDecl>(D)) {
+        IsPack = true;
+      }
+    }
+  }
+  // PackExpansionExpr or type-dependent expressions are also valid packs
+  if (Pack->isTypeDependent()) {
+    IsPack = true;  // Assume it's a pack in dependent context
+  }
+
+  if (!IsPack) {
+    Diag(Loc, DiagID::err_pack_index_not_pack);
+    // Still create the node for error recovery
+  }
+
+  // 2. Validate that Index is an integral expression
+  QualType IndexType = Index->getType();
+  if (!IndexType.isNull() && !IndexType->isIntegerType() &&
+      !IndexType->isBooleanType() && !Index->isTypeDependent()) {
+    Diag(Index->getLocation(), DiagID::err_pack_index_non_integral);
+    // Still create the node for error recovery
+  }
+
+  // 3. Create the node
   auto *PIE = Context.create<PackIndexingExpr>(Loc, Pack, Index);
-  // TODO: Pack indexing requires template pack expansion to determine type.
-  // The result type depends on the Nth element of the expanded parameter pack.
-  // Will be implemented when full variadic template support is available.
+
+  // 4. Type deduction
+  // If the expression is type-dependent, leave type unset (deduced at instantiation)
+  if (!Pack->isTypeDependent() && !Index->isTypeDependent()) {
+    // Try to deduce type from the pack if index is a constant
+    if (auto *IntLit = llvm::dyn_cast<IntegerLiteral>(Index)) {
+      uint64_t Idx = IntLit->getValue().getZExtValue();
+      // If Pack is a DeclRefExpr to a parameter pack with known substitutions,
+      // try to get the Nth element type
+      if (auto *DRE = llvm::dyn_cast<DeclRefExpr>(Pack)) {
+        if (auto *TTPD = llvm::dyn_cast<TemplateTypeParmDecl>(DRE->getDecl())) {
+          // Type template parameter pack — type depends on instantiation
+          // Leave as dependent for now
+        }
+      }
+    }
+    // For now, if we can't statically determine the type, leave it dependent
+    // The InstantiatePackIndexingExpr will set the type during instantiation
+  }
+
   return ExprResult(PIE);
 }
 

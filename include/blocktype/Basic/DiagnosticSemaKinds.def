@@ -403,6 +403,14 @@ DIAG(err_pack_index_non_constant, Error, \
   "pack index must be a constant expression", \
   "包索引必须是常量表达式")
 
+DIAG(err_pack_index_not_pack, Error, \
+  "pack indexing requires a parameter pack", \
+  "包索引需要参数包")
+
+DIAG(err_pack_index_non_integral, Error, \
+  "pack index must be an integral expression", \
+  "包索引必须是整型表达式")
+
 DIAG(warn_pack_index_runtime, Warning, \
   "runtime pack indexing may generate less efficient code", \
   "运行时包索引可能生成效率较低的代码")

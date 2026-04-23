@@ -451,7 +451,14 @@ Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
   
   // Return the Nth element if we have substituted expressions
   if (!SubstitutedExprs.empty() && Index < SubstitutedExprs.size()) {
-    return SubstitutedExprs[Index];
+    Expr *Result = SubstitutedExprs[Index];
+    // Propagate value category from the Nth element per P2662R3 §[expr.prim.pack.index]
+    PIE->setValueKind(Result->getValueKind());
+    // Propagate type from the Nth element
+    if (!Result->getType().isNull()) {
+      PIE->setType(Result->getType());
+    }
+    return Result;
   }
   
   // Return the original expression if we couldn't substitute
@@ -553,6 +560,16 @@ Expr *TemplateInstantiator::substituteDependentExpr(
     // Try to resolve the qualifier
     // For now, if we can't resolve, return the original expression
     (void)DSDRE;
+  }
+
+  // Handle PackIndexingExpr: T...[N]
+  if (auto *PIE = llvm::dyn_cast<PackIndexingExpr>(E)) {
+    // Collect pack arguments from the TemplateInstantiation substitutions
+    llvm::SmallVector<TemplateArgument, 4> PackArgs;
+    for (const auto &KV : Inst.getSubstitutions()) {
+      PackArgs.push_back(KV.second);
+    }
+    return InstantiatePackIndexingExpr(PIE, PackArgs);
   }
 
   // For other type-dependent expressions, return as-is.

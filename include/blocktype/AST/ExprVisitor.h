@@ -86,6 +86,10 @@ public:
       return static_cast<ImplClass *>(this)->VisitArraySubscriptExpr(
           llvm::cast<ArraySubscriptExpr>(E));
     
+    case ASTNode::NodeKind::PackIndexingExprKind:
+      return static_cast<ImplClass *>(this)->VisitPackIndexingExpr(
+          llvm::cast<PackIndexingExpr>(E));
+    
     default:
       // For unsupported types, return original
       return E;
@@ -207,6 +211,19 @@ public:
     
     // TODO: Create new ArraySubscriptExpr
     return ASE; // Placeholder
+  }
+
+  Expr *VisitPackIndexingExpr(PackIndexingExpr *PIE) {
+    // Recurse into pack and index sub-expressions
+    Expr *NewPack = Visit(PIE->getPack());
+    Expr *NewIndex = Visit(PIE->getIndex());
+
+    if (NewPack == PIE->getPack() && NewIndex == PIE->getIndex()) {
+      return PIE; // No change
+    }
+
+    // TODO: Create new PackIndexingExpr with substituted sub-expressions
+    return PIE;
   }
 
   // Add more Visit* methods as needed

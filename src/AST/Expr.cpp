@@ -741,6 +741,16 @@ bool Expr::isTypeDependent() const {
   return ExprTy && ExprTy->isDependentType();
 }
 
+bool Expr::isValueDependent() const {
+  // Default: a type-dependent expression is also value-dependent
+  return isTypeDependent();
+}
+
+bool Expr::isInstantiationDependent() const {
+  // Default: instantiation-dependent is a superset of type-dependent
+  return isTypeDependent();
+}
+
 //===----------------------------------------------------------------------===//
 // P7.1.2: DecayCopyExpr dump
 //===----------------------------------------------------------------------===//

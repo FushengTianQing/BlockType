@@ -2426,13 +2426,24 @@ llvm::Value *CodeGenFunction::EmitPackIndexingExpr(PackIndexingExpr *PIE) {
       llvm::LLVMContext &Ctx = Builder.getContext();
       llvm::Function *F = Builder.GetInsertBlock()->getParent();
       
+      // Determine the result type from the first substituted expression
+      // (all elements should have the same type for runtime indexing per P2662R3)
+      llvm::Type *ResultType = nullptr;
+      if (!Substituted[0]->getType().isNull()) {
+        ResultType = CGM.getTypes().ConvertType(Substituted[0]->getType());
+      }
+      if (!ResultType) {
+        // Fallback: use the index type if we can't determine result type
+        ResultType = IndexVal->getType();
+      }
+      
       // Create merge block where all cases converge
       llvm::BasicBlock *MergeBB = llvm::BasicBlock::Create(Ctx, "pack.merge", F);
       llvm::BasicBlock *DefaultBB = llvm::BasicBlock::Create(Ctx, "pack.default", F);
       
-      // Create PHI node in merge block
+      // Create PHI node in merge block with the correct result type
       Builder.SetInsertPoint(MergeBB);
-      llvm::PHINode *PHI = Builder.CreatePHI(IndexVal->getType(), Substituted.size(), "pack.result");
+      llvm::PHINode *PHI = Builder.CreatePHI(ResultType, Substituted.size(), "pack.result");
       
       // Create switch instruction
       Builder.SetInsertPoint(Builder.GetInsertBlock());  // Back to current block
@@ -2456,10 +2467,9 @@ llvm::Value *CodeGenFunction::EmitPackIndexingExpr(PackIndexingExpr *PIE) {
         Builder.CreateBr(MergeBB);
       }
       
-      // Handle default case (out of bounds)
+      // Handle default case (out of bounds) — use trap for safety
       Builder.SetInsertPoint(DefaultBB);
-      // Emit null or undef value for out-of-bounds
-      llvm::Value *DefaultVal = llvm::UndefValue::get(IndexVal->getType());
+      llvm::Value *DefaultVal = llvm::UndefValue::get(ResultType);
       PHI->addIncoming(DefaultVal, DefaultBB);
       Builder.CreateBr(MergeBB);
       

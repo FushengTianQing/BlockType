@@ -147,6 +147,14 @@ public:
   /// An expression is type-dependent if its type depends on a template parameter.
   virtual bool isTypeDependent() const;
 
+  /// isValueDependent - Determine whether this expression is value-dependent.
+  /// An expression is value-dependent if its value depends on a template parameter.
+  virtual bool isValueDependent() const;
+
+  /// isInstantiationDependent - Determine whether this expression is
+  /// instantiation-dependent (references a template parameter in any way).
+  virtual bool isInstantiationDependent() const;
+
   static bool classof(const ASTNode *N) {
     return N->getKind() >= NodeKind::ExprKind &&
            N->getKind() < NodeKind::NullStmtKind;
@@ -1496,6 +1504,20 @@ public:
     if (isSubstituted())
       return false;
     return Pack->isTypeDependent() || Index->isTypeDependent();
+  }
+
+  /// A pack indexing expression is value-dependent if the pack or index is value-dependent
+  bool isValueDependent() const override {
+    if (isSubstituted())
+      return false;
+    return Pack->isValueDependent() || Index->isValueDependent();
+  }
+
+  /// A pack indexing expression is instantiation-dependent if the pack or index is
+  bool isInstantiationDependent() const override {
+    if (isSubstituted())
+      return false;
+    return Pack->isInstantiationDependent() || Index->isInstantiationDependent();
   }
 
   static bool classof(const ASTNode *N) {

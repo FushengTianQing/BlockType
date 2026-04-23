@@ -46,6 +46,11 @@ public:
     Substitutions[Param] = Arg;
   }
 
+  /// Get all substitutions (for pack indexing and fold expression instantiation).
+  const llvm::DenseMap<NamedDecl *, TemplateArgument> &getSubstitutions() const {
+    return Substitutions;
+  }
+
   /// Substitute types in a QualType.
   /// Replaces template type parameters with their corresponding arguments.
   [[nodiscard]] QualType substituteType(QualType Type) const;
