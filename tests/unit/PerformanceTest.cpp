@@ -41,14 +41,19 @@ double measureTime(F&& Func, unsigned Iterations = 1) {
 
 // Helper to generate random identifier
 std::string generateIdentifier(unsigned Length) {
+  static const char FirstChars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_";
   static const char Chars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789";
   std::random_device Rd;
   std::mt19937 Gen(Rd());
+  std::uniform_int_distribution<> FirstDis(0, sizeof(FirstChars) - 2);
   std::uniform_int_distribution<> Dis(0, sizeof(Chars) - 2);
   
   std::string Result;
   Result.reserve(Length);
-  for (unsigned I = 0; I < Length; ++I) {
+  if (Length > 0) {
+    Result += FirstChars[FirstDis(Gen)];
+  }
+  for (unsigned I = 1; I < Length; ++I) {
     Result += Chars[Dis(Gen)];
   }
   return Result;

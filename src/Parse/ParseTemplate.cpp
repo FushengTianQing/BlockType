@@ -367,12 +367,22 @@ TemplateDecl *Parser::parseTemplateDeclaration() {
     auto *TATD = llvm::cast<TypeAliasTemplateDecl>(
         Actions.ActOnTypeAliasTemplateDeclFactory(TemplateLoc, TAD->getName(), TemplatedDecl).get());
     
+    // Set the template parameter list BEFORE validation, so that
+    // ActOnTypeAliasTemplateDecl can find the parameters.
+    auto *AliasTPL = new TemplateParameterList(
+        TemplateLoc, LAngleLoc, RAngleLoc, Params, RequiresClause);
+    TATD->setTemplateParameterList(AliasTPL);
+    
     // Validate and register the type alias template
     if (Actions.ActOnTypeAliasTemplateDecl(TATD).isInvalid()) {
       return nullptr;  // Validation failed
     }
     
     Template = TATD;
+    // Skip the generic TPL assignment below since we already set it
+    Actions.PopScope(); // Pop TemplateScope
+    Actions.PopScope(); // Pop TemplateParamScope
+    return Template;
   } else {
     // Fallback for other types
     Template = llvm::cast<TemplateDecl>(

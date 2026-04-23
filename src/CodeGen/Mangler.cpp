@@ -465,10 +465,17 @@ void Mangler::mangleNestedName(const CXXRecordDecl *RD,
 
   llvm::SmallVector<llvm::StringRef, 8> NameChain;
 
-  // Walk up the parent chain: nested classes first
-  const CXXRecordDecl *Cur = RD;
-  while (Cur) {
-    NameChain.push_back(Cur->getName());
+  // Walk up the parent chain: nested classes first.
+  // Since CXXRecordDecl multiply-inherits from RecordDecl and DeclContext,
+  // we walk the DeclContext parent chain and cast back via the known kind.
+  const DeclContext *Cur = RD->getDeclContext();
+  while (Cur && Cur->getDeclContextKind() == DeclContextKind::CXXRecord) {
+    // The DeclContext subobject IS part of a CXXRecordDecl; offset back.
+    const auto *RecordCtx = static_cast<const CXXRecordDecl *>(
+        static_cast<const RecordDecl *>(
+            static_cast<const NamedDecl *>(
+                static_cast<const Decl *>(Cur))));
+    NameChain.push_back(RecordCtx->getName());
     Cur = Cur->getParent();
   }
 

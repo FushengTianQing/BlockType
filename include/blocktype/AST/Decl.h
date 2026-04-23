@@ -292,6 +292,10 @@ public:
 
   NodeKind getKind() const override { return NodeKind::FunctionDeclKind; }
 
+  /// Access the DeclContext interface.
+  DeclContext *getDeclContext() { return this; }
+  const DeclContext *getDeclContext() const { return this; }
+
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
 
   static bool classof(const ASTNode *N) {

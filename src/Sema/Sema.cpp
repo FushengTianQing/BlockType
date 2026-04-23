@@ -159,7 +159,7 @@ QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
   
   // Build substitution map from template parameters to arguments
   for (unsigned i = 0; i < std::min(Args.size(), Params.size()); ++i) {
-    if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(Params[i])) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(Params[i])) {
       Inst.addSubstitution(ParamDecl, Args[i]);
     }
   }
