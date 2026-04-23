@@ -14,6 +14,7 @@
 #include "blocktype/Basic/Diagnostics.h"
 #include "blocktype/AST/ASTContext.h"
 #include "blocktype/AST/Expr.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/Sema/Sema.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -783,6 +784,37 @@ TEST_F(ParserTest, DeeplyNested) {
   Expr *E = P->parseExpression();
   ASSERT_NE(E, nullptr);
   EXPECT_TRUE(llvm::isa<BinaryOperator>(E));
+}
+
+//===----------------------------------------------------------------------===//
+// P2893R3: Variadic friend (Task 2)
+//===----------------------------------------------------------------------===//
+
+TEST_F(ParserTest, FriendTypeDeclNormal) {
+  // Normal friend class declaration
+  parse("class C { friend int; };");
+  Decl *D = P->parseDeclaration();
+  ASSERT_NE(D, nullptr);
+  EXPECT_TRUE(llvm::isa<CXXRecordDecl>(D));
+}
+
+TEST_F(ParserTest, FriendTypeDeclPackExpansion) {
+  // P2893R3: friend class Ts...; — pack expansion after class-key type name
+  parse("class C { friend class X...; };");
+  Decl *D = P->parseDeclaration();
+  ASSERT_NE(D, nullptr);
+  EXPECT_TRUE(llvm::isa<CXXRecordDecl>(D));
+
+  auto *RD = llvm::cast<CXXRecordDecl>(D);
+  // Check that a friend decl with pack expansion exists
+  bool hasFriendDecl = false;
+  for (auto *Member : RD->members()) {
+    if (auto *FD = llvm::dyn_cast<FriendDecl>(Member)) {
+      hasFriendDecl = true;
+      EXPECT_TRUE(FD->isPackExpansion());
+    }
+  }
+  EXPECT_TRUE(hasFriendDecl);
 }
 
 } // anonymous namespace

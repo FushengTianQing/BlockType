@@ -669,6 +669,9 @@ private:
   bool HasCopyConstructor;
   bool HasMoveConstructor;
   bool HasDestructor;
+  // E7.5.2.4: Trivially relocatable (P2786R13) — user-declared special members
+  bool HasUserDeclaredMoveConstructor = false;
+  bool HasUserDeclaredDestructor = false;
   unsigned CurrentAccess; // Current access specifier (0=private, 1=protected, 2=public)
   
   // P7.1.5: Lambda support
@@ -713,6 +716,17 @@ public:
   bool hasCopyConstructor() const { return HasCopyConstructor; }
   bool hasMoveConstructor() const { return HasMoveConstructor; }
   bool hasDestructor() const { return HasDestructor; }
+
+  // E7.5.2.4: Trivially relocatable (P2786R13)
+  bool hasUserDeclaredMoveConstructor() const { return HasUserDeclaredMoveConstructor; }
+  void setUserDeclaredMoveConstructor(bool V) { HasUserDeclaredMoveConstructor = V; }
+  bool hasUserDeclaredDestructor() const { return HasUserDeclaredDestructor; }
+  void setUserDeclaredDestructor(bool V) { HasUserDeclaredDestructor = V; }
+
+  /// isTriviallyRelocatable - A type is trivially relocatable if it has no
+  /// user-declared move constructor and no user-declared destructor, and all
+  /// base classes and non-static data members are also trivially relocatable.
+  bool isTriviallyRelocatable() const;
 
   // Access control
   unsigned getCurrentAccess() const { return CurrentAccess; }
@@ -1297,6 +1311,7 @@ class TemplateTemplateParmDecl : public TemplateDecl {
   unsigned Depth;
   unsigned Index;
   bool IsParameterPack;
+  bool IsConceptParam = false; // E7.5.2.5: concept template template parameter (P2841R7)
   TemplateDecl *DefaultArg;
   Expr *Constraint = nullptr; // C++20 requires-clause constraint
 
@@ -1317,6 +1332,10 @@ public:
   Expr *getConstraint() const { return Constraint; }
   void setConstraint(Expr *C) { Constraint = C; }
   bool hasConstraint() const { return Constraint != nullptr; }
+
+  // E7.5.2.5: Concept template template parameter (P2841R7)
+  bool isConceptParam() const { return IsConceptParam; }
+  void setConceptParam(bool V) { IsConceptParam = V; }
 
   NodeKind getKind() const override { return NodeKind::TemplateTemplateParmDeclKind; }
 
@@ -1582,6 +1601,7 @@ class FriendDecl : public Decl {
   NamedDecl *FriendDecl_; // The friend declaration (function or class)
   QualType FriendType;    // If friend is a type (friend class X;)
   bool IsFriendType;      // true if friend is a type
+  bool IsPackExpansion = false; // P2893R3: true for pack friend (friend Ts...;)
 
 public:
   FriendDecl(SourceLocation Loc, NamedDecl *FD, QualType FT = QualType(),
@@ -1591,6 +1611,10 @@ public:
   NamedDecl *getFriendDecl() const { return FriendDecl_; }
   QualType getFriendType() const { return FriendType; }
   bool isFriendType() const { return IsFriendType; }
+
+  // P2893R3: Pack expansion support
+  bool isPackExpansion() const { return IsPackExpansion; }
+  void setPackExpansion(bool V = true) { IsPackExpansion = V; }
 
   NodeKind getKind() const override { return NodeKind::FriendDeclKind; }
 

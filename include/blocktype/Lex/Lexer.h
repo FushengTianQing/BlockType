@@ -75,6 +75,11 @@ public:
   /// Returns true if comments are being kept as tokens.
   bool isKeepingComments() const { return KeepComments; }
 
+  // E7.5.2.1 / Task 7.5.1: Unicode name lookup (public for testing)
+  /// Looks up a Unicode character name and returns its code point.
+  /// Returns 0xFFFFFFFF if not found.
+  static uint32_t lookupUnicodeName(llvm::StringRef Name);
+
 private:
   //===--------------------------------------------------------------------===//
   // Character operations
@@ -111,6 +116,16 @@ private:
   /// Processes an escape sequence starting at BufferPtr.
   /// Returns true if a valid escape sequence was processed.
   bool processEscapeSequence();
+
+  // E7.5.2.1 / Task 7.5.1: Escape sequence extensions (P2290R3 + P2071R2)
+
+  /// Processes a delimited hex escape \x{HHHH...} (P2290R3).
+  /// Returns true if valid.
+  bool processDelimitedHexEscape();
+
+  /// Processes a named character escape \N{name} (P2071R2).
+  /// Returns true if valid.
+  bool processNamedEscape();
 
   //===--------------------------------------------------------------------===//
   // Token formation

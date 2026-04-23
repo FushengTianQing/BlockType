@@ -1158,9 +1158,21 @@ FriendDecl *Parser::parseFriendDeclaration(CXXRecordDecl *Class) {
     SourceLocation TypeNameLoc = Tok.getLocation();
     consumeToken();
 
+    // P2893R3: Check for pack expansion '...' after type name
+    bool IsPackExpansion = false;
+    if (Tok.is(TokenKind::ellipsis)) {
+      IsPackExpansion = true;
+      consumeToken(); // consume '...'
+    }
+
     // Create friend type declaration via Sema (handles type lookup + forward decl)
     FriendDecl *FD = llvm::cast<FriendDecl>(
         Actions.ActOnFriendTypeDecl(FriendLoc, TypeName, TypeNameLoc).get());
+
+    // P2893R3: Set pack expansion flag
+    if (FD && IsPackExpansion) {
+      FD->setPackExpansion(true);
+    }
 
     // Expect semicolon
     if (!Tok.is(TokenKind::semicolon)) {

@@ -19,6 +19,8 @@ add_executable(blocktype-sema-test
   ConceptTest.cpp
   SFINAETest.cpp
   VariadicTemplateTest.cpp
+  IndeterminateAttrTest.cpp
+  TriviallyRelocatableTest.cpp
 )
 
 target_include_directories(blocktype-sema-test PUBLIC

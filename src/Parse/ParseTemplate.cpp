@@ -695,13 +695,19 @@ TemplateTemplateParmDecl *Parser::parseTemplateTemplateParameter() {
     Constraint = parseConstraintExpression();
   }
 
-  // Expect 'class' or 'typename'
-  if (!Tok.is(TokenKind::kw_class) && !Tok.is(TokenKind::kw_typename)) {
+  // E7.5.2.5: Concept template template parameter (P2841R7)
+  // Support: template <typename> concept C
+  // The 'concept' keyword replaces 'class'/'typename'
+  bool IsConceptParam = false;
+  if (Tok.is(TokenKind::kw_concept)) {
+    IsConceptParam = true;
+    consumeToken(); // consume 'concept'
+  } else if (!Tok.is(TokenKind::kw_class) && !Tok.is(TokenKind::kw_typename)) {
     emitError(DiagID::err_expected);
     return nullptr;
+  } else {
+    consumeToken(); // consume 'class' or 'typename'
   }
-
-  consumeToken(); // consume 'class' or 'typename'
 
   // Check for parameter pack
   bool IsParameterPack = false;
@@ -728,6 +734,11 @@ TemplateTemplateParmDecl *Parser::parseTemplateTemplateParameter() {
   // Set constraint if present
   if (Constraint) {
     Param->setConstraint(Constraint);
+  }
+
+  // E7.5.2.5: Set concept param flag (P2841R7)
+  if (IsConceptParam) {
+    Param->setConceptParam(true);
   }
 
   // Create TemplateParameterList for the template template parameter

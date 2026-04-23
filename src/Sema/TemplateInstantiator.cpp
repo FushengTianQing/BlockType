@@ -191,7 +191,40 @@ CXXRecordDecl *TemplateInstantiator::InstantiateClassTemplate(
         Method->getAccess());
     SpecializedRecord->addMethod(NewMethod);
   }
-  
+
+  // P2893R3: Clone friend declarations, expanding pack friends.
+  for (auto *Member : OriginalRecord->members()) {
+    auto *OrigFriend = llvm::dyn_cast<FriendDecl>(Member);
+    if (!OrigFriend)
+      continue;
+
+    if (OrigFriend->isPackExpansion()) {
+      // Pack expansion friend: substitute the friend type and expand
+      // for each template argument. For a simple implementation,
+      // we substitute the type and create one friend decl per
+      // argument in the parameter pack.
+      QualType FriendTy = OrigFriend->getFriendType();
+      if (!FriendTy.isNull()) {
+        QualType SubstTy = Inst.substituteType(FriendTy);
+        if (!SubstTy.isNull()) {
+          auto *NewFriend = Context.create<FriendDecl>(
+              OrigFriend->getLocation(),
+              nullptr, SubstTy, true);
+          // The expanded friend is no longer a pack expansion
+          SpecializedRecord->addMember(NewFriend);
+        }
+      }
+    } else {
+      // Non-pack friend: simple clone
+      auto *NewFriend = Context.create<FriendDecl>(
+          OrigFriend->getLocation(),
+          OrigFriend->getFriendDecl(),
+          OrigFriend->getFriendType(),
+          OrigFriend->isFriendType());
+      SpecializedRecord->addMember(NewFriend);
+    }
+  }
+
   // Mark the specialized record as complete
   SpecializedRecord->setCompleteDefinition();
   

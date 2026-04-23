@@ -346,4 +346,24 @@ TEST_F(StatementTest, ComplexControlFlow) {
   EXPECT_TRUE(llvm::isa<IfStmt>(S));
 }
 
+//===----------------------------------------------------------------------===//
+// P2360R0: for init-statement using (Task 1)
+//===----------------------------------------------------------------------===//
+
+TEST_F(StatementTest, ForWithUsingInit) {
+  // P2360R0: for (using T = int; ...)
+  parse("for (using T = int; ; ) ;");
+  Stmt *S = P->parseStatement();
+  ASSERT_NE(S, nullptr);
+  EXPECT_TRUE(llvm::isa<ForStmt>(S));
+}
+
+TEST_F(StatementTest, ForWithUsingInitAndCondition) {
+  // P2360R0: for (using T = int; T x; ) ;
+  parse("for (using T = int; true; ) ;");
+  Stmt *S = P->parseStatement();
+  ASSERT_NE(S, nullptr);
+  EXPECT_TRUE(llvm::isa<ForStmt>(S));
+}
+
 } // anonymous namespace

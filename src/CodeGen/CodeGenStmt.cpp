@@ -669,10 +669,22 @@ void CodeGenFunction::EmitDeclStmt(DeclStmt *DeclarationStatement) {
           }
         }
       } else {
-        // 零初始化
-        llvm::Type *LLVMType = CGM.getTypes().ConvertType(VarType);
-        if (LLVMType) {
-          Builder.CreateStore(llvm::Constant::getNullValue(LLVMType), Alloca);
+        // E7.5.2.3: [[indeterminate]] attribute (P2795R5) — skip zero-init
+        bool IsIndeterminate = false;
+        if (auto *AL = VariableDecl->getAttrs()) {
+          for (auto *A : AL->getAttributes()) {
+            if (A->getAttributeName() == "indeterminate") {
+              IsIndeterminate = true;
+              break;
+            }
+          }
+        }
+        if (!IsIndeterminate) {
+          // 零初始化
+          llvm::Type *LLVMType = CGM.getTypes().ConvertType(VarType);
+          if (LLVMType) {
+            Builder.CreateStore(llvm::Constant::getNullValue(LLVMType), Alloca);
+          }
         }
       }
     }

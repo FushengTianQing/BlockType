@@ -695,4 +695,36 @@ std::string QualType::getAsString() const {
   return Str;
 }
 
+//===----------------------------------------------------------------------===//
+// E7.5.2.4: Trivially relocatable (P2786R13)
+//===----------------------------------------------------------------------===//
+
+bool Type::isTriviallyRelocatable() const {
+  // Builtin types, pointers, references are always trivially relocatable
+  switch (getTypeClass()) {
+  case TypeClass::Builtin:
+  case TypeClass::Pointer:
+  case TypeClass::LValueReference:
+  case TypeClass::RValueReference:
+  case TypeClass::Enum:
+  case TypeClass::MemberPointer:
+    return true;
+  case TypeClass::Record: {
+    auto *RT = cast<RecordType>(this);
+    if (auto *CXXRD = dyn_cast<CXXRecordDecl>(RT->getDecl()))
+      return CXXRD->isTriviallyRelocatable();
+    // Plain structs/unions without CXX semantics are trivially relocatable
+    return true;
+  }
+  case TypeClass::ConstantArray:
+  case TypeClass::IncompleteArray:
+  case TypeClass::VariableArray: {
+    auto *AT = cast<ArrayType>(this);
+    return AT->getElementType()->isTriviallyRelocatable();
+  }
+  default:
+    return false;
+  }
+}
+
 } // namespace blocktype

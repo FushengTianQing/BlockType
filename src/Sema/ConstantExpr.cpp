@@ -16,6 +16,7 @@
 #include "blocktype/Sema/ConstantExpr.h"
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Stmt.h"
+#include "blocktype/AST/Expr.h"
 
 #include "llvm/ADT/APSInt.h"
 #include "llvm/Support/Casting.h"
@@ -204,6 +205,14 @@ EvalResult ConstantExprEvaluator::EvaluateExpr(Expr *E) {
     return EvaluateCastExpr(CE);
   if (auto *Call = llvm::dyn_cast<CallExpr>(E))
     return EvaluateCallExpr(Call);
+
+  // P3068R6: constexpr functions may contain throw expressions.
+  // If a throw is reached during constant evaluation, the evaluation fails.
+  if (llvm::isa<CXXThrowExpr>(E)) {
+    return EvalResult::getFailure(EvalResult::EvaluationFailed,
+                                  "throw expression encountered during "
+                                  "constant evaluation");
+  }
 
   // Unsupported expression type
   return EvalResult::getFailure(EvalResult::NotConstantExpression,

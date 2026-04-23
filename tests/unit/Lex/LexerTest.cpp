@@ -268,4 +268,39 @@ TEST_F(LexerTest, SimpleFunction) {
   EXPECT_EQ(Tokens[5].getKind(), TokenKind::kw_return);
 }
 
+// --- P2558R2: @/$/backtick as identifier continue chars (Task 3) ---
+
+TEST_F(LexerTest, DollarContinueChar) {
+  // P2558R2: $ as identifier continue char
+  auto Tokens = lex("foo$bar");
+  ASSERT_EQ(Tokens.size(), 2u);
+  EXPECT_EQ(Tokens[0].getKind(), TokenKind::identifier);
+  EXPECT_EQ(Tokens[0].getText(), "foo$bar");
+}
+
+TEST_F(LexerTest, AtContinueChar) {
+  // P2558R2: @ as identifier continue char
+  auto Tokens = lex("foo@bar");
+  ASSERT_EQ(Tokens.size(), 2u);
+  EXPECT_EQ(Tokens[0].getKind(), TokenKind::identifier);
+  EXPECT_EQ(Tokens[0].getText(), "foo@bar");
+}
+
+TEST_F(LexerTest, BacktickContinueChar) {
+  // P2558R2: backtick as identifier continue char
+  auto Tokens = lex("foo`bar");
+  ASSERT_EQ(Tokens.size(), 2u);
+  EXPECT_EQ(Tokens[0].getKind(), TokenKind::identifier);
+  EXPECT_EQ(Tokens[0].getText(), "foo`bar");
+}
+
+TEST_F(LexerTest, DollarNotStartChar) {
+  // $ cannot start an identifier (only continue)
+  auto Tokens = lex("$foo");
+  // $ should be its own unknown token, then foo is identifier
+  ASSERT_GE(Tokens.size(), 3u);
+  EXPECT_EQ(Tokens[1].getKind(), TokenKind::identifier);
+  EXPECT_EQ(Tokens[1].getText(), "foo");
+}
+
 } // anonymous namespace

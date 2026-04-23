@@ -258,4 +258,32 @@ TEST_F(ConstantExprTest, ConstexprVarDecl) {
   EXPECT_EQ(Result.getInt().getLimitedValue(), 100u);
 }
 
+// --- P3068R6: constexpr throw (Task 4) ---
+
+TEST_F(ConstantExprTest, ThrowExprEvaluationFails) {
+  // P3068R6: If a throw is reached during constant evaluation, it fails.
+  auto *Throw = Context.create<CXXThrowExpr>(SourceLocation(1), makeInt(42));
+  auto Result = Eval.Evaluate(Throw);
+  EXPECT_FALSE(Result.isSuccess());
+  EXPECT_EQ(Result.getKind(), EvalResult::EvaluationFailed);
+}
+
+TEST_F(ConstantExprTest, ThrowExprNullSubExprEvaluationFails) {
+  // throw without operand (rethrow)
+  auto *Throw = Context.create<CXXThrowExpr>(SourceLocation(1), nullptr);
+  auto Result = Eval.Evaluate(Throw);
+  EXPECT_FALSE(Result.isSuccess());
+  EXPECT_EQ(Result.getKind(), EvalResult::EvaluationFailed);
+}
+
+TEST_F(ConstantExprTest, ThrowExprInConditionalNotReached) {
+  // true ? 42 : throw — the throw branch is not evaluated
+  auto *Throw = Context.create<CXXThrowExpr>(SourceLocation(1), makeInt(0));
+  auto *CO = Context.create<ConditionalOperator>(SourceLocation(1),
+      makeBool(true), makeInt(42), Throw);
+  auto Result = Eval.Evaluate(CO);
+  ASSERT_TRUE(Result.isSuccess());
+  EXPECT_EQ(Result.getInt().getLimitedValue(), 42u);
+}
+
 } // anonymous namespace

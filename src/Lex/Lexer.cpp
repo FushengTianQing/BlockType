@@ -359,6 +359,10 @@ bool Lexer::processEscapeSequence() {
   // B2.6: Hex escape \xHH
   if (C == 'x') {
     ++BufferPtr;
+    // E7.5.2.1 / Task 7.5.1: Check for delimited hex escape \x{HHHH...} (P2290R3)
+    if (BufferPtr < BufferEnd && *BufferPtr == '{') {
+      return processDelimitedHexEscape();
+    }
     // Must have at least one hex digit
     if (BufferPtr < BufferEnd && std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
       ++BufferPtr;
@@ -416,9 +420,236 @@ bool Lexer::processEscapeSequence() {
     return true;
   }
 
+  // E7.5.2.1 / Task 7.5.1: Named character escape \N{name} (P2071R2)
+  if (C == 'N') {
+    ++BufferPtr;
+    return processNamedEscape();
+  }
+
   // Simple escape sequences: \n, \t, \r, \a, \b, \f, \v, \\, \', \", \?
   ++BufferPtr;
   return true;
+}
+
+//===----------------------------------------------------------------------===//
+// E7.5.2.1 / Task 7.5.1: Escape sequence extensions (P2290R3 + P2071R2)
+//===----------------------------------------------------------------------===//
+
+bool Lexer::processDelimitedHexEscape() {
+  // We are positioned at '{'
+  ++BufferPtr; // consume '{'
+
+  // Must have at least one hex digit
+  if (BufferPtr >= BufferEnd || !std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "invalid delimited escape sequence: expected hex digit after \\x{");
+    return false;
+  }
+
+  // Collect hex digits
+  unsigned Count = 0;
+  uint32_t Value = 0;
+  while (BufferPtr < BufferEnd && std::isxdigit(static_cast<unsigned char>(*BufferPtr))) {
+    char D = *BufferPtr;
+    ++BufferPtr;
+    ++Count;
+    Value <<= 4;
+    if (D >= '0' && D <= '9') Value |= (D - '0');
+    else if (D >= 'a' && D <= 'f') Value |= (D - 'a' + 10);
+    else if (D >= 'A' && D <= 'F') Value |= (D - 'A' + 10);
+  }
+
+  if (Count == 0) {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "invalid delimited escape sequence: expected hex digit");
+    return false;
+  }
+
+  // Expect '}'
+  if (BufferPtr >= BufferEnd || *BufferPtr != '}') {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "invalid delimited escape sequence: expected '}'");
+    return false;
+  }
+  ++BufferPtr; // consume '}'
+
+  // Validate Unicode range
+  if (Value > 0x10FFFF) {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "delimited escape sequence value too large for Unicode");
+    return false;
+  }
+
+  return true;
+}
+
+bool Lexer::processNamedEscape() {
+  // We are positioned after '\N'
+  // Expect '{'
+  if (BufferPtr >= BufferEnd || *BufferPtr != '{') {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "invalid named escape: expected '{' after \\N");
+    return false;
+  }
+  ++BufferPtr; // consume '{'
+
+  // Collect the character name
+  const char *NameStart = BufferPtr;
+  while (BufferPtr < BufferEnd && *BufferPtr != '}') {
+    // Allow letters, digits, space, hyphen in character names
+    char C = *BufferPtr;
+    if (!std::isalnum(static_cast<unsigned char>(C)) && C != ' ' && C != '-') {
+      Diags.report(getSourceLocation(), DiagLevel::Error,
+                   "invalid character in named escape sequence");
+      return false;
+    }
+    ++BufferPtr;
+  }
+
+  if (BufferPtr >= BufferEnd) {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "unterminated named escape sequence");
+    return false;
+  }
+
+  llvm::StringRef Name(NameStart, BufferPtr - NameStart);
+  ++BufferPtr; // consume '}'
+
+  // Look up the name
+  uint32_t CodePoint = lookupUnicodeName(Name);
+  if (CodePoint == 0xFFFFFFFF) {
+    Diags.report(getSourceLocation(), DiagLevel::Error,
+                 "unknown Unicode character name: '" + Name.str() + "'");
+    return false;
+  }
+
+  return true;
+}
+
+uint32_t Lexer::lookupUnicodeName(llvm::StringRef Name) {
+  // Basic Unicode character name lookup table
+  // Covers common ASCII/Latin and some extended characters
+  struct NameEntry {
+    const char *Name;
+    uint32_t CodePoint;
+  };
+
+  // Sorted for potential binary search; common characters
+  static const NameEntry Names[] = {
+      {"AMPERSAND", 0x0026},
+      {"APOSTROPHE", 0x0027},
+      {"ASTERISK", 0x002A},
+      {"BACKSLASH", 0x005C},
+      {"CARRIAGE RETURN", 0x000D},
+      {"CENT SIGN", 0x00A2},
+      {"COLON", 0x003A},
+      {"COMMA", 0x002C},
+      {"COMMERCIAL AT", 0x0040},
+      {"COPYRIGHT SIGN", 0x00A9},
+      {"DEGREE SIGN", 0x00B0},
+      {"DIGIT EIGHT", 0x0038},
+      {"DIGIT FIVE", 0x0035},
+      {"DIGIT FOUR", 0x0034},
+      {"DIGIT NINE", 0x0039},
+      {"DIGIT ONE", 0x0031},
+      {"DIGIT SEVEN", 0x0037},
+      {"DIGIT SIX", 0x0036},
+      {"DIGIT THREE", 0x0033},
+      {"DIGIT TWO", 0x0032},
+      {"DIGIT ZERO", 0x0030},
+      {"DOLLAR SIGN", 0x0024},
+      {"EMOJI GRINNING FACE", 0x1F600},
+      {"EQUALS SIGN", 0x003D},
+      {"EXCLAMATION MARK", 0x0021},
+      {"FULL STOP", 0x002E},
+      {"FULLWIDTH DIGIT ZERO", 0xFF10},
+      {"GRAVE ACCENT", 0x0060},
+      {"GREATER-THAN SIGN", 0x003E},
+      {"HYPHEN-MINUS", 0x002D},
+      {"LATIN CAPITAL LETTER A", 0x0041},
+      {"LATIN CAPITAL LETTER B", 0x0042},
+      {"LATIN CAPITAL LETTER C", 0x0043},
+      {"LATIN CAPITAL LETTER D", 0x0044},
+      {"LATIN CAPITAL LETTER E", 0x0045},
+      {"LATIN CAPITAL LETTER F", 0x0046},
+      {"LATIN CAPITAL LETTER G", 0x0047},
+      {"LATIN CAPITAL LETTER H", 0x0048},
+      {"LATIN CAPITAL LETTER I", 0x0049},
+      {"LATIN CAPITAL LETTER J", 0x004A},
+      {"LATIN CAPITAL LETTER K", 0x004B},
+      {"LATIN CAPITAL LETTER L", 0x004C},
+      {"LATIN CAPITAL LETTER M", 0x004D},
+      {"LATIN CAPITAL LETTER N", 0x004E},
+      {"LATIN CAPITAL LETTER O", 0x004F},
+      {"LATIN CAPITAL LETTER P", 0x0050},
+      {"LATIN CAPITAL LETTER Q", 0x0051},
+      {"LATIN CAPITAL LETTER R", 0x0052},
+      {"LATIN CAPITAL LETTER S", 0x0053},
+      {"LATIN CAPITAL LETTER T", 0x0054},
+      {"LATIN CAPITAL LETTER U", 0x0055},
+      {"LATIN CAPITAL LETTER V", 0x0056},
+      {"LATIN CAPITAL LETTER W", 0x0057},
+      {"LATIN CAPITAL LETTER X", 0x0058},
+      {"LATIN CAPITAL LETTER Y", 0x0059},
+      {"LATIN CAPITAL LETTER Z", 0x005A},
+      {"LATIN SMALL LETTER A", 0x0061},
+      {"LATIN SMALL LETTER B", 0x0062},
+      {"LATIN SMALL LETTER C", 0x0063},
+      {"LATIN SMALL LETTER D", 0x0064},
+      {"LATIN SMALL LETTER E", 0x0065},
+      {"LATIN SMALL LETTER F", 0x0066},
+      {"LATIN SMALL LETTER G", 0x0067},
+      {"LATIN SMALL LETTER H", 0x0068},
+      {"LATIN SMALL LETTER I", 0x0069},
+      {"LATIN SMALL LETTER J", 0x006A},
+      {"LATIN SMALL LETTER K", 0x006B},
+      {"LATIN SMALL LETTER L", 0x006C},
+      {"LATIN SMALL LETTER M", 0x006D},
+      {"LATIN SMALL LETTER N", 0x006E},
+      {"LATIN SMALL LETTER O", 0x006F},
+      {"LATIN SMALL LETTER P", 0x0070},
+      {"LATIN SMALL LETTER Q", 0x0071},
+      {"LATIN SMALL LETTER R", 0x0072},
+      {"LATIN SMALL LETTER S", 0x0073},
+      {"LATIN SMALL LETTER T", 0x0074},
+      {"LATIN SMALL LETTER U", 0x0075},
+      {"LATIN SMALL LETTER V", 0x0076},
+      {"LATIN SMALL LETTER W", 0x0077},
+      {"LATIN SMALL LETTER X", 0x0078},
+      {"LATIN SMALL LETTER Y", 0x0079},
+      {"LATIN SMALL LETTER Z", 0x007A},
+      {"LEFT CURLY BRACKET", 0x007B},
+      {"LEFT PARENTHESIS", 0x0028},
+      {"LEFT SQUARE BRACKET", 0x005B},
+      {"LESS-THAN SIGN", 0x003C},
+      {"LINE FEED", 0x000A},
+      {"LOW LINE", 0x005F},
+      {"MICRO SIGN", 0x00B5},
+      {"NO-BREAK SPACE", 0x00A0},
+      {"NUMBER SIGN", 0x0023},
+      {"PERCENT SIGN", 0x0025},
+      {"PLUS SIGN", 0x002B},
+      {"QUESTION MARK", 0x003F},
+      {"QUOTATION MARK", 0x0022},
+      {"REGISTERED SIGN", 0x00AE},
+      {"RIGHT CURLY BRACKET", 0x007D},
+      {"RIGHT PARENTHESIS", 0x0029},
+      {"RIGHT SQUARE BRACKET", 0x005D},
+      {"SEMICOLON", 0x003B},
+      {"SOLIDUS", 0x002F},
+      {"SPACE", 0x0020},
+      {"TILDE", 0x007E},
+      {"VERTICAL LINE", 0x007C},
+      {"YEN SIGN", 0x00A5},
+  };
+
+  // Linear search (sufficient for the small table)
+  for (const auto &Entry : Names) {
+    if (Name == Entry.Name) {
+      return Entry.CodePoint;
+    }
+  }
+  return 0xFFFFFFFF; // Not found
 }
 
 //===----------------------------------------------------------------------===//
@@ -530,7 +761,8 @@ bool Lexer::lexIdentifier(Token &Result, const char *Start) {
     // ASCII identifier
     while (BufferPtr < BufferEnd) {
       char C = *BufferPtr;
-      if (std::isalnum(static_cast<unsigned char>(C)) || C == '_') {
+      if (std::isalnum(static_cast<unsigned char>(C)) || C == '_' ||
+          C == '@' || C == '$' || C == '`') {
         ++BufferPtr;
       } else {
         break;
@@ -1365,7 +1597,9 @@ bool Lexer::isIdentifierStartChar(char C) {
 }
 
 bool Lexer::isIdentifierContinueChar(char C) {
-  return std::isalnum(static_cast<unsigned char>(C)) || C == '_';
+  // P2558R2: Allow @, $, and backtick as identifier continue characters
+  return std::isalnum(static_cast<unsigned char>(C)) || C == '_' ||
+         C == '@' || C == '$' || C == '`';
 }
 
 bool Lexer::isUnicodeIDStart(uint32_t CodePoint) {

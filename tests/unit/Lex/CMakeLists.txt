@@ -7,6 +7,7 @@ add_executable(blocktype-lex-test
   LexerFixTest.cpp
   LexerMediumPriorityTest.cpp
   LexerExtensionTest.cpp
+  EscapeSequenceTest.cpp
 )
 
 target_include_directories(blocktype-lex-test PUBLIC

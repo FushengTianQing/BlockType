@@ -997,6 +997,18 @@ Expr *Parser::parseIdentifier() {
     return parseReflectMembersBuiltin(Loc);
   }
 
+  // E7.5.2.4: __is_trivially_relocatable(T) type trait (P2786R13)
+  if (Name == "__is_trivially_relocatable" && Tok.is(TokenKind::l_paren)) {
+    consumeToken(); // consume '('
+    QualType T = parseType();
+    if (!tryConsumeToken(TokenKind::r_paren)) {
+      emitError(DiagID::err_expected_rparen);
+    }
+    // Evaluate at parse time: create a boolean literal result
+    bool Result = !T.isNull() && T->isTriviallyRelocatable();
+    return Actions.ActOnCXXBoolLiteral(Loc, Result).get();
+  }
+
   // Check for scope resolution operator (::)
   if (Tok.is(TokenKind::coloncolon)) {
     // This is a qualified name: std::is_integral_v

@@ -395,6 +395,35 @@ void CXXRecordDecl::dump(raw_ostream &OS, unsigned Indent) const {
 }
 
 //===----------------------------------------------------------------------===//
+// E7.5.2.4: Trivially relocatable (P2786R13)
+//===----------------------------------------------------------------------===//
+
+bool CXXRecordDecl::isTriviallyRelocatable() const {
+  // A type is NOT trivially relocatable if it has a user-declared
+  // move constructor or a user-declared destructor.
+  if (HasUserDeclaredMoveConstructor || HasUserDeclaredDestructor)
+    return false;
+
+  // Check all base classes
+  for (const auto &Base : Bases) {
+    QualType BaseType = Base.getType();
+    if (!BaseType.isNull() && !BaseType->isTriviallyRelocatable())
+      return false;
+  }
+
+  // Check all non-static data members
+  for (auto *Member : Members) {
+    if (auto *FD = dyn_cast<FieldDecl>(Member)) {
+      QualType FieldType = FD->getType();
+      if (!FieldType.isNull() && !FieldType->isTriviallyRelocatable())
+        return false;
+    }
+  }
+
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
 // CXXMethodDecl
 //===----------------------------------------------------------------------===//
 

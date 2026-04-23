@@ -120,6 +120,11 @@ public:
   /// isDependentType - Returns true if this type depends on a template parameter.
   bool isDependentType() const;
 
+  /// E7.5.2.4: isTriviallyRelocatable (P2786R13)
+  /// A type is trivially relocatable if it can be moved by memcpy.
+  /// For record types, this means no user-declared move constructor or destructor.
+  bool isTriviallyRelocatable() const;
+
   /// getCanonicalType - Returns the canonical type.
   /// The canonical type is the unique representative of an equivalence class.
   /// 

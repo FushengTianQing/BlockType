@@ -84,6 +84,18 @@ DeclResult Sema::ActOnVarDecl(SourceLocation Loc, llvm::StringRef Name,
     VD->setAttrs(Attrs);
   }
 
+  // E7.5.2.3: [[indeterminate]] attribute (P2795R5)
+  // Warn when [[indeterminate]] is used on a const variable
+  if (Attrs && T.isConstQualified()) {
+    for (auto *A : Attrs->getAttributes()) {
+      if (A->getAttributeName() == "indeterminate") {
+        Diags.report(Loc, DiagLevel::Warning,
+                     "[[indeterminate]] on a const variable has no effect");
+        break;
+      }
+    }
+  }
+
   // Check initializer if present
   if (Init) {
     if (!TC.CheckInitialization(T, Init, Loc))
