@@ -202,3 +202,66 @@ DIAG(err_unknown, Error, \
 DIAG(err_not_implemented, Error, \
   "feature not implemented", \
   "功能未实现")
+
+//===----------------------------------------------------------------------===//
+// Exception Handling Diagnostics
+//===----------------------------------------------------------------------===//
+
+DIAG(err_rethrow_not_in_catch, Error, \
+  "rethrow not in catch handler", \
+  "不在 catch 处理程序中的重新抛出")
+DIAG(err_throw_incomplete_type, Error, \
+  "cannot throw incomplete type", \
+  "不能抛出不完整类型")
+DIAG(err_throw_abstract_type, Error, \
+  "cannot throw abstract class type", \
+  "不能抛出抽象类类型")
+DIAG(err_throw_non_copyable, Error, \
+  "cannot throw non-copyable and non-movable type", \
+  "不能抛出不可复制且不可移动的类型")
+DIAG(err_throw_reference_type, Error, \
+  "cannot throw reference type", \
+  "不能抛出引用类型")
+DIAG(err_throw_array_type, Error, \
+  "cannot throw array type", \
+  "不能抛出数组类型")
+DIAG(err_throw_in_noexcept_function, Error, \
+  "throw in noexcept function '%0'", \
+  "noexcept 函数 '%0' 中出现 throw")
+DIAG(warn_non_noexcept_call_in_noexcept, Warning, \
+  "call to non-noexcept function '%0' in noexcept function", \
+  "noexcept 函数中调用了非 noexcept 函数 '%0'")
+DIAG(warn_unreachable_catch, Warning, \
+  "catch clause is unreachable", \
+  "catch 子句不可达")
+
+//===----------------------------------------------------------------------===//
+// Lambda Diagnostics
+//===----------------------------------------------------------------------===//
+
+DIAG(err_lambda_capture_odr_use, Error, \
+  "variable '%0' is captured by reference but not odr-usable", \
+  "变量 '%0' 被引用捕获但不可 ODR 使用")
+DIAG(err_lambda_init_capture_deduction_failed, Error, \
+  "cannot deduce type for init capture '%0'", \
+  "无法推导初始化捕获 '%0' 的类型")
+DIAG(err_lambda_generic_no_auto_param, Error, \
+  "generic lambda requires at least one auto parameter", \
+  "泛型 lambda 需要至少一个 auto 参数")
+
+//===----------------------------------------------------------------------===//
+// Implicit Conversion Diagnostics
+//===----------------------------------------------------------------------===//
+
+DIAG(err_no_user_defined_conversion, Error, \
+  "no viable user-defined conversion from '%0' to '%1'", \
+  "没有可行的用户定义转换从 '%0' 到 '%1'")
+DIAG(err_derived_to_base_incomplete, Error, \
+  "derived-to-base conversion with incomplete type", \
+  "派生到基类转换中类型不完整")
+DIAG(err_qual_conversion_incompatible, Error, \
+  "qualification conversion between incompatible types", \
+  "不兼容类型之间的限定符转换")
+DIAG(err_array_to_pointer_incompatible, Error, \
+  "array-to-pointer decay with incompatible element types", \
+  "数组到指针衰减中元素类型不兼容")

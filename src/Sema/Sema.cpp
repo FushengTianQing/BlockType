@@ -776,19 +776,14 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
 
   // Template instantiation depth limit to prevent infinite recursion.
   // Per C++ standard recommendation, 1024 is the typical limit.
-  static constexpr unsigned MaxInstantiationDepth = 1024;
-  static unsigned CurrentInstantiationDepth = 0;
-  
-  if (CurrentInstantiationDepth >= MaxInstantiationDepth) {
+  // Use the TemplateInstantiator's depth tracking instead of a static variable.
+  if (Instantiator->isInstantiationDepthExceeded()) {
     Diags.report(Loc, DiagID::err_template_recursion);
     return nullptr;
   }
   
-  ++CurrentInstantiationDepth;
-  
   // Step 1: Check if a specialization already exists (cache lookup)
   if (auto *Existing = FuncTemplate->findSpecialization(TemplateArgs)) {
-    --CurrentInstantiationDepth;
     return Existing;
   }
   
@@ -799,7 +794,6 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
   
   if (TemplatedFunc == nullptr) {
     Diags.report(Loc, DiagID::err_template_recursion);
-    --CurrentInstantiationDepth;
     return nullptr;
   }
   
@@ -810,7 +804,6 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
   if (Params.empty()) {
     Diags.report(Loc, DiagID::err_template_arg_num_different, 
                  "no template parameters", FuncTemplate->getName());
-    --CurrentInstantiationDepth;
     return nullptr;
   }
   
@@ -870,7 +863,6 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
     } else {
       Diags.report(Loc, DiagID::err_auto_return_no_deduction, 
                    FuncTemplate->getName());
-      --CurrentInstantiationDepth;
       return nullptr;
     }
   }
@@ -892,7 +884,6 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
   // Step 8: Register the specialization
   FuncTemplate->addSpecialization(NewFD);
   
-  --CurrentInstantiationDepth;
   return NewFD;
 }
 

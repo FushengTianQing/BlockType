@@ -310,33 +310,171 @@ bool ConversionChecker::isQualificationConversion(QualType From, QualType To) {
 
   // Qualification conversion: adding const/volatile to pointer types
   // e.g., int* → const int*  or  int** → const int* const*
+  //
+  // Per C++ [conv.qual]: A qualification conversion is a multi-level
+  // pointer conversion that adds qualifiers at each level.
 
-  const auto *FromPtr = llvm::dyn_cast<PointerType>(getUnqualified(From));
-  const auto *ToPtr = llvm::dyn_cast<PointerType>(getUnqualified(To));
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
 
-  if (!FromPtr || !ToPtr)
+  // Single-level pointer qualification conversion
+  const auto *FromPtr = llvm::dyn_cast<PointerType>(FromTy);
+  const auto *ToPtr = llvm::dyn_cast<PointerType>(ToTy);
+
+  if (FromPtr && ToPtr) {
+    // Recursively check qualification conversion at each pointer level
+    return isQualificationConversionRecursive(
+        QualType(FromPtr->getPointeeType(), From.getQualifiers()),
+        QualType(ToPtr->getPointeeType(), To.getQualifiers()));
+  }
+
+  // Non-pointer types: qualification conversion only if same type
+  // with added qualifiers
+  if (isSameUnqualifiedType(From, To)) {
+    auto FromQuals = From.getQualifiers();
+    auto ToQuals = To.getQualifiers();
+    unsigned cvrMask = static_cast<unsigned>(Qualifier::Const) |
+                       static_cast<unsigned>(Qualifier::Volatile) |
+                       static_cast<unsigned>(Qualifier::Restrict);
+    unsigned fromCV = static_cast<unsigned>(FromQuals) & cvrMask;
+    unsigned toCV = static_cast<unsigned>(ToQuals) & cvrMask;
+    // To must add at least one qualifier
+    return ((toCV & ~fromCV) & cvrMask) != 0;
+  }
+
+  return false;
+}
+
+/// Recursive helper for multi-level qualification conversion.
+/// Per C++ [conv.qual]: checks qualification compatibility at each
+/// pointer level, with the rule that inner levels can add qualifiers
+/// only if all outer levels have const.
+bool ConversionChecker::isQualificationConversionRecursive(
+    QualType From, QualType To) {
+  if (From.isNull() || To.isNull())
     return false;
 
-  // Check if the pointee types are the same except for added qualifiers
-  QualType FromPointee(FromPtr->getPointeeType(), Qualifier::None);
-  QualType ToPointee(ToPtr->getPointeeType(), Qualifier::None);
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
 
-  // The unqualified pointee types must match
-  if (!isSameUnqualifiedType(FromPointee, ToPointee))
+  // Both are pointers: recurse
+  auto *FromPtr = llvm::dyn_cast<PointerType>(FromTy);
+  auto *ToPtr = llvm::dyn_cast<PointerType>(ToTy);
+
+  if (FromPtr && ToPtr) {
+    // Check qualifiers at this level
+    auto FromQuals = From.getQualifiers();
+    auto ToQuals = To.getQualifiers();
+    unsigned cvrMask = static_cast<unsigned>(Qualifier::Const) |
+                       static_cast<unsigned>(Qualifier::Volatile);
+    unsigned fromCV = static_cast<unsigned>(FromQuals) & cvrMask;
+    unsigned toCV = static_cast<unsigned>(ToQuals) & cvrMask;
+
+    // To must have at least the same qualifiers as From at this level
+    if ((toCV & fromCV) != fromCV)
+      return false;
+
+    // Recurse into pointee types
+    return isQualificationConversionRecursive(
+        QualType(FromPtr->getPointeeType(), Qualifier::None),
+        QualType(ToPtr->getPointeeType(), Qualifier::None));
+  }
+
+  // Neither is a pointer: check if same type with To adding qualifiers
+  if (!FromPtr && !ToPtr) {
+    if (!isSameUnqualifiedType(From, To))
+      return false;
+
+    auto FromQuals = From.getQualifiers();
+    auto ToQuals = To.getQualifiers();
+    unsigned cvrMask = static_cast<unsigned>(Qualifier::Const) |
+                       static_cast<unsigned>(Qualifier::Volatile);
+    unsigned fromCV = static_cast<unsigned>(FromQuals) & cvrMask;
+    unsigned toCV = static_cast<unsigned>(ToQuals) & cvrMask;
+
+    // To must have at least the same qualifiers as From
+    return (toCV & fromCV) == fromCV;
+  }
+
+  // One is pointer, other is not: not a qualification conversion
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// ConversionChecker — isDerivedToBaseRefConversion
+//===----------------------------------------------------------------------===//
+
+bool ConversionChecker::isDerivedToBaseRefConversion(QualType From,
+                                                       QualType To) {
+  if (From.isNull() || To.isNull())
     return false;
 
-  // To must add qualifiers (From's qualifiers ⊆ To's qualifiers)
-  auto FromQuals = FromPointee.getQualifiers();
-  auto ToQuals = ToPointee.getQualifiers();
+  const auto *FromRef = llvm::dyn_cast<ReferenceType>(getUnqualified(From));
+  const auto *ToRef = llvm::dyn_cast<ReferenceType>(getUnqualified(To));
 
-  // Check that To has at least the same qualifiers as From
-  // (i.e., the difference is only adding const/volatile)
-  auto addedQuals = static_cast<unsigned>(ToQuals) & ~static_cast<unsigned>(FromQuals);
-  // Only const/volatile/restrict bits are relevant (mask out ref qualifiers)
-  unsigned cvrMask = static_cast<unsigned>(Qualifier::Const) |
-                     static_cast<unsigned>(Qualifier::Volatile) |
-                     static_cast<unsigned>(Qualifier::Restrict);
-  return (addedQuals & cvrMask) != 0;
+  if (!FromRef || !ToRef)
+    return false;
+
+  QualType FromReferenced(FromRef->getReferencedType(), Qualifier::None);
+  QualType ToReferenced(ToRef->getReferencedType(), Qualifier::None);
+
+  const auto *FromRecord = llvm::dyn_cast<RecordType>(getUnqualified(FromReferenced));
+  const auto *ToRecord = llvm::dyn_cast<RecordType>(getUnqualified(ToReferenced));
+
+  if (!FromRecord || !ToRecord)
+    return false;
+
+  auto *FromCXX = llvm::dyn_cast<CXXRecordDecl>(FromRecord->getDecl());
+  auto *ToCXX = llvm::dyn_cast<CXXRecordDecl>(ToRecord->getDecl());
+
+  if (!FromCXX || !ToCXX)
+    return false;
+
+  return FromCXX->isDerivedFrom(ToCXX);
+}
+
+//===----------------------------------------------------------------------===//
+// ConversionChecker — isArrayToPointerDecay
+//===----------------------------------------------------------------------===//
+
+bool ConversionChecker::isArrayToPointerDecay(QualType From, QualType To) {
+  if (From.isNull() || To.isNull())
+    return false;
+
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
+
+  if (!FromTy->isArrayType() || !ToTy->isPointerType())
+    return false;
+
+  const auto *FromArray = llvm::cast<ArrayType>(FromTy);
+  const auto *ToPtr = llvm::cast<PointerType>(ToTy);
+
+  // The element type must match the pointee type (possibly with
+  // qualification adjustment)
+  QualType ElementType(FromArray->getElementType(), Qualifier::None);
+  QualType PointeeType(ToPtr->getPointeeType(), Qualifier::None);
+
+  return isSameUnqualifiedType(ElementType, PointeeType);
+}
+
+//===----------------------------------------------------------------------===//
+// ConversionChecker — isFunctionToPointerDecay
+//===----------------------------------------------------------------------===//
+
+bool ConversionChecker::isFunctionToPointerDecay(QualType From, QualType To) {
+  if (From.isNull() || To.isNull())
+    return false;
+
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
+
+  if (!FromTy->isFunctionType() || !ToTy->isPointerType())
+    return false;
+
+  const auto *ToPtr = llvm::cast<PointerType>(ToTy);
+  return isSameUnqualifiedType(QualType(FromTy, Qualifier::None),
+                                QualType(ToPtr->getPointeeType(), Qualifier::None));
 }
 
 //===----------------------------------------------------------------------===//
@@ -351,25 +489,65 @@ bool ConversionChecker::isDerivedToBaseConversion(QualType From, QualType To) {
   const auto *FromPtr = llvm::dyn_cast<PointerType>(getUnqualified(From));
   const auto *ToPtr = llvm::dyn_cast<PointerType>(getUnqualified(To));
 
-  if (!FromPtr || !ToPtr)
+  if (FromPtr && ToPtr) {
+    const auto *FromRecord =
+        llvm::dyn_cast<RecordType>(FromPtr->getPointeeType());
+    const auto *ToRecord =
+        llvm::dyn_cast<RecordType>(ToPtr->getPointeeType());
+
+    if (FromRecord && ToRecord) {
+      auto *FromCXX = llvm::dyn_cast<CXXRecordDecl>(FromRecord->getDecl());
+      auto *ToCXX = llvm::dyn_cast<CXXRecordDecl>(ToRecord->getDecl());
+
+      if (FromCXX && ToCXX) {
+        return FromCXX->isDerivedFrom(ToCXX);
+      }
+    }
     return false;
+  }
 
-  const auto *FromRecord =
-      llvm::dyn_cast<RecordType>(FromPtr->getPointeeType());
-  const auto *ToRecord =
-      llvm::dyn_cast<RecordType>(ToPtr->getPointeeType());
+  // Reference to derived → reference to base
+  // e.g., Derived& → Base& or const Base&
+  const auto *FromRef = llvm::dyn_cast<ReferenceType>(getUnqualified(From));
+  const auto *ToRef = llvm::dyn_cast<ReferenceType>(getUnqualified(To));
 
-  if (!FromRecord || !ToRecord)
+  if (FromRef && ToRef) {
+    QualType FromReferenced(FromRef->getReferencedType(), Qualifier::None);
+    QualType ToReferenced(ToRef->getReferencedType(), Qualifier::None);
+
+    // Both must reference record types
+    const auto *FromRecord = llvm::dyn_cast<RecordType>(getUnqualified(FromReferenced));
+    const auto *ToRecord = llvm::dyn_cast<RecordType>(getUnqualified(ToReferenced));
+
+    if (FromRecord && ToRecord) {
+      auto *FromCXX = llvm::dyn_cast<CXXRecordDecl>(FromRecord->getDecl());
+      auto *ToCXX = llvm::dyn_cast<CXXRecordDecl>(ToRecord->getDecl());
+
+      if (FromCXX && ToCXX) {
+        return FromCXX->isDerivedFrom(ToCXX);
+      }
+    }
     return false;
+  }
 
-  auto *FromCXX = llvm::dyn_cast<CXXRecordDecl>(FromRecord->getDecl());
-  auto *ToCXX = llvm::dyn_cast<CXXRecordDecl>(ToRecord->getDecl());
+  // Direct class type: Derived → Base (for copy initialization)
+  // This occurs when catching exceptions: catch(Base) with throw(Derived)
+  const Type *FromTy = getUnqualified(From);
+  const Type *ToTy = getUnqualified(To);
 
-  if (!FromCXX || !ToCXX)
-    return false;
+  if (FromTy->isRecordType() && ToTy->isRecordType()) {
+    auto *FromRecord = llvm::cast<RecordType>(FromTy);
+    auto *ToRecord = llvm::cast<RecordType>(ToTy);
 
-  // Check if FromCXX is derived from ToCXX
-  return FromCXX->isDerivedFrom(ToCXX);
+    auto *FromCXX = llvm::dyn_cast<CXXRecordDecl>(FromRecord->getDecl());
+    auto *ToCXX = llvm::dyn_cast<CXXRecordDecl>(ToRecord->getDecl());
+
+    if (FromCXX && ToCXX) {
+      return FromCXX->isDerivedFrom(ToCXX);
+    }
+  }
+
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -442,6 +620,24 @@ bool ConversionChecker::isStandardConversion(QualType From, QualType To) {
     // void* conversions: any pointer → void*
     const auto *ToPtr = llvm::cast<PointerType>(ToTy);
     if (ToPtr->getPointeeType()->isVoidType()) {
+      return true;
+    }
+  }
+
+  // Reference conversions
+  if (FromTy->isReferenceType() && ToTy->isReferenceType()) {
+    // Derived-to-base reference conversion
+    if (isDerivedToBaseRefConversion(From, To))
+      return true;
+
+    // Qualification adjustment on references
+    // e.g., int& → const int&
+    auto *FromRef = llvm::cast<ReferenceType>(FromTy);
+    auto *ToRef = llvm::cast<ReferenceType>(ToTy);
+    QualType FromRefd(FromRef->getReferencedType(), From.getQualifiers());
+    QualType ToRefd(ToRef->getReferencedType(), To.getQualifiers());
+    if (isSameUnqualifiedType(FromRefd, ToRefd)) {
+      // Same type, possibly with added qualifiers on To
       return true;
     }
   }
@@ -521,6 +717,14 @@ ConversionChecker::GetStandardConversion(QualType From, QualType To) {
 
   // 5. Check for derived-to-base pointer conversion
   if (isDerivedToBaseConversion(From, To)) {
+    SCS.setThird(StandardConversionKind::Conversion);
+    SCS.setRank(ConversionRank::Conversion);
+    return SCS;
+  }
+
+  // 5b. Check for derived-to-base reference conversion
+  // e.g., Derived& → Base& or Derived& → const Base&
+  if (isDerivedToBaseRefConversion(From, To)) {
     SCS.setThird(StandardConversionKind::Conversion);
     SCS.setRank(ConversionRank::Conversion);
     return SCS;

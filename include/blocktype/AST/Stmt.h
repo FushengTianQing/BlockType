@@ -470,6 +470,10 @@ public:
   Stmt *getTryBlock() const { return TryBlock; }
   llvm::ArrayRef<Stmt *> getCatchBlocks() const { return CatchBlocks; }
 
+  /// Get handlers as CXXCatchStmt pointers (convenience accessor).
+  /// Returns an empty vector if any handler is not a CXXCatchStmt.
+  llvm::SmallVector<CXXCatchStmt *, 4> getHandlers() const;
+
   NodeKind getKind() const override { return NodeKind::CXXTryStmtKind; }
 
   void dump(raw_ostream &OS, unsigned Indent = 0) const override;
@@ -490,6 +494,15 @@ public:
 
   VarDecl *getExceptionDecl() const { return ExceptionDecl; }
   Stmt *getHandlerBlock() const { return HandlerBlock; }
+
+  /// Get the catch keyword location.
+  SourceLocation getCatchLoc() const { return getLocation(); }
+
+  /// Check if this is a catch-all handler (catch(...)).
+  bool isCatchAll() const {
+    return ExceptionDecl == nullptr ||
+           ExceptionDecl->getType()->isVoidType();
+  }
 
   NodeKind getKind() const override { return NodeKind::CXXCatchStmtKind; }
 

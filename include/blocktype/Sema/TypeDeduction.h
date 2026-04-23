@@ -75,13 +75,48 @@ public:
 
   /// Deduce the type for `decltype(expr)`.
   /// Rules (C++ [dcl.type.decltype]):
-  /// - decltype(id) → declared type of id
+  /// - decltype(id) → declared type of id (no reference stripping)
   /// - decltype(expr) → type of expr, preserving value category
-  /// - decltype((id)) → reference to declared type of id
+  /// - decltype((id)) → reference to declared type of id (always ref)
   QualType deduceDecltypeType(Expr *E);
 
+  /// Deduce the type for `decltype((expr))` — double parentheses case.
+  /// Per C++ [dcl.type.decltype]:
+  ///   decltype((x)) always yields a reference type:
+  ///   - If x is an lvalue of type T → T&
+  ///   - If x is an xvalue of type T → T&&
+  ///   - If x is a prvalue of type T → T (but parenthesized id
+  ///     expressions are always lvalues, so this case is rare)
+  QualType deduceDecltypeDoubleParenType(Expr *E);
+
   /// Deduce the type for `decltype(auto)`.
+  /// Per C++ [dcl.spec.auto]: decltype(auto) uses decltype rules
+  /// for deduction, preserving value category.
   QualType deduceDecltypeAutoType(Expr *E);
+
+  /// Deduce the type for `const auto& x = init;`.
+  /// Combines const qualifier with auto reference deduction.
+  QualType deduceConstAutoRefType(Expr *Init);
+
+  /// Deduce the type for `volatile auto& x = init;`.
+  QualType deduceVolatileAutoRefType(Expr *Init);
+
+  /// Deduce the type for `const volatile auto& x = init;`.
+  QualType deduceCVAutoRefType(Expr *Init);
+
+  /// Deduce the type for `const auto&& x = init;`.
+  QualType deduceConstAutoForwardingRefType(Expr *Init);
+
+  /// Deduce return type for `decltype(auto) f() { return expr; }`.
+  /// Uses decltype rules (preserving value category) for return deduction.
+  QualType deduceReturnTypeDecltypeAuto(Expr *ReturnExpr);
+
+  /// Deduce types for structured bindings `auto [a, b] = expr`.
+  /// Per C++ [dcl.struct.bind]:
+  ///   - For tuple-like types: uses std::tuple_element<i>::type
+  ///   - For arrays: each binding is a reference to the element
+  ///   - For aggregate classes: each binding references the field
+  QualType deduceStructuredBindingType(QualType EType, unsigned Index);
 
   //===------------------------------------------------------------------===//
   // Template argument deduction (placeholder for later)

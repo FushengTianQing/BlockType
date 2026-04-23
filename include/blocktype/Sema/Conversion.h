@@ -186,7 +186,20 @@ public:
   /// Check if a derived-to-base pointer conversion exists.
   static bool isDerivedToBaseConversion(QualType From, QualType To);
 
+  /// Check if a derived-to-base reference conversion exists.
+  static bool isDerivedToBaseRefConversion(QualType From, QualType To);
+
+  /// Check if an array-to-pointer decay exists.
+  static bool isArrayToPointerDecay(QualType From, QualType To);
+
+  /// Check if a function-to-pointer decay exists.
+  static bool isFunctionToPointerDecay(QualType From, QualType To);
+
 private:
+  /// Recursive helper for multi-level qualification conversion.
+  /// Per C++ [conv.qual]: checks qualification compatibility at each
+  /// pointer level.
+  static bool isQualificationConversionRecursive(QualType From, QualType To);
   /// Try to find a converting constructor in ToClass that accepts From.
   static ImplicitConversionSequence TryConvertingConstructor(
       QualType From, CXXRecordDecl *ToClass);

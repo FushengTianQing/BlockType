@@ -35,23 +35,37 @@ FunctionDecl *TemplateInstantiator::InstantiateFunctionTemplate(
     return nullptr;
   }
   
-  // Step 1: Check if a specialization already exists (cache lookup)
+  // Step 1: Check instantiation depth limit
+  if (isInstantiationDepthExceeded()) {
+    SemaRef.Diag(FuncTemplate->getLocation(), DiagID::err_template_recursion);
+    return nullptr;
+  }
+  
+  // Step 2: Check if a specialization already exists (cache lookup)
   if (auto *Existing = FuncTemplate->findSpecialization(TemplateArgs)) {
     return Existing;
   }
   
-  // Step 2: Enter SFINAE context for substitution
+  // Step 3: Enter SFINAE context for substitution
   unsigned SavedErrors = SemaRef.getDiagnostics().getNumErrors();
   SFINAEGuard SFINAEGuard(SFContext, SavedErrors, &SemaRef.getDiagnostics());
   
-  // Step 3: Delegate to Sema for actual instantiation
+  // Step 4: Increment instantiation depth
+  ++InstantiationDepth;
+  
+  // Step 5: Delegate to Sema for actual instantiation
   // The SFINAE context will catch any substitution failures
   FunctionDecl *Result = SemaRef.InstantiateFunctionTemplate(
       FuncTemplate, TemplateArgs, FuncTemplate->getLocation());
   
-  // Step 4: If substitution failed during instantiation, return nullptr
+  // Step 6: Decrement instantiation depth
+  --InstantiationDepth;
+  
+  // Step 7: If substitution failed during instantiation, return nullptr
   // (the candidate is removed from overload set per SFINAE rules)
   if (Result == nullptr || SemaRef.getDiagnostics().hasErrorOccurred()) {
+    // Record the failure reason in SFINAE context
+    SFContext.addFailureReason("template argument substitution failed");
     return nullptr;
   }
   
@@ -326,6 +340,120 @@ Expr *TemplateInstantiator::InstantiatePackIndexingExpr(
   
   // Return the original expression if we couldn't substitute
   return PIE;
+}
+
+//===----------------------------------------------------------------------===//
+// Dependent type/expression substitution
+//===----------------------------------------------------------------------===//
+
+QualType TemplateInstantiator::substituteDependentType(
+    QualType T, const TemplateInstantiation &Inst) {
+  if (T.isNull()) return QualType();
+
+  // Use the TemplateInstantiation's substituteType which handles
+  // TemplateTypeParmType substitution via the TypeVisitor.
+  QualType Result = Inst.substituteType(T);
+
+  // Additionally handle DependentType (T::name)
+  if (!Result.isNull() && Result->isDependentType()) {
+    // If the result is still dependent, check if we can resolve it
+    // by looking at the base type of the DependentType.
+    if (auto *DT = llvm::dyn_cast<DependentType>(Result.getTypePtr())) {
+      QualType BaseType(DT->getBaseType(), Qualifier::None);
+
+      // Try to substitute the base type first
+      if (!BaseType.isNull()) {
+        QualType SubstBase = substituteDependentType(BaseType, Inst);
+        if (!SubstBase.isNull() && !SubstBase->isDependentType()) {
+          // Base type is now concrete — try to look up the member
+          // in the substituted base type.
+          if (SubstBase->isRecordType()) {
+            auto *RT = llvm::cast<RecordType>(SubstBase.getTypePtr());
+            auto *RD = RT->getDecl();
+            if (RD) {
+              // Look up the member name in the record
+              for (auto *D : RD->members()) {
+                if (auto *ND = llvm::dyn_cast<NamedDecl>(D)) {
+                  if (ND->getName() == DT->getName()) {
+                    if (auto *VD = llvm::dyn_cast<ValueDecl>(ND)) {
+                      return VD->getType();
+                    }
+                    if (auto *TD = llvm::dyn_cast<TypeDecl>(ND)) {
+                      return SemaRef.getASTContext().getTypeDeclType(TD);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // If we can't resolve the member, return the substituted
+          // base type as-is (the dependent name remains unresolved).
+        }
+      }
+    }
+  }
+
+  return Result;
+}
+
+Expr *TemplateInstantiator::substituteDependentExpr(
+    Expr *E, const TemplateInstantiation &Inst) {
+  if (!E) return nullptr;
+
+  // If the expression is not type-dependent, no substitution needed
+  if (!E->isTypeDependent()) return E;
+
+  // Handle CXXDependentScopeMemberExpr: base->member or base.member
+  if (auto *DSME = llvm::dyn_cast<CXXDependentScopeMemberExpr>(E)) {
+    // Try to substitute the base type
+    QualType BaseType = DSME->getBaseType();
+    if (!BaseType.isNull()) {
+      QualType SubstBase = substituteDependentType(BaseType, Inst);
+      if (!SubstBase.isNull() && !SubstBase->isDependentType()) {
+        // Base type is now concrete — try to look up the member
+        if (SubstBase->isRecordType()) {
+          auto *RT = llvm::cast<RecordType>(SubstBase.getTypePtr());
+          auto *RD = RT->getDecl();
+          if (RD) {
+            for (auto *D : RD->members()) {
+              if (auto *ND = llvm::dyn_cast<NamedDecl>(D)) {
+                if (ND->getName() == DSME->getMemberName()) {
+                  if (auto *VD = llvm::dyn_cast<ValueDecl>(ND)) {
+                    ASTContext &Ctx = SemaRef.getASTContext();
+                    return Ctx.create<DeclRefExpr>(
+                        DSME->getLocation(), VD, VD->getName());
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Handle DependentScopeDeclRefExpr: T::name
+  if (auto *DSDRE = llvm::dyn_cast<DependentScopeDeclRefExpr>(E)) {
+    // Try to resolve the qualifier
+    // For now, if we can't resolve, return the original expression
+    (void)DSDRE;
+  }
+
+  // For other type-dependent expressions, return as-is.
+  // Full substitution would require recursive traversal of all
+  // sub-expressions, which is handled by StmtCloner with the
+  // TemplateInstantiation.
+  return E;
+}
+
+bool TemplateInstantiator::isDependentType(QualType T) const {
+  if (T.isNull()) return false;
+  return T->isDependentType();
+}
+
+bool TemplateInstantiator::isDependentExpr(Expr *E) const {
+  if (!E) return false;
+  return E->isTypeDependent();
 }
 
 } // namespace blocktype

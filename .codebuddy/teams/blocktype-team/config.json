@@ -2,7 +2,7 @@
   "name": "blocktype-team",
   "leadAgentId": "946d5dc52dcf47fc9da3e720ed5f5991",
   "workspacePath": "/Users/yuan/Documents/BlockType",
-  "createdAt": "2026-04-22T21:54:54.448Z",
+  "createdAt": "2026-04-22T23:55:03.779Z",
   "options": {
     "workspacePath": "/Users/yuan/Documents/BlockType",
     "isAutoTeam": false
@@ -16,22 +16,22 @@
     {
       "memberId": "planner@blocktype-team",
       "name": "planner",
-      "role": "规划人员-功能规划"
+      "role": "planner-文档治理与重组"
     },
     {
       "memberId": "developer@blocktype-team",
       "name": "developer",
-      "role": "开发人员-代码开发"
+      "role": "developer-第三波功能补全"
     },
     {
       "memberId": "tester@blocktype-team",
       "name": "tester",
-      "role": "测试人员-测试管理"
+      "role": "tester-回归测试验证"
     },
     {
       "memberId": "reviewer@blocktype-team",
       "name": "reviewer",
-      "role": "代码审查人员-质量监控"
+      "role": "reviewer-审查修复质量"
     }
   ],
   "isAutoTeam": false

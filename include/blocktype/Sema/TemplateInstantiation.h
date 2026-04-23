@@ -82,11 +82,43 @@ class TemplateInstantiator {
   /// SFINAE context for managing substitution failures.
   SFINAEContext SFContext;
 
+  /// Current instantiation depth (for recursion limit).
+  unsigned InstantiationDepth = 0;
+
+  /// Maximum instantiation depth (per C++ standard recommendation).
+  static constexpr unsigned MaxInstantiationDepth = 1024;
+
 public:
   explicit TemplateInstantiator(class Sema &Sema);
 
   /// Get the SFINAE context (for use by deduction/instantiation).
   SFINAEContext &getSFINAEContext() { return SFContext; }
+
+  /// Get the current instantiation depth.
+  unsigned getInstantiationDepth() const { return InstantiationDepth; }
+
+  /// Check if instantiation depth limit has been exceeded.
+  bool isInstantiationDepthExceeded() const {
+    return InstantiationDepth >= MaxInstantiationDepth;
+  }
+
+  /// Substitute a dependent type expression with the given template arguments.
+  /// Handles DependentType, TemplateTypeParmType, and nested dependent types.
+  /// Returns the substituted QualType, or null on failure.
+  QualType substituteDependentType(QualType T,
+                                    const TemplateInstantiation &Inst);
+
+  /// Substitute a dependent expression with the given template arguments.
+  /// Handles CXXDependentScopeMemberExpr, DependentScopeDeclRefExpr, etc.
+  /// Returns the substituted Expr, or nullptr on failure.
+  Expr *substituteDependentExpr(Expr *E,
+                                 const TemplateInstantiation &Inst);
+
+  /// Check if a type is dependent (contains template parameters).
+  bool isDependentType(QualType T) const;
+
+  /// Check if an expression is type-dependent.
+  bool isDependentExpr(Expr *E) const;
 
   /// Instantiate a function template with given template arguments.
   ///
