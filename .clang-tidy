@@ -1,6 +1,19 @@
 Checks: >
   bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-argument-comment,
   modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-return-braced-init-list,
+  -modernize-use-auto,
+  -modernize-use-nullptr,
   readability-*,
-  -modernize-use-trailing-return-type
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-braces-around-statements,
+  -readability-magic-numbers,
+  -readability-convert-member-functions-to-static,
+  -readability-make-member-function-const,
+  -readability-qualified-auto,
+  -readability-isolate-declaration
 WarningsAsErrors: '*'
