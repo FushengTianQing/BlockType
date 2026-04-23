@@ -63,6 +63,15 @@ struct TargetOptions {
 
   /// ABI name (e.g., "itanium", "ms").
   std::string ABI;
+
+  /// Floating-point ABI: "hard"/"soft"/"softfp".
+  std::string FloatABI = "hard";
+
+  /// Enable PIE (position-independent executable). Default true.
+  bool PIE = true;
+
+  /// Code model: "default"/"small"/"large".
+  std::string CodeModel = "default";
 };
 
 /// CodeGenOptions - Code generation options.

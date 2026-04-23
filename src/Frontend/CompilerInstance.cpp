@@ -309,14 +309,14 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
   }
 
   // Get target triple
-  auto TargetTriple = Module.getTargetTriple();
-  if (TargetTriple.empty())
-    TargetTriple = llvm::sys::getDefaultTargetTriple();
-  Module.setTargetTriple(TargetTriple);
+  std::string TargetTripleStr = Module.getTargetTriple();
+  if (TargetTripleStr.empty())
+    TargetTripleStr = llvm::sys::getDefaultTargetTriple();
+  Module.setTargetTriple(TargetTripleStr);
 
   // Look up target
   std::string Error;
-  auto *Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
+  auto *Target = llvm::TargetRegistry::lookupTarget(TargetTripleStr, Error);
   if (!Target) {
     errs() << "Error: " << Error << "\n";
     return false;
@@ -324,7 +324,32 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
 
   // Create TargetMachine
   llvm::TargetOptions Opt;
-  auto RM = llvm::Reloc::PIC_;  // Default PIC
+  std::string CPU = Invocation->TargetOpts.CPU;
+  std::string Features = Invocation->TargetOpts.Features;
+
+  // Use StringRef for prefix/contains checks
+  llvm::StringRef TargetTriple(TargetTripleStr);
+
+  // x86_64 target-specific defaults
+  if (TargetTriple.startswith("x86_64")) {
+    if (CPU.empty()) CPU = "x86-64-v2";
+    if (Features.empty()) Features = "+sse4.2,+cx16,+popcnt";
+  }
+
+  // AArch64/ARM64 target-specific defaults
+  if (TargetTriple.startswith("aarch64") || TargetTriple.startswith("arm64")) {
+    if (CPU.empty()) {
+      CPU = TargetTriple.contains("apple") ? "apple-m1" : "generic";
+    }
+    if (Features.empty()) Features = "+neon,+fp-armv8";
+  }
+
+  // PIC/PIE relocation model
+  auto RM = Invocation->TargetOpts.PIE
+                ? llvm::Reloc::PIC_
+                : llvm::Reloc::Static;
+
+  // CodeGenOptLevel (implemented in 8.3.1)
   auto CM = [&]() -> llvm::CodeGenOptLevel {
     switch (Invocation->CodeGenOpts.OptimizationLevel) {
     case 0:  return llvm::CodeGenOptLevel::None;
@@ -335,13 +360,15 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
     }
   }();
 
-  std::string CPU = Invocation->TargetOpts.CPU;
-  std::string Features = Invocation->TargetOpts.Features;
+  // Code model (LLVM 18 removed CodeModel::Default, use Small as default)
+  auto CMModel = llvm::CodeModel::Small;
+  if (Invocation->TargetOpts.CodeModel == "small")
+    CMModel = llvm::CodeModel::Small;
+  else if (Invocation->TargetOpts.CodeModel == "large")
+    CMModel = llvm::CodeModel::Large;
 
-  // LLVM 18 移除了 CodeModel::Default，使用 Small 作为默认代码模型
-  // Small 在大多数平台上是默认行为，与 CodeModel::Default 等价
-  auto TM = Target->createTargetMachine(TargetTriple, CPU, Features, Opt,
-                                         RM, llvm::CodeModel::Small, CM);
+  auto TM = Target->createTargetMachine(TargetTripleStr, CPU, Features, Opt,
+                                         RM, CMModel, CM);
   if (!TM) {
     errs() << "Error: Could not create TargetMachine\n";
     return false;

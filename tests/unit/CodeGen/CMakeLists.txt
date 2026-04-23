@@ -14,6 +14,7 @@ add_executable(blocktype-codegen-test
   ManglerTest.cpp
   TargetInfoTest.cpp
   OptimizationTest.cpp
+  TargetOptimizationTest.cpp
 )
 
 target_include_directories(blocktype-codegen-test PUBLIC
