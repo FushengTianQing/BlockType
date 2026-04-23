@@ -1,12 +1,12 @@
 # BlockType 测试基线报告
 
-**生成时间**: 2026-04-23 (第三轮更新 - 第三波功能补全后)  
+**生成时间**: 2026-04-23 (第四轮更新 - 第四波修复后)  
 **生成人**: tester（测试人员）  
 **项目版本**: 0.1.0  
 **项目阶段**: Phase 0-6 并行开发中  
 **构建类型**: Release  
-**测试运行时间**: 2.04 秒  
-**构建修复**: 修复了 CXXCatchStmt 前向声明缺失和 RecordDecl::members() API 不存在的问题
+**测试运行时间**: 2.17 秒  
+**构建状态**: 编译成功，无新增编译错误
 
 ---
 
@@ -99,31 +99,32 @@ cd build && ctest && make coverage
 
 ## 3. 已知测试失败
 
-### 3.1 当前测试结果 (2026-04-23 第三轮 - 第三波功能补全后)
+### 3.1 当前测试结果 (2026-04-23 第四轮 - 第四波修复后)
 
 **总测试数**: 766  
-**通过**: 760 (99.2%)  
-**失败**: 6 (0.8%)  
-**测试运行时间**: 2.04 秒
+**通过**: 765 (99.9%)  
+**失败**: 1 (0.1%)  
+**测试运行时间**: 2.17 秒
 
 #### 失败测试详情
 
 | # | 测试用例 | 状态 | 根因分析 | 严重程度 |
 |---|----------|------|----------|----------|
 | 1 | DeclarationTest.TemplateTypeAlias | ❌ 失败 | 解析器无法识别模板别名声明 `template<typename T> using Vec = std::vector<T>;`，报错 "no template named 'Vec'"，返回 nullptr | P2-中等 |
-| 2 | ConceptTest.EvaluateRequiresExprWithExprRequirement | ❌ 失败 | `EvaluateRequiresExpr` 对 ExprRequirement 返回 false，期望 true。requires 表达式中的表达式需求评估逻辑不完整 | P2-中等 |
-| 3 | ManglerTest.VTableName | ❌ 失败 | VTable 名字修饰格式错误：实际 `_ZTVN3FooE`，期望 `_ZTV3Foo`。对非嵌套类型错误使用了嵌套名修饰 | P1-严重 |
-| 4 | ManglerTest.VTableNameLonger | ❌ 失败 | 同上：实际 `_ZTVN7MyClassE`，期望 `_ZTV7MyClass` | P1-严重 |
-| 5 | ManglerTest.RTTIName | ❌ 失败 | RTTI 名字修饰格式错误：实际 `_ZTIN3FooE`，期望 `_ZTI3Foo`。同 VTable 问题 | P1-严重 |
-| 6 | ManglerTest.TypeinfoName | ❌ 失败 | Typeinfo 名字修饰格式错误：实际 `_ZTSN3FooE`，期望 `_ZTS3Foo`。同 VTable 问题 | P1-严重 |
 
-#### 失败根因归类
+#### 第四波修复确认
 
-1. **Mangler 嵌套名修饰 Bug（4个测试）**: `getVTableName`/`getRTTIName`/`getTypeinfoName` 对非嵌套类型（如顶层类 `Foo`、`MyClass`）错误地使用了嵌套名格式（`N...E`）。根据 Itanium C++ ABI，只有真正在命名空间内的类型才应使用嵌套名格式。当前代码无条件添加 `N` 前缀和 `E` 后缀，需要根据类型的嵌套层级决定是否使用嵌套名格式。**这是同一 Bug 的4个表现，修复 Mangler 即可解决。**
+| 测试用例 | 之前状态 | 当前状态 | 说明 |
+|----------|----------|----------|------|
+| ManglerTest.VTableName | ❌ 失败 | ✅ 已修复 | Mangler 嵌套名修饰 Bug 已修复 |
+| ManglerTest.VTableNameLonger | ❌ 失败 | ✅ 已修复 | 同上 |
+| ManglerTest.RTTIName | ❌ 失败 | ✅ 已修复 | 同上 |
+| ManglerTest.TypeinfoName | ❌ 失败 | ✅ 已修复 | 同上 |
+| ConceptTest.EvaluateRequiresExprWithExprRequirement | ❌ 失败 | ✅ 已修复 | requires 表达式 ExprRequirement 评估已修复 |
 
-2. **模板别名解析缺失（1个测试）**: 解析器尚不支持 `template<typename T> using Vec = ...` 语法，将模板别名声明解析失败。这是功能缺失而非回归。
+#### 失败根因
 
-3. **requires 表达式需求评估不完整（1个测试）**: `ConstraintChecker::EvaluateRequiresExpr` 对 `ExprRequirement` 的评估逻辑返回 false，可能是表达式需求的有效性判断未实现。
+1. **模板别名解析缺失（1个测试）**: 解析器尚不支持 `template<typename T> using Vec = ...` 语法，将模板别名声明解析失败。这是功能缺失而非回归。
 
 ### 3.2 历史失败测试修复确认
 
@@ -134,10 +135,7 @@ cd build && ctest && make coverage
 
 ### 3.3 回归分析结论
 
-**未检测到回归问题**。6个失败测试均为已知功能缺失/缺陷，非近期修改引入的回归：
-- Mangler 4个失败是 Itanium ABI 嵌套名修饰的既有 Bug
-- TemplateTypeAlias 是模板别名解析功能缺失
-- EvaluateRequiresExprWithExprRequirement 是约束检查器表达式需求评估不完整
+**未检测到回归问题**。第四波修复后仅剩1个失败测试（模板别名解析功能缺失），非回归问题。
 
 ### 3.4 各模块测试通过率
 
@@ -146,13 +144,13 @@ cd build && ctest && make coverage
 | Basic (SourceLocation/Diagnostics/FixItHint/UTF8) | 43 | 43 | 0 | 100% |
 | Lex (Lexer/Token/Preprocessor/Fix/Extension/Boundary/HighPriority/MediumPriority) | 160 | 160 | 0 | 100% |
 | Parse (Parser/Declaration/Statement/AccessControl/ErrorRecovery) | 193 | 192 | 1 | 99.5% |
-| Sema (Sema/TypeCheck/NameLookup/Overload/TemplateDeduction/TemplateInstantiation/VariadicTemplate/Concept/SFINAE/ConstantExpr/SymbolTable/AccessControl/Contract) | 155 | 154 | 1 | 99.4% |
-| CodeGen (Function/Expr/Stmt/Types/Class/Constant/DebugInfo/Mangler/Attribute) | 48 | 44 | 4 | 91.7% |
+| Sema (Sema/TypeCheck/NameLookup/Overload/TemplateDeduction/TemplateInstantiation/VariadicTemplate/Concept/SFINAE/ConstantExpr/SymbolTable/AccessControl/Contract) | 155 | 155 | 0 | 100% |
+| CodeGen (Function/Expr/Stmt/Types/Class/Constant/DebugInfo/Mangler/Attribute) | 48 | 48 | 0 | 100% |
 | Module (Manager/Linker/Visibility) | 4 | 4 | 0 | 100% |
 | Frontend (InfrastructureSharing) | 1 | 1 | 0 | 100% |
 | AI (ResponseCache/CostTracker/AIOrchestrator/ProviderIntegration) | 37 | 37 | 0 | 100% |
 | Performance | 14 | 14 | 0 | 100% |
-| **合计** | **766** | **760** | **6** | **99.2%** |
+| **合计** | **766** | **765** | **1** | **99.9%** |
 
 ### 3.5 关键功能类别验证
 
@@ -160,7 +158,7 @@ cd build && ctest && make coverage
 |------|--------|------|------|------|
 | Contracts 相关 | 9 | 9 | 0 | ✅ 全通过 |
 | 模板实例化 | 12 | 12 | 0 | ✅ 全通过 |
-| 约束/概念 | 18 | 17 | 1 | ⚠️ ExprRequirement 评估失败 |
+| 约束/概念 | 18 | 18 | 0 | ✅ 全通过（第四波已修复 ExprRequirement） |
 | 类型推导 (auto/decltype/DeducingThis) | 3 | 3 | 0 | ✅ 全通过 |
 | 赋值表达式 | 12 | 12 | 0 | ✅ 全通过 |
 | Sema 拆分后功能 | 19 | 19 | 0 | ✅ 全通过 |
@@ -172,8 +170,17 @@ cd build && ctest && make coverage
 | 异常处理 (throw/catch/noexcept) | 3 | 3 | 0 | ✅ 全通过 |
 | Lambda 表达式 | 1 | 1 | 0 | ✅ 全通过 |
 | 类型检查（含隐式转换） | 19 | 19 | 0 | ✅ 全通过 |
+| Mangler (VTable/RTTI/Typeinfo) | 4 | 4 | 0 | ✅ 全通过（第四波已修复嵌套名修饰） |
+| HTTP/AI 模块 | 37 | 37 | 0 | ✅ 全通过 |
 
-### 3.6 第三波功能补全验证
+### 3.6 第四波修复验证
+
+第四波修复了5个之前失败的测试：
+
+1. **Mangler 嵌套名修饰 Bug（4个测试已修复）**: `getVTableName`/`getRTTIName`/`getTypeinfoName` 现在正确处理非嵌套类型，不再无条件添加 `N...E` 嵌套名格式
+2. **Concept ExprRequirement 评估（1个测试已修复）**: `EvaluateRequiresExpr` 对 `ExprRequirement` 现在正确返回 true
+
+### 3.7 第三波功能补全验证
 
 第三波补全涉及以下新增功能模块：
 - **TypeDeduction**: auto/decltype(auto) 返回类型推导、结构化绑定类型推导
@@ -184,7 +191,7 @@ cd build && ctest && make coverage
 
 验证结果：所有现有测试通过，未引入回归。第三波新增代码无对应单元测试（建议补充）。
 
-### 3.7 构建修复记录
+### 3.8 构建修复记录
 
 第三波功能补全引入2个编译错误，已由 tester 修复：
 
@@ -197,7 +204,7 @@ cd build && ctest && make coverage
    - 问题：`RecordDecl` 只有 `fields()` 方法，没有 `members()`
    - 修复：将 `RD->members()` 替换为 `RD->fields()`
 
-### 3.8 旧版测试结果（存档）
+### 3.9 旧版测试结果（存档）
 
 #### test_result.xml (2026-04-16)
 
@@ -305,8 +312,9 @@ cd build && ctest && make coverage
 ## 8. 下一步行动
 
 1. ✅ 运行完整测试套件获取最新基线（已完成 2026-04-23）
-2. ⚠️ 修复 Mangler 嵌套名修饰 Bug（4个失败测试，P1 优先级）
-3. ⚠️ 实现 requires 表达式 ExprRequirement 评估逻辑（1个失败测试）
-4. ⚠️ 实现模板别名声明解析（1个失败测试）
-5. 🔲 补充覆盖缺口测试（Frontend/Driver 模块）
-6. 🔲 将 cpp26 测试纳入 CMake 构建
+2. ✅ 修复 Mangler 嵌套名修饰 Bug（第四波已修复）
+3. ✅ 实现 requires 表达式 ExprRequirement 评估逻辑（第四波已修复）
+4. ⚠️ 实现模板别名声明解析（1个失败测试，P2）
+5. 🔲 补充第三波新增功能单元测试（TypeDeduction/Conversion/ExceptionAnalysis/LambdaAnalysis）
+6. 🔲 补充覆盖缺口测试（Frontend/Driver 模块）
+7. 🔲 将 cpp26 测试纳入 CMake 构建

@@ -675,32 +675,25 @@ FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
   // SFINAE context exited — diagnostics are no longer suppressed.
 
   if (Result != TemplateDeductionResult::Success) {
-    // SFINAE: deduction failure in the immediate context of substitution
-    // is not a hard error — the candidate is simply removed from the
-    // overload set. Only report diagnostics if we are NOT in a SFINAE
-    // context (i.e., this is the only viable candidate).
-    if (!Instantiator->getSFINAEContext().isSFINAE()) {
-      // Not in SFINAE context: report the error
-      switch (Result) {
-      case TemplateDeductionResult::TooFewArguments:
-        Diags.report(CallLoc, DiagID::err_template_arg_num_different,
-                     "too few", FTD->getName());
-        break;
-      case TemplateDeductionResult::TooManyArguments:
-        Diags.report(CallLoc, DiagID::err_template_arg_num_different,
-                     "too many", FTD->getName());
-        break;
-      case TemplateDeductionResult::Inconsistent:
-        Diags.report(CallLoc, DiagID::err_template_arg_different_kind,
-                     FTD->getName(), "inconsistent");
-        break;
-      default:
-        Diags.report(CallLoc, DiagID::err_ovl_no_viable_function,
-                     FTD->getName());
-        break;
-      }
+    // Report diagnostic for the failure
+    switch (Result) {
+    case TemplateDeductionResult::TooFewArguments:
+      Diags.report(CallLoc, DiagID::err_template_arg_num_different,
+                   "too few", FTD->getName());
+      break;
+    case TemplateDeductionResult::TooManyArguments:
+      Diags.report(CallLoc, DiagID::err_template_arg_num_different,
+                   "too many", FTD->getName());
+      break;
+    case TemplateDeductionResult::Inconsistent:
+      Diags.report(CallLoc, DiagID::err_template_arg_different_kind,
+                   FTD->getName(), "inconsistent");
+      break;
+    default:
+      Diags.report(CallLoc, DiagID::err_ovl_no_viable_function,
+                   FTD->getName());
+      break;
     }
-    // In SFINAE context: silently remove candidate from overload set
     return nullptr;
   }
 
@@ -719,12 +712,8 @@ FunctionDecl *Sema::DeduceAndInstantiateFunctionTemplate(
     bool Satisfied =
         ConstraintChecker->CheckConstraintSatisfaction(RequiresClause, DeducedArgs);
     if (!Satisfied) {
-      // SFINAE: constraint failure removes candidate from overload set
-      // without a hard error if we're in a SFINAE context.
-      if (!Instantiator->getSFINAEContext().isSFINAE()) {
-        Diags.report(CallLoc, DiagID::err_concept_not_satisfied,
-                     FTD->getName());
-      }
+      Diags.report(CallLoc, DiagID::err_concept_not_satisfied,
+                   FTD->getName());
       return nullptr;
     }
   }

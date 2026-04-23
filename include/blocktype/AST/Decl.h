@@ -239,32 +239,6 @@ public:
   bool hasNoexceptSpec() const { return HasNoexceptSpec; }
   bool getNoexceptValue() const { return NoexceptValue; }
   Expr *getNoexceptExpr() const { return NoexceptExpr; }
-
-  /// NoexceptSpec - Structured noexcept specification for compatibility
-  /// checking with overridden functions.
-  struct NoexceptSpec {
-    bool IsNoexcept = false;  ///< Whether noexcept spec is present
-    bool Value = false;       ///< noexcept(true) or noexcept(false)
-    Expr *Expression = nullptr; ///< noexcept(expr) expression
-
-    static NoexceptSpec makeNoexceptTrue() {
-      return {true, true, nullptr};
-    }
-    static NoexceptSpec makeNoexceptFalse() {
-      return {true, false, nullptr};
-    }
-    static NoexceptSpec makeNoexceptExpr(Expr *E) {
-      return {true, false, E};
-    }
-    static NoexceptSpec makeNone() {
-      return {false, false, nullptr};
-    }
-  };
-
-  /// Get the noexcept specification as a structured object.
-  NoexceptSpec getNoexceptSpec() const {
-    return {HasNoexceptSpec, NoexceptValue, NoexceptExpr};
-  }
   
   /// Storage class access.
   StorageClass getStorageClass() const { return SC; }

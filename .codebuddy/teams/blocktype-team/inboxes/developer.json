@@ -7,5 +7,14 @@
     "content": "第四波紧急修复任务（3个P0 + 1个P1，按顺序执行）：\n\n**Task 1: deduceDecltypeType 引用错误修复（P0）**\n- 文件：`src/Sema/TypeDeduction.cpp`\n- 问题：`deduceDecltypeType` 对 DeclRefExpr 错误添加引用，与 `deduceDecltypeDoubleParenType` 逻辑完全相同\n- 导致 `decltype(x)` 对变量 x 错误推导为 T& 而非 T\n- 修复：`decltype(x)` 应返回 x 的声明类型（不添加引用），`decltype((x))` 才添加引用\n\n**Task 2: EvaluateExprRequirement 无条件返回false修复（P0）**\n- 文件：`src/Sema/Sema.cpp` 或相关文件\n- 问题：`ConstraintSatisfaction::EvaluateExprRequirement` 第184行无条件 `return false`\n- 导致所有含表达式要求的 requires 子句永远失败\n- 修复：实际评估表达式需求，返回正确结果\n\n**Task 3: Mangler 嵌套名修饰修复（P1，影响4个测试失败）**\n- 文件：`src/CodeGen/Mangler.cpp`\n- 问题：`getVTableName`/`getRTTIName`/`getTypeinfoName` 对非嵌套类型（顶层类）无条件添加了 `N` 前缀和 `E` 后缀\n- 违反 Itanium C++ ABI 规范：`_ZTVN3FooE` 应为 `_ZTV3Foo`\n- 修复：只有嵌套类型才添加 N/E，顶层类不添加\n\n**Task 4: HTTPClient::urlEncode 未定义行为修复（P0）**\n- 文件：`src/AI/HTTPClient.cpp`（或相关文件）\n- 问题：`curl_easy_escape(nullptr, ...)` 传入空指针，未定义行为\n- 修复：确保传入有效的 CURL handle\n\n每完成一个任务通过 send_message 通知我。请立即开始！",
     "timestamp": "2026-04-23T00:37:51.822Z",
     "read": true
+  },
+  {
+    "id": "msg-1776905410761-2rwe0y",
+    "from": "team-lead",
+    "to": "developer",
+    "type": "message",
+    "content": "心跳巡检：请汇报第三波功能补全的进度，包括：auto/decltype推导、模板实例化路径、异常处理Sema、Lambda Sema、隐式转换序列。哪些已完成？哪些仍在进行中？",
+    "timestamp": "2026-04-23T00:50:10.761Z",
+    "read": true
   }
 ]

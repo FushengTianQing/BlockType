@@ -61,5 +61,23 @@
     "content": "第四波紧急修复全部4个任务已完成：\n\n**Task 1: deduceDecltypeType 引用错误修复（P0）** ✅\n- 文件：`src/Sema/TypeDeduction.cpp`\n- 问题：`deduceDecltypeType` 对 `DeclRefExpr`（如变量 `x`）因为 `isLValue()` 返回 true 而错误添加引用，导致 `decltype(x)` 推导为 `T&` 而非 `T`\n- 修复：按C++ [dcl.type.decltype]p1，区分 unparenthesized id-expression 和一般表达式：\n  - `DeclRefExpr` / `MemberExpr`（无括号的id-expression）：直接返回声明类型，不添加引用\n  - 其他表达式（包括括号表达式）：按值类别推导（lvalue→T&, xvalue→T&&, prvalue→T）\n- 这样 `decltype(x)` 返回 `int`，`decltype((x))` 返回 `int&`\n\n**Task 2: EvaluateExprRequirement 无条件返回false修复（P0）** ✅\n- 文件：`src/Sema/ConstraintSatisfaction.cpp`\n- 问题：第184行 `return false` 导致所有含表达式要求的 requires 子句永远失败\n- 修复：\n  - 删除无条件 `return false`\n  - 替换后增加替换失败检查（`SubstType.isNull()` → return false）\n  - 尝试使用 `ConstantExprEvaluator` 评估表达式，返回布尔结果\n  - 若无法常量求值，只要表达式合法（非null、非dependent）即视为满足\n\n**Task 3: Mangler 嵌套名修饰修复（P1）** ✅\n- 文件：`src/CodeGen/Mangler.cpp`\n- 问题：`getVTableName`/`getRTTIName`/`getTypeinfoName` 对所有类型无条件添加 `N` 前缀和 `E` 后缀，违反 Itanium C++ ABI 规范\n- 修复：检查 `RD->getParent()` 判断是否为嵌套类型：\n  - 嵌套类（有parent）：使用 `N...E` 包装（如 `_ZTVN3foo3BarE`）\n  - 顶层类（无parent）：直接使用 source-name（如 `_ZTV3Foo`）\n\n**Task 4: HTTPClient::urlEncode 未定义行为修复（P0）** ✅\n- 文件：`src/AI/HTTPClient.cpp`\n- 问题：`curl_easy_escape(nullptr, ...)` 传入空指针，是未定义行为\n- 修复：\n  - 使用 `curl_easy_init()` 获取有效的 CURL handle\n  - 若初始化失败，提供 RFC 3986 手动 percent-encoding 回退方案\n  - 编码完成后 `curl_easy_cleanup(Curl)` 释放 handle",
     "timestamp": "2026-04-23T00:41:32.656Z",
     "read": true
+  },
+  {
+    "id": "msg-1776905378341-nquwiy",
+    "from": "tester",
+    "to": "team-lead",
+    "type": "message",
+    "content": "## 第四波修复回归测试验证完成\n\n### 测试总结\n- **总测试数**: 766\n- **通过**: 765 (99.9%)\n- **失败**: 1 (0.1%)\n- **测试运行时间**: 2.17 秒\n- **构建状态**: 编译成功，无新增编译错误\n\n### 重大进展：5个之前失败的测试已修复！\n\n| 测试用例 | 之前状态 | 当前状态 |\n|----------|----------|----------|\n| ManglerTest.VTableName | ❌ 失败 | ✅ 已修复 |\n| ManglerTest.VTableNameLonger | ❌ 失败 | ✅ 已修复 |\n| ManglerTest.RTTIName | ❌ 失败 | ✅ 已修复 |\n| ManglerTest.TypeinfoName | ❌ 失败 | ✅ 已修复 |\n| ConceptTest.EvaluateRequiresExprWithExprRequirement | ❌ 失败 | ✅ 已修复 |\n\n### 唯一剩余失败测试\n\n- **DeclarationTest.TemplateTypeAlias** — 解析器不支持 `template<typename T> using Vec = ...` 语法，属于功能缺失（P2-中等）\n\n### 重点验证结果\n\n| 类别 | 测试数 | 状态 |\n|------|--------|------|\n| decltype 类型推导 | 3 | ✅ 全通过 |\n| Concepts/requires 表达式 | 18 | ✅ 全通过（ExprRequirement 已修复） |\n| Mangler (VTable/RTTI/Typeinfo) | 4 | ✅ 全通过（嵌套名修饰已修复） |\n| HTTP/AI 模块 | 37 | ✅ 全通过 |\n\n### 回归分析\n\n**未检测到回归问题**。从6个失败减少到1个，所有修复均验证通过。\n\n### 注意事项\n\n测试基线文件已被 planner 移动到 `docs/guides/TEST_BASELINE.md`（文档重组），已在新位置更新。\n\n### 建议\n\n1. **P2**: 实现模板别名声明解析（唯一剩余失败测试）\n2. 补充第三波新增功能单元测试\n3. 补充 Frontend/Driver 模块测试覆盖",
+    "timestamp": "2026-04-23T00:49:38.341Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776905422278-ulz3n0",
+    "from": "tester",
+    "to": "team-lead",
+    "type": "message",
+    "content": "## 心跳巡检回复\n\n### 当前状态：测试基本全通过\n\n**最新测试结果（第四波修复后）**：\n- **总测试数**: 766\n- **通过**: 765 (99.9%)\n- **失败**: 1 (0.1%)\n\n### 唯一失败测试\n\n- **DeclarationTest.TemplateTypeAlias** — 解析器不支持 `template<typename T> using Vec = ...` 语法，属于功能缺失（P2-中等），非回归问题\n\n### 已修复的测试（第四波）\n\n之前6个失败测试中的5个已在第四波修复：\n- ✅ ManglerTest.VTableName / VTableNameLonger / RTTIName / TypeinfoName（嵌套名修饰 Bug 已修复）\n- ✅ ConceptTest.EvaluateRequiresExprWithExprRequirement（ExprRequirement 评估已修复）\n\n### 结论\n\n测试套件状态良好，无回归问题。唯一剩余失败是模板别名解析功能缺失。",
+    "timestamp": "2026-04-23T00:50:22.278Z",
+    "read": true
   }
 ]

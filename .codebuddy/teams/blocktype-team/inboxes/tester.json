@@ -16,5 +16,14 @@
     "content": "第四波修复已完成，请执行回归测试验证：\n\n1. 构建项目：`cd /Users/yuan/Documents/BlockType && cmake --build build --target blocktype`\n2. 运行完整测试套件\n3. 重点关注：\n   - decltype 类型推导测试（验证 `decltype(x)` vs `decltype((x))`）\n   - Concepts/requires 表达式测试（ExprRequirement 是否通过）\n   - Mangler 测试（4个之前失败的测试是否修复）\n   - HTTP/AI 模块测试\n4. 更新测试基线报告 `docs/TEST_BASELINE.md`\n\n完成后通过 send_message 通知我。",
     "timestamp": "2026-04-23T00:45:13.884Z",
     "read": true
+  },
+  {
+    "id": "msg-1776905412272-4l11qx",
+    "from": "team-lead",
+    "to": "tester",
+    "type": "message",
+    "content": "心跳巡检：请汇报回归测试验证的当前状态。测试是否全部通过？是否有失败的测试用例？",
+    "timestamp": "2026-04-23T00:50:12.272Z",
+    "read": true
   }
 ]
