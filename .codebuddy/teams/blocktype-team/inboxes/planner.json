@@ -1,20 +1,11 @@
 [
   {
-    "id": "msg-1776904926815-04b3a8",
+    "id": "msg-1776916126855-lmjgqe",
     "from": "team-lead",
     "to": "planner",
     "type": "message",
-    "content": "文档重组方案已获用户确认，请立即执行！\n\n执行顺序按优先级：\n1. P0：重写 ROADMAP.md 和 PHASE_PROGRESS.md\n2. P1：创建新目录结构，使用 `git mv` 移动文件，重命名含中文/空格的目录和文件\n3. P2：更新 ARCHITECTURE.md、AI_API.md、Phase 8/9 计划\n4. P3：删除空文件和空目录\n\n注意事项：\n- 必须使用 `git mv` 保留历史\n- 移动后全局搜索替换文档内部链接\n- 旧目录清空后可放置 README 指向新位置（过渡期）\n- 完成后通过 send_message 通知我",
-    "timestamp": "2026-04-23T00:42:06.815Z",
-    "read": true
-  },
-  {
-    "id": "msg-1776905408504-7jsjc0",
-    "from": "team-lead",
-    "to": "planner",
-    "type": "message",
-    "content": "心跳巡检：请汇报当前文档治理与重组任务（DOC_REORGANIZATION_PLAN.md）的进度。是否已完成？",
-    "timestamp": "2026-04-23T00:50:08.504Z",
+    "content": "收到，状态概览很全面。按串行模式，当前 reviewer 正在审查 wave6。你暂时待命，等需要规划时再分配任务。",
+    "timestamp": "2026-04-23T03:48:46.855Z",
     "read": true
   }
 ]

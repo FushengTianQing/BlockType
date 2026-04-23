@@ -451,9 +451,10 @@ std::optional<bool> ConstraintSatisfaction::SubstituteAndEvaluate(
       if (SubstE->getType().getTypePtr() && SubstE->getType()->isDependentType()) {
         QualType SubstType = CurrentSubstInst.substituteType(SubstE->getType());
         if (!SubstType.isNull() && SubstType.getTypePtr() != SubstE->getType().getTypePtr()) {
-          // Type was substituted — the expression is no longer dependent.
-          // The substituted type will be used by downstream evaluation.
-          (void)SubstType;
+          // Type was substituted — apply it to the expression so downstream
+          // evaluation sees the concrete (non-dependent) type.
+          // Per C++ [temp.constr]: substitution must be applied before evaluation.
+          SubstE->setType(SubstType);
         }
       }
     }

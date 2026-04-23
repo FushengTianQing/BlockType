@@ -1,11 +1,20 @@
 [
   {
-    "id": "msg-1776907660001-930xlp",
-    "from": "reviewer",
+    "id": "msg-1776916056452-8cpv0l",
+    "from": "team-lead",
     "to": "dev-tester",
     "type": "message",
-    "content": "## Wave6 修复任务清单（来自 reviewer 综合审查）\n\n审查报告在 `docs/status/audits/comprehensive_post_wave5_audit.md`，以下是按优先级排列的修复任务：\n\n### 最高优先级 P0（必须立即修复）\n\n**P0-NEW-2: 模板实例化替换映射使用错误 Decl 类型**（0.5天）\n- 文件：`src/Sema/TemplateInstantiation.cpp:92` 和 `src/Sema/Sema.cpp:162`\n- 问题：`dyn_cast_or_null<TypedefNameDecl>(Params[i])` 对模板参数永远返回 nullptr\n- 修复：改为 `dyn_cast_or_null<TemplateTypeParmDecl>(Params[i])`\n- 需验证 `addSubstitution` 的键类型是否支持 `TemplateTypeParmDecl`\n\n**P0-NEW-1: Sema::ProcessAST 未实现**（5天）\n- 问题：plan.md 规划的 `Parser → Sema::ProcessAST → CodeGen` 流程未实施\n- 修复：\n  1. 在 `src/Sema/Sema.cpp` 中实现 `ProcessAST(TranslationUnitDecl *TU)` — 遍历 AST，为 CXXNewExpr/CXXDeleteExpr 设置 ExprTy\n  2. 在 `tools/driver.cpp` 编译流程中创建 Sema 实例并调用 ProcessAST\n  3. CodeGen 中 CXXNewExpr 的后备逻辑改为防御性断言\n- 参考：plan.md 中的目标数据流\n\n### P1 快速修复（各0.5天）\n\n**P1-5: ExceptionAnalysis::CheckCatchMatch catch(...) 无 return**\n- 文件：`src/Sema/ExceptionAnalysis.cpp:137-141`\n- 修复：在 `isVoidType() || isBuiltinType()` 检测后添加 `return CatchMatchResult::ExactMatch;`\n\n**P1-6: LambdaAnalysis 静态变量捕获 err→warn**\n- 文件：`src/Sema/LambdaAnalysis.cpp:83`\n- 修复：将 `DiagID::err_lambda_capture_odr_use` 改为 `DiagID::warn_lambda_capture_odr_use`（或对应警告ID）\n\n**P1-8: Conversion 整型提升 First 步骤修正**\n- 文件：`src/Sema/Conversion.cpp:697-699`\n- 修复：对右值源的整型提升，`setFirst(StandardConversionKind::Identity)` 而非 `LvalueTransformation`\n\n### P1 中等修复\n\n**P1-3: Overload::addCandidates 处理 FunctionTemplateDecl**（1天）\n- 文件：`src/Sema/Overload.cpp:245-252`\n- 修复：在遍历 LookupResult 时，对 FunctionTemplateDecl 调用 `addTemplateCandidate`\n\n**P1-2: ConstraintSatisfaction 完整替换**（2天）\n- 文件：`src/Sema/ConstraintSatisfaction.cpp`\n- 修复：EvaluateCompoundRequirement 中使用替换结果而非 (void) 丢弃\n\n**P1-7: 泛型 lambda 推导使用计算结果**（2天）\n- 文件：`src/Sema/LambdaAnalysis.cpp:220-222`\n- 修复：基于 DeducedArgs 替换返回类型中的 auto/模板参数\n\n**P1-4: InstantiateClassTemplate 实现**（5天）\n- 文件：`src/Sema/TemplateInstantiator.cpp:88-90`\n- 注意：P0-NEW-2 修复后，Sema::InstantiateClassTemplate 的替换映射才能正常工作\n\n建议按此顺序执行，P0-NEW-2 是投入产出比最高的修复项。",
-    "timestamp": "2026-04-23T01:27:40.001Z",
+    "content": "收到。按串行模式，当前 reviewer 正在审查 wave6 修复。你暂时待命，等 reviewer 审查完成后会给你分配修复任务。",
+    "timestamp": "2026-04-23T03:47:36.452Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776916445197-afmr40",
+    "from": "team-lead",
+    "to": "dev-tester",
+    "type": "message",
+    "content": "Wave6 审查完成，请立即开始 Wave7 修复，按以下优先级：\n\n## 第一优先级（2个P1）\n\n**W6-P1-1: SubstituteAndEvaluate 类型替换结果被丢弃**（0.5天）\n- 文件：`src/Sema/ConstraintSatisfaction.cpp`\n- 问题：`SubstituteAndEvaluate` 中类型替换结果被 `(void)` 丢弃，未应用到表达式\n- 修复：参考同文件 `EvaluateCompoundRequirement` 中正确的 `E->setType(SubstType)` 写法，在 `SubstituteAndEvaluate` 中同样应用替换结果\n\n**W6-P1-2: InstantiateClassTemplate 两个不一致实现**（2天）\n- 文件：`src/Sema/TemplateInstantiator.cpp` 和 `src/Sema/Sema.cpp`\n- 问题：TemplateInstantiator 版本用 `addFieldWithParent`（正确设 Parent）但未注册符号表；Sema 版本用 `addField`（不设 Parent）但注册了符号表\n- 修复：统一为 TemplateInstantiator 版本（使用 addFieldWithParent），Sema 版本委托调用 TemplateInstantiator\n\n修复后运行构建和测试，确保 765/766 通过率不降。完成后汇报给我。",
+    "timestamp": "2026-04-23T03:54:05.197Z",
     "read": true
   }
 ]

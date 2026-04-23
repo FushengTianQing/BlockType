@@ -113,6 +113,9 @@ NamedDecl *Sema::LookupName(llvm::StringRef Name) const {
 }
 
 /// InstantiateClassTemplate - Instantiate a class template with given arguments.
+/// Delegates to TemplateInstantiator for the actual instantiation (which uses
+/// addFieldWithParent to correctly set Parent pointers), then registers the
+/// specialized record and its fields in the symbol table.
 QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
                                         const TemplateSpecializationType *TST) {
   // Step 1: Look up the template declaration
@@ -137,68 +140,23 @@ QualType Sema::InstantiateClassTemplate(llvm::StringRef TemplateName,
     return QualType();
   }
   
-  // Step 4: Check if this specialization already exists
-  // TODO: Implement specialization cache
+  // Step 4: Delegate to TemplateInstantiator which uses addFieldWithParent
+  // (correctly sets Parent on fields) and handles base classes and methods.
+  llvm::SmallVector<TemplateArgument, 4> TemplateArgs(Args.begin(), Args.end());
+  CXXRecordDecl *SpecializedRecord =
+      Instantiator->InstantiateClassTemplate(ClassTemplate, TemplateArgs);
   
-  // Step 5: Get the templated class declaration
-  auto *TemplatedDecl = ClassTemplate->getTemplatedDecl();
-  if (!TemplatedDecl) {
-    Diags.report(SourceLocation(), DiagID::err_template_recursion);
+  if (!SpecializedRecord) {
     return QualType();
   }
   
-  // Step 6: Create TemplateInstantiation and set up substitutions
-  TemplateInstantiation Inst;
-  auto Params = ClassTemplate->getTemplateParameters();
-  
-  if (Params.empty()) {
-    Diags.report(SourceLocation(), DiagID::err_template_arg_num_different,
-                 "no template parameters", TemplateName);
-    return QualType();
-  }
-  
-  // Build substitution map from template parameters to arguments
-  for (unsigned i = 0; i < std::min(Args.size(), Params.size()); ++i) {
-    if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(Params[i])) {
-      Inst.addSubstitution(ParamDecl, Args[i]);
-    }
-  }
-  
-  // Step 7: Clone the CXXRecordDecl with substituted types
-  auto *OriginalRecord = llvm::dyn_cast<CXXRecordDecl>(TemplatedDecl);
-  if (!OriginalRecord) {
-    Diags.report(SourceLocation(), DiagID::err_expected);
-    return QualType();
-  }
-  
-  // Create a new CXXRecordDecl for the specialization
-  auto *SpecializedRecord = Context.create<CXXRecordDecl>(
-      OriginalRecord->getLocation(),
-      OriginalRecord->getName(),
-      OriginalRecord->getTagKind());
-  
-  // Clone fields with substituted types
-  for (auto *Field : OriginalRecord->fields()) {
-    QualType SubstFieldType = Inst.substituteType(Field->getType());
-    
-    auto *NewField = Context.create<FieldDecl>(
-        Field->getLocation(),
-        Field->getName(),
-        SubstFieldType,
-        Field->getBitWidth(),
-        Field->isMutable(),
-        Field->getInClassInitializer(),
-        Field->getAccess());
-    
-    SpecializedRecord->addField(NewField);
-    registerDecl(NewField);
-  }
-  
-  // Mark the specialized record as complete
-  SpecializedRecord->setCompleteDefinition();
-  
-  // Register the specialized record
+  // Step 5: Register the specialized record and its fields in the symbol table.
+  // TemplateInstantiator does not register declarations — that is Sema's
+  // responsibility.
   registerDecl(SpecializedRecord);
+  for (auto *Field : SpecializedRecord->fields()) {
+    registerDecl(Field);
+  }
   
   // Return the type of the specialized record
   return Context.getTypeDeclType(SpecializedRecord);

@@ -1,38 +1,11 @@
 [
   {
-    "id": "msg-1776903404673-u1ygj1",
+    "id": "msg-1776916023811-wr8sdk",
     "from": "team-lead",
     "to": "reviewer",
     "type": "message",
-    "content": "第三波功能补全已全部完成！请立即审查以下修复：\n\n**Task 1: auto/decltype 完整类型推导**\n- 新增 deduceDecltypeDoubleParenType、deduceConstAutoRefType 等7个推导函数\n- 文件：src/Sema/TypeDeduction.cpp, include/blocktype/Sema/TypeDeduction.h\n\n**Task 2: 模板实例化关键路径打通**\n- 修复 static CurrentInstantiationDepth 线程安全bug\n- 实现 substituteDependentType/substituteDependentExpr\n- 1024深度限制 + SFINAE上下文管理\n- 文件：src/Sema/TemplateInstantiator.cpp, src/Sema/Sema.cpp\n\n**Task 3: 异常处理 Sema 分析**\n- 新建 ExceptionAnalysis.h/.cpp\n- CheckThrowExpr/CheckCatchMatch/CheckNoexceptSpec 等6个函数\n- 文件：src/Sema/ExceptionAnalysis.cpp, include/blocktype/Sema/ExceptionAnalysis.h\n\n**Task 4: Lambda Sema 分析补全**\n- 新建 LambdaAnalysis.h/.cpp\n- CheckCaptureODrUse/DeduceInitCaptureType/CheckGenericLambda 等6个函数\n- 文件：src/Sema/LambdaAnalysis.cpp, include/blocktype/Sema/LambdaAnalysis.h\n\n**Task 5: 隐式转换序列补全**\n- 增强派生到基类转换、限定转换、数组/函数到指针衰减\n- 文件：src/Sema/Conversion.cpp, include/blocktype/Sema/Conversion.h\n\n审查重点：\n1. 新增代码是否完整实现（不是空壳或TODO）\n2. 是否引入新问题\n3. 线程安全修复是否正确\n4. 新模块(ExceptionAnalysis/LambdaAnalysis)架构是否合理\n5. 与 Clang 对应实现的对比\n\n完成后通过 send_message 通知我。",
-    "timestamp": "2026-04-23T00:16:44.673Z",
-    "read": true
-  },
-  {
-    "id": "msg-1776905109005-a5a6ue",
-    "from": "team-lead",
-    "to": "reviewer",
-    "type": "message",
-    "content": "第四波修复已完成，请立即审查以下4个修复：\n\n**Task 1: deduceDecltypeType 引用错误修复**\n- 文件：`src/Sema/TypeDeduction.cpp`\n- 修复：区分 unparenthesized id-expression（直接返回声明类型）和其他表达式（按值类别推导）\n- 验证：`decltype(x)` 应返回 `int`，`decltype((x))` 应返回 `int&`\n\n**Task 2: EvaluateExprRequirement 修复**\n- 文件：`src/Sema/ConstraintSatisfaction.cpp`\n- 修复：删除无条件 `return false`，使用 `ConstantExprEvaluator` 评估表达式\n\n**Task 3: Mangler 嵌套名修饰修复**\n- 文件：`src/CodeGen/Mangler.cpp`\n- 修复：检查 `RD->getParent()` 判断嵌套类型，顶层类不添加 N/E\n\n**Task 4: HTTPClient::urlEncode UB 修复**\n- 文件：`src/AI/HTTPClient.cpp`\n- 修复：使用 `curl_easy_init()` 获取有效 handle，失败时 RFC 3986 手动编码回退\n\n审查重点：\n1. decltype 修复是否符合 C++ [dcl.type.decltype] 标准\n2. ExprRequirement 评估是否完整\n3. Mangler 修复是否符合 Itanium C++ ABI\n4. HTTPClient 修复是否有资源泄漏\n\n完成后通过 send_message 通知我。",
-    "timestamp": "2026-04-23T00:45:09.005Z",
-    "read": true
-  },
-  {
-    "id": "msg-1776905413909-6fym23",
-    "from": "team-lead",
-    "to": "reviewer",
-    "type": "message",
-    "content": "心跳巡检：请汇报审查进度，包括：第一波+第二波修复质量审查，以及AI/Module模块审查。是否已完成？",
-    "timestamp": "2026-04-23T00:50:13.909Z",
-    "read": true
-  },
-  {
-    "id": "msg-1776906289116-a1b3m1",
-    "from": "team-lead",
-    "to": "reviewer",
-    "type": "message",
-    "content": "请立即审查第四波修复（4个任务），这是你的当前任务：\n\n**Task 1: deduceDecltypeType 引用错误修复**\n- 文件：`src/Sema/TypeDeduction.cpp`\n- 验证 `decltype(x)` 返回 T vs `decltype((x))` 返回 T& 是否正确\n\n**Task 2: EvaluateExprRequirement 修复**\n- 文件：`src/Sema/ConstraintSatisfaction.cpp`\n- 验证表达式需求评估是否完整\n\n**Task 3: Mangler 嵌套名修饰修复**\n- 文件：`src/CodeGen/Mangler.cpp`\n- 验证 Itanium ABI 合规性\n\n**Task 4: HTTPClient::urlEncode UB修复**\n- 文件：`src/AI/HTTPClient.cpp`\n- 检查资源泄漏\n\n审查报告输出到 `docs/status/audits/wave4_audit.md`，完成后通过 send_message 通知我。",
-    "timestamp": "2026-04-23T01:04:49.116Z",
+    "content": "请立即开始审查 Wave6 的修复（commit 8613108 和 cfc2b33），共8个P1+1个P0修复，14个文件变更。\n\n审查重点：\n1. P0-NEW-2: 模板实例化替换映射 TypedefNameDecl→TemplateTypeParmDecl（3处）— src/Sema/TemplateInstantiation.cpp:92, src/Sema/Sema.cpp:162, src/Sema/ConstraintSatisfaction.cpp\n2. P1-5: CheckCatchMatch catch(...) 添加 return — src/Sema/ExceptionAnalysis.cpp:137-141\n3. P1-6: Lambda 静态变量捕获 err→warn — src/Sema/LambdaAnalysis.cpp:83\n4. P1-8: 整型提升 First 步骤 Identity — src/Sema/Conversion.cpp:697-699\n5. P1-3: Overload::addCandidates 处理 FunctionTemplateDecl — src/Sema/Overload.cpp:245-252\n6. P1-2: ConstraintSatisfaction 完整替换 — src/Sema/ConstraintSatisfaction.cpp\n7. P1-7: 泛型 lambda 推导使用 DeducedArgs — src/Sema/LambdaAnalysis.cpp:220-222\n8. P1-4: InstantiateClassTemplate 完整实现 — src/Sema/TemplateInstantiator.cpp:88-90\n\n特别关注3个风险点：\n- P1-4 InstantiateClassTemplate 新增大量代码，验证 API 签名是否正确\n- P1-3 addTemplateCandidate 方法签名是否匹配\n- P0-NEW-2 addSubstitution 键类型设计意图\n\n输出审查报告到 docs/status/audits/wave6_audit.md，完成后通知我。",
+    "timestamp": "2026-04-23T03:47:03.811Z",
     "read": true
   }
 ]
