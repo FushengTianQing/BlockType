@@ -77,9 +77,10 @@ std::string Mangler::getMangledName(const FunctionDecl *FD) {
     DeclContext *Ctx = FD->getDeclContext()->getParent();
     while (Ctx) {
       if (Ctx->isNamespace()) {
-        auto *NS = reinterpret_cast<NamespaceDecl *>(Ctx);
-        if (!NS->getName().empty()) {
-          NsChain.push_back(NS->getName());
+        if (auto *ND = Ctx->getOwningDecl()) {
+          if (!ND->getName().empty()) {
+            NsChain.push_back(ND->getName());
+          }
         }
       }
       Ctx = Ctx->getParent();
@@ -465,18 +466,17 @@ void Mangler::mangleNestedName(const CXXRecordDecl *RD,
 
   llvm::SmallVector<llvm::StringRef, 8> NameChain;
 
-  // Walk up the parent chain: nested classes first.
-  // Since CXXRecordDecl multiply-inherits from RecordDecl and DeclContext,
-  // we walk the DeclContext parent chain and cast back via the known kind.
-  const DeclContext *Cur = RD->getDeclContext();
-  while (Cur && Cur->getDeclContextKind() == DeclContextKind::CXXRecord) {
-    // The DeclContext subobject IS part of a CXXRecordDecl; offset back.
-    const auto *RecordCtx = static_cast<const CXXRecordDecl *>(
-        static_cast<const RecordDecl *>(
-            static_cast<const NamedDecl *>(
-                static_cast<const Decl *>(Cur))));
-    NameChain.push_back(RecordCtx->getName());
-    Cur = Cur->getParent();
+  // First, add the record's own name.
+  NameChain.push_back(RD->getName());
+
+  // Walk up the parent chain: nested classes and namespaces.
+  for (DeclContext *ParentCtx = RD->getDeclContext()->getParent();
+       ParentCtx; ParentCtx = ParentCtx->getParent()) {
+    if (ParentCtx->isCXXRecord()) {
+      if (auto *ND = ParentCtx->getOwningDecl()) {
+        NameChain.push_back(ND->getName());
+      }
+    }
   }
 
   // Check if the class's DeclContext has namespace parents.
@@ -485,12 +485,10 @@ void Mangler::mangleNestedName(const CXXRecordDecl *RD,
   DeclContext *Ctx = RD->getDeclContext()->getParent();
   while (Ctx) {
     if (Ctx->isNamespace()) {
-      // The DeclContext for a NamespaceDecl IS the NamespaceDecl itself,
-      // so we can reinterpret_cast. This is safe because DeclContextKind::Namespace
-      // guarantees the object is a NamespaceDecl.
-      auto *NS = reinterpret_cast<NamespaceDecl *>(Ctx);
-      if (!NS->getName().empty()) {
-        NameChain.push_back(NS->getName());
+      if (auto *ND = Ctx->getOwningDecl()) {
+        if (!ND->getName().empty()) {
+          NameChain.push_back(ND->getName());
+        }
       }
     }
     Ctx = Ctx->getParent();
@@ -507,9 +505,10 @@ bool Mangler::hasNamespaceParent(const CXXRecordDecl *RD) {
   DeclContext *Ctx = RD->getDeclContext()->getParent();
   while (Ctx) {
     if (Ctx->isNamespace()) {
-      auto *NS = reinterpret_cast<const NamespaceDecl *>(Ctx);
-      if (!NS->getName().empty())
-        return true;
+      if (auto *ND = Ctx->getOwningDecl()) {
+        if (!ND->getName().empty())
+          return true;
+      }
     }
     Ctx = Ctx->getParent();
   }

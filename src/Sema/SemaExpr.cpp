@@ -656,7 +656,7 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
 
   if (!FD) {
     // During incremental migration, fall back to creating a CallExpr
-    // without full resolution. ProcessAST will handle it later.
+    // without full resolution.
     auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
     return ExprResult(CE);
   }

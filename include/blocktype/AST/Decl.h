@@ -224,7 +224,9 @@ public:
         Body(Body), IsInline(IsInline), IsConstexpr(IsConstexpr),
         IsConsteval(IsConsteval),
         HasNoexceptSpec(HasNoexceptSpec), NoexceptValue(NoexceptValue),
-        NoexceptExpr(NoexceptExpr), Attrs(Attrs) {}
+        NoexceptExpr(NoexceptExpr), Attrs(Attrs) {
+    setOwningDecl(this);
+  }
 
   llvm::ArrayRef<ParmVarDecl *> getParams() const { return Params; }
   unsigned getNumParams() const { return Params.size(); }
@@ -677,7 +679,9 @@ public:
       : RecordDecl(Loc, Name, TK), DeclContext(DeclContextKind::CXXRecord),
         HasDefaultConstructor(false), HasCopyConstructor(false),
         HasMoveConstructor(false), HasDestructor(false),
-        CurrentAccess(TK == TK_class ? 0 : 2) {}
+        CurrentAccess(TK == TK_class ? 0 : 2) {
+    setOwningDecl(this);
+  }
 
   // Base classes
   llvm::ArrayRef<BaseSpecifier> bases() const { return Bases; }
@@ -972,7 +976,9 @@ class NamespaceDecl : public NamedDecl, public DeclContext {
 public:
   NamespaceDecl(SourceLocation Loc, llvm::StringRef Name, bool IsInline = false)
       : NamedDecl(Loc, Name), DeclContext(DeclContextKind::Namespace),
-        IsInline(IsInline) {}
+        IsInline(IsInline) {
+    setOwningDecl(this);
+  }
 
   void addDecl(Decl *D) { DeclContext::addDecl(D); }
   void addDecl(NamedDecl *D) { DeclContext::addDecl(D); }

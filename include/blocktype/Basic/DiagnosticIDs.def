@@ -242,6 +242,9 @@ DIAG(warn_unreachable_catch, Warning, \
 DIAG(err_lambda_capture_odr_use, Error, \
   "variable '%0' is captured by reference but not odr-usable", \
   "变量 '%0' 被引用捕获但不可 ODR 使用")
+DIAG(warn_lambda_capture_static, Warning, \
+  "capturing static variable '%0' is unnecessary; it is always accessible", \
+  "捕获静态变量 '%0' 是不必要的；它始终可访问")
 DIAG(err_lambda_init_capture_deduction_failed, Error, \
   "cannot deduce type for init capture '%0'", \
   "无法推导初始化捕获 '%0' 的类型")

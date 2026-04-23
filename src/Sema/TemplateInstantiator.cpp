@@ -85,9 +85,107 @@ CXXRecordDecl *TemplateInstantiator::InstantiateClassTemplate(
     return Existing;
   }
   
-  // TODO: Implement full class template instantiation
-  // For now, return the templated declaration as a placeholder
-  return llvm::dyn_cast<CXXRecordDecl>(ClassTemplate->getTemplatedDecl());
+  // Get the templated declaration
+  Decl *TemplatedDecl = ClassTemplate->getTemplatedDecl();
+  auto *OriginalRecord = llvm::dyn_cast_or_null<CXXRecordDecl>(TemplatedDecl);
+  if (!OriginalRecord) {
+    return nullptr;
+  }
+  
+  // Build substitution map from template parameters to arguments
+  TemplateInstantiation Inst;
+  auto Params = ClassTemplate->getTemplateParameters();
+  for (unsigned i = 0; i < std::min(TemplateArgs.size(), Params.size()); ++i) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(Params[i])) {
+      Inst.addSubstitution(ParamDecl, TemplateArgs[i]);
+    }
+  }
+  
+  // Create a new CXXRecordDecl for the specialization
+  ASTContext &Context = SemaRef.getASTContext();
+  auto *SpecializedRecord = Context.create<CXXRecordDecl>(
+      OriginalRecord->getLocation(),
+      OriginalRecord->getName(),
+      OriginalRecord->getTagKind());
+  
+  // Clone base classes with substituted types
+  for (const auto &Base : OriginalRecord->bases()) {
+    QualType SubstBaseType = Inst.substituteType(Base.getType());
+    if (!SubstBaseType.isNull()) {
+      SpecializedRecord->addBase(CXXRecordDecl::BaseSpecifier(
+          SubstBaseType, Base.getLocation(), Base.isVirtual(),
+          Base.isBaseOfClass(), Base.getAccessSpecifier()));
+    }
+  }
+  
+  // Clone fields with substituted types
+  for (auto *Field : OriginalRecord->fields()) {
+    QualType SubstFieldType = Inst.substituteType(Field->getType());
+    auto *NewField = Context.create<FieldDecl>(
+        Field->getLocation(),
+        Field->getName(),
+        SubstFieldType,
+        Field->getBitWidth(),
+        Field->isMutable(),
+        Field->getInClassInitializer(),
+        Field->getAccess());
+    SpecializedRecord->addFieldWithParent(NewField, SpecializedRecord);
+  }
+  
+  // Clone methods with substituted signatures
+  for (auto *Method : OriginalRecord->methods()) {
+    // Substitute the method's type
+    QualType SubstMethodType = Inst.substituteType(Method->getType());
+    
+    // Clone parameters with substituted types
+    llvm::SmallVector<ParmVarDecl *, 4> ClonedParams;
+    for (auto *Param : Method->getParams()) {
+      QualType SubstParamType = Inst.substituteType(Param->getType());
+      auto *ClonedParam = Context.create<ParmVarDecl>(
+          Param->getLocation(),
+          Param->getName(),
+          SubstParamType,
+          Param->getFunctionScopeIndex(),
+          Param->getDefaultArg());
+      ClonedParams.push_back(ClonedParam);
+    }
+    
+    auto *NewMethod = Context.create<CXXMethodDecl>(
+        Method->getLocation(),
+        Method->getName(),
+        SubstMethodType,
+        ClonedParams,
+        SpecializedRecord,
+        Method->getBody(),
+        Method->isStatic(),
+        Method->isConst(),
+        Method->isVolatile(),
+        Method->isVirtual(),
+        Method->isPureVirtual(),
+        Method->isOverride(),
+        Method->isFinal(),
+        Method->isDefaulted(),
+        Method->isDeleted(),
+        Method->getRefQualifier(),
+        Method->hasNoexceptSpec(),
+        Method->getNoexceptValue(),
+        Method->getNoexceptExpr(),
+        Method->getAccess());
+    SpecializedRecord->addMethod(NewMethod);
+  }
+  
+  // Mark the specialized record as complete
+  SpecializedRecord->setCompleteDefinition();
+  
+  // Register the specialization
+  ClassTemplate->addSpecialization(
+      Context.create<ClassTemplateSpecializationDecl>(
+          OriginalRecord->getLocation(),
+          OriginalRecord->getName(),
+          ClassTemplate,
+          TemplateArgs));
+  
+  return SpecializedRecord;
 }
 
 Expr *TemplateInstantiator::InstantiateFoldExpr(

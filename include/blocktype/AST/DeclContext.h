@@ -59,6 +59,12 @@ class DeclContext {
   /// The kind of this context.
   DeclContextKind ContextKind;
 
+  /// Pointer to the NamedDecl that owns this DeclContext.
+  /// For mixin classes (CXXRecordDecl, NamespaceDecl, FunctionDecl),
+  /// this points to the NamedDecl base subobject. For standalone
+  /// DeclContexts, this is nullptr.
+  class NamedDecl *OwningDecl = nullptr;
+
   /// All declarations in this context (in order of appearance).
   llvm::SmallVector<Decl *, 32> Decls;
 
@@ -175,6 +181,13 @@ public:
 
   /// Dump this context for debugging.
   void dumpDeclContext(llvm::raw_ostream &OS, unsigned Indent = 0) const;
+
+  /// Get the NamedDecl that owns this DeclContext.
+  /// Returns nullptr for standalone contexts or if not set.
+  class NamedDecl *getOwningDecl() const { return OwningDecl; }
+
+  /// Set the owning NamedDecl (called by classes that mixin DeclContext).
+  void setOwningDecl(class NamedDecl *ND) { OwningDecl = ND; }
 };
 
 } // namespace blocktype

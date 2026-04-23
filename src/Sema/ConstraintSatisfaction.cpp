@@ -81,7 +81,7 @@ bool ConstraintSatisfaction::CheckConceptSatisfaction(
     if (auto *TPL = TD->getTemplateParameterList()) {
       auto ParamDecls = TPL->getParams();
       for (unsigned i = 0; i < std::min(Args.size(), ParamDecls.size()); ++i) {
-        if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(ParamDecls[i])) {
+        if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(ParamDecls[i])) {
           CurrentSubstInst.addSubstitution(ParamDecl, Args[i]);
         }
       }
@@ -233,7 +233,11 @@ bool ConstraintSatisfaction::EvaluateCompoundRequirement(
     // Use the stored TemplateInstantiation for type substitution.
     if (E->getType().getTypePtr() && E->getType()->isDependentType()) {
       QualType SubstType = CurrentSubstInst.substituteType(E->getType());
-      (void)SubstType;
+      if (!SubstType.isNull()) {
+        // Apply the substituted type to the expression for downstream checks.
+        // Per C++ [temp.constr]: substitution must be applied before evaluation.
+        E->setType(SubstType);
+      }
     }
   }
 

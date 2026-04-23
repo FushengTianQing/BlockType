@@ -80,9 +80,8 @@ bool LambdaAnalysis::CheckCaptureODRUse(LambdaExpr *Lambda) {
       if (VD->isStatic()) {
         // Static variables don't need capture at all — they're always accessible
         // Warn about unnecessary capture
-        SemaRef.Diag(Capture.Loc, DiagID::err_lambda_capture_odr_use,
+        SemaRef.Diag(Capture.Loc, DiagID::warn_lambda_capture_static,
                      Capture.Name);
-        HasErrors = true;
         continue;
       }
 
@@ -217,8 +216,27 @@ QualType LambdaAnalysis::DeduceGenericLambdaCallOperatorType(
     }
   }
 
-  // If we deduced any template arguments, return the deduced return type
-  // For now, we return the lambda's declared return type
+  // If we deduced any template arguments, substitute them into the return type.
+  // For generic lambdas, the return type may contain auto/TemplateTypeParmType
+  // that needs to be resolved from the deduced arguments.
+  if (!DeducedArgs.empty() && Lambda->getReturnType().getTypePtr()) {
+    TemplateInstantiation Inst;
+    TemplateParameterList *TPL = Lambda->getTemplateParameters();
+    if (TPL) {
+      auto TPLParams = TPL->getParams();
+      for (unsigned I = 0; I < std::min(DeducedArgs.size(), TPLParams.size()); ++I) {
+        if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(TPLParams[I])) {
+          Inst.addSubstitution(ParamDecl, DeducedArgs[I]);
+        }
+      }
+    }
+    QualType SubstReturnType = Inst.substituteType(Lambda->getReturnType());
+    if (!SubstReturnType.isNull()) {
+      return SubstReturnType;
+    }
+  }
+
+  // Fallback: return the lambda's declared return type as-is
   return Lambda->getReturnType();
 }
 

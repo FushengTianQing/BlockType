@@ -246,8 +246,14 @@ void OverloadCandidateSet::addCandidates(const LookupResult &R) {
   for (auto *D : R.getDecls()) {
     if (auto *FD = llvm::dyn_cast<FunctionDecl>(D)) {
       addCandidate(FD);
+    } else if (auto *FTD = llvm::dyn_cast<FunctionTemplateDecl>(D)) {
+      // Add as a template candidate — the caller is responsible for
+      // deducing template arguments and instantiating before viability check.
+      if (auto *TemplatedFD = llvm::dyn_cast_or_null<FunctionDecl>(
+              FTD->getTemplatedDecl())) {
+        addTemplateCandidate(TemplatedFD, FTD);
+      }
     }
-    // TODO: handle FunctionTemplateDecl by attempting instantiation
   }
 }
 

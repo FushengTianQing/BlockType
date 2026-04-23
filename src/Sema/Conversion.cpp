@@ -694,7 +694,7 @@ ConversionChecker::GetStandardConversion(QualType From, QualType To) {
 
   // 2. Check for integral promotion
   if (isIntegralPromotion(From, To)) {
-    SCS.setFirst(StandardConversionKind::LvalueTransformation);
+    SCS.setFirst(StandardConversionKind::Identity);
     SCS.setThird(StandardConversionKind::Promotion);
     SCS.setRank(ConversionRank::Promotion);
     return SCS;
@@ -702,7 +702,7 @@ ConversionChecker::GetStandardConversion(QualType From, QualType To) {
 
   // 3. Check for floating-point promotion
   if (isFloatingPointPromotion(From, To)) {
-    SCS.setFirst(StandardConversionKind::LvalueTransformation);
+    SCS.setFirst(StandardConversionKind::Identity);
     SCS.setThird(StandardConversionKind::Promotion);
     SCS.setRank(ConversionRank::Promotion);
     return SCS;

@@ -138,6 +138,7 @@ CatchMatchResult ExceptionAnalysis::CheckCatchMatch(
     // catch(...) is represented as catch(void) or catch(auto)
     // in some implementations. For now, we check if it's a
     // catch-all pattern.
+    return CatchMatchResult::ExactMatch;
   }
 
   const Type *CatchTy = CatchType.getTypePtr();

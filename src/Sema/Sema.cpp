@@ -2187,7 +2187,7 @@ ExprResult Sema::ActOnCallExpr(Expr *Fn, llvm::ArrayRef<Expr *> Args,
 
   if (!FD) {
     // During incremental migration, fall back to creating a CallExpr
-    // without full resolution. ProcessAST will handle it later.
+    // without full resolution.
     auto *CE = Context.create<CallExpr>(LParenLoc, Fn, Args);
     return ExprResult(CE);
   }
@@ -3192,7 +3192,7 @@ FunctionDecl *Sema::InstantiateFunctionTemplate(
   
   // Build substitution map from template parameters to arguments
   for (unsigned i = 0; i < std::min(TemplateArgs.size(), Params.size()); ++i) {
-    if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(Params[i])) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(Params[i])) {
       Inst.addSubstitution(ParamDecl, TemplateArgs[i]);
     }
   }

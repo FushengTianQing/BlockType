@@ -8,6 +8,7 @@
 
 #include "blocktype/Sema/TemplateInstantiation.h"
 #include "blocktype/AST/ASTContext.h"
+#include "blocktype/AST/Decl.h"
 #include "blocktype/AST/StmtCloner.h"
 #include "blocktype/AST/TemplateParameterList.h"
 #include "llvm/Support/raw_ostream.h"
@@ -89,7 +90,7 @@ FunctionDecl *TemplateInstantiation::substituteFunctionSignature(
   // Build substitution map
   auto ParamDecls = Params->getParams();
   for (unsigned i = 0; i < std::min(Args.size(), ParamDecls.size()); ++i) {
-    if (auto *ParamDecl = llvm::dyn_cast_or_null<TypedefNameDecl>(ParamDecls[i])) {
+    if (auto *ParamDecl = llvm::dyn_cast_or_null<TemplateTypeParmDecl>(ParamDecls[i])) {
       MutableInst.addSubstitution(ParamDecl, Args[i]);
     }
   }
