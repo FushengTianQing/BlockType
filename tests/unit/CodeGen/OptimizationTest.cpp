@@ -213,21 +213,21 @@ TEST_F(OptimizationTest, GenerateObjectFile) {
   ASSERT_NE(FD, -1);
   close(FD);
 
+  // RAII cleanup guard
+  struct TempFileGuard {
+    std::string Path;
+    ~TempFileGuard() { std::remove(Path.c_str()); }
+  } Guard{OutputPath};
+
   bool Result = Instance.generateObjectFile(*M, OutputPath);
   EXPECT_TRUE(Result);
 
   // Verify the file was created and is non-empty
   std::error_code EC;
-  llvm::sys::fs::file_status Status;
-  EC = llvm::sys::fs::status(OutputPath, Status);
-  EXPECT_FALSE(EC);
   uint64_t FileSize = 0;
   EC = llvm::sys::fs::file_size(OutputPath, FileSize);
   EXPECT_FALSE(EC);
   EXPECT_GT(FileSize, 0u);
-
-  // Clean up
-  std::remove(OutputPath.c_str());
 }
 
 // === Test: macOS ARM64 Target Code Generation ===
@@ -247,6 +247,12 @@ TEST_F(OptimizationTest, macOSARM64TargetCodeGeneration) {
   ASSERT_NE(FD, -1);
   close(FD);
 
+  // RAII cleanup guard
+  struct TempFileGuard {
+    std::string Path;
+    ~TempFileGuard() { std::remove(Path.c_str()); }
+  } Guard{OutputPath};
+
   bool Result = Instance.generateObjectFile(*M, OutputPath);
   EXPECT_TRUE(Result);
 
@@ -256,9 +262,6 @@ TEST_F(OptimizationTest, macOSARM64TargetCodeGeneration) {
   EC2 = llvm::sys::fs::file_size(OutputPath, FileSize);
   EXPECT_FALSE(EC2);
   EXPECT_GT(FileSize, 0u);
-
-  // Clean up
-  std::remove(OutputPath.c_str());
 }
 
 // === Test: generateObjectFile With Optimization ===
@@ -282,6 +285,12 @@ TEST_F(OptimizationTest, GenerateObjectFileWithOptimization) {
   ASSERT_NE(FD, -1);
   close(FD);
 
+  // RAII cleanup guard
+  struct TempFileGuard {
+    std::string Path;
+    ~TempFileGuard() { std::remove(Path.c_str()); }
+  } Guard{OutputPath};
+
   bool Result = Instance.generateObjectFile(*M, OutputPath);
   EXPECT_TRUE(Result);
 
@@ -291,9 +300,6 @@ TEST_F(OptimizationTest, GenerateObjectFileWithOptimization) {
   EC3 = llvm::sys::fs::file_size(OutputPath, FileSize2);
   EXPECT_FALSE(EC3);
   EXPECT_GT(FileSize2, 0u);
-
-  // Clean up
-  std::remove(OutputPath.c_str());
 }
 
 // === Test: TargetMachine Creation for Default Triple ===
