@@ -5,9 +5,9 @@
 #include <memory>
 #include <ostream>
 #include <string>
-#include <string_view>
 #include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRConstant.h"
 #include "blocktype/IR/IRFunction.h"
 #include "blocktype/IR/IRTypeContext.h"
@@ -43,11 +43,11 @@ class IRFunctionDecl {
   CallingConvention CallConv;
 
 public:
-  IRFunctionDecl(std::string_view N, IRFunctionType* T,
+  IRFunctionDecl(StringRef N, IRFunctionType* T,
                  LinkageKind L = LinkageKind::External,
                  CallingConvention CC = CallingConvention::C);
 
-  std::string_view getName() const { return Name; }
+  StringRef getName() const { return Name; }
   IRFunctionType* getFunctionType() const { return Ty; }
   LinkageKind getLinkage() const { return Linkage; }
   CallingConvention getCallingConv() const { return CallConv; }
@@ -64,11 +64,11 @@ class IRGlobalVariable {
   unsigned AddressSpace = 0;
 
 public:
-  IRGlobalVariable(std::string_view N, IRType* T, bool IsConst,
+  IRGlobalVariable(StringRef N, IRType* T, bool IsConst,
                    LinkageKind L = LinkageKind::External,
                    IRConstant* Init = nullptr, unsigned Align = 0, unsigned AS = 0);
 
-  std::string_view getName() const { return Name; }
+  StringRef getName() const { return Name; }
   IRType* getType() const { return Ty; }
   LinkageKind getLinkage() const { return Linkage; }
   IRConstant* getInitializer() const { return Initializer; }
@@ -85,9 +85,9 @@ class IRGlobalAlias {
   IRConstant* Aliasee;
 
 public:
-  IRGlobalAlias(std::string_view N, IRType* T, IRConstant* A);
+  IRGlobalAlias(StringRef N, IRType* T, IRConstant* A);
 
-  std::string_view getName() const { return Name; }
+  StringRef getName() const { return Name; }
   IRType* getType() const { return Ty; }
   IRConstant* getAliasee() const { return Aliasee; }
 };
@@ -107,28 +107,28 @@ class IRModule {
   uint32_t RequiredFeatures = 0;
 
 public:
-  IRModule(std::string_view N, IRTypeContext& Ctx,
-           std::string_view Triple = "", std::string_view DL = "");
+  IRModule(StringRef N, IRTypeContext& Ctx,
+           StringRef Triple = "", StringRef DL = "");
 
-  std::string_view getName() const { return Name; }
-  std::string_view getTargetTriple() const { return TargetTriple; }
-  void setTargetTriple(std::string_view T) { TargetTriple = T; }
+  StringRef getName() const { return Name; }
+  StringRef getTargetTriple() const { return TargetTriple; }
+  void setTargetTriple(StringRef T) { TargetTriple = T.str(); }
   IRTypeContext& getTypeContext() const { return TypeCtx; }
 
   bool isSealed() const { return IsSealed; }
   void seal() { IsSealed = true; }
 
-  IRFunction* getFunction(std::string_view Name) const;
-  IRFunction* getOrInsertFunction(std::string_view Name, IRFunctionType* Ty);
+  IRFunction* getFunction(StringRef Name) const;
+  IRFunction* getOrInsertFunction(StringRef Name, IRFunctionType* Ty);
   void addFunction(std::unique_ptr<IRFunction> F);
   auto& getFunctions() { return Functions; }
   unsigned getNumFunctions() const { return static_cast<unsigned>(Functions.size()); }
 
-  IRFunctionDecl* getFunctionDecl(std::string_view Name) const;
+  IRFunctionDecl* getFunctionDecl(StringRef Name) const;
   void addFunctionDecl(std::unique_ptr<IRFunctionDecl> D);
 
-  IRGlobalVariable* getGlobalVariable(std::string_view Name) const;
-  IRGlobalVariable* getOrInsertGlobal(std::string_view Name, IRType* Ty);
+  IRGlobalVariable* getGlobalVariable(StringRef Name) const;
+  IRGlobalVariable* getOrInsertGlobal(StringRef Name, IRType* Ty);
   void addGlobal(std::unique_ptr<IRGlobalVariable> GV);
   auto& getGlobals() { return Globals; }
 

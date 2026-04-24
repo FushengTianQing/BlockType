@@ -5,9 +5,8 @@
 #include <memory>
 #include <ostream>
 #include <string>
-#include <string_view>
-#include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRBasicBlock.h"
 #include "blocktype/IR/IRType.h"
 #include "blocktype/IR/IRValue.h"
@@ -22,11 +21,11 @@ class IRArgument {
   unsigned Attrs = 0;
 
 public:
-  IRArgument(IRType* T, unsigned No, std::string_view N = "")
-    : ParamType(T), Name(N), ArgNo(No) {}
+  IRArgument(IRType* T, unsigned No, StringRef N = "")
+    : ParamType(T), Name(N.str()), ArgNo(No) {}
 
   IRType* getType() const { return ParamType; }
-  std::string_view getName() const { return Name; }
+  StringRef getName() const { return Name; }
   unsigned getArgNo() const { return ArgNo; }
   bool hasAttr(unsigned A) const { return (Attrs & A) != 0; }
   void addAttr(unsigned A) { Attrs |= A; }
@@ -43,18 +42,18 @@ class IRFunction {
   IRFunctionType* Ty;
   LinkageKind Linkage;
   CallingConvention CallConv;
-  std::vector<std::unique_ptr<IRArgument>> Args;
+  SmallVector<std::unique_ptr<IRArgument>, 8> Args;
   std::list<std::unique_ptr<IRBasicBlock>> BasicBlocks;
   FunctionAttrs Attrs = 0;
   unsigned Alignment = 0;
   std::string Section;
 
 public:
-  IRFunction(IRModule* M, std::string_view N, IRFunctionType* T,
+  IRFunction(IRModule* M, StringRef N, IRFunctionType* T,
              LinkageKind L = LinkageKind::External,
              CallingConvention CC = CallingConvention::C);
 
-  std::string_view getName() const { return Name; }
+  StringRef getName() const { return Name; }
   IRModule* getParent() const { return Parent; }
   IRFunctionType* getFunctionType() const { return Ty; }
   LinkageKind getLinkage() const { return Linkage; }
@@ -66,7 +65,7 @@ public:
   IRArgument* getArg(unsigned i) const { return Args[i].get(); }
   IRType* getArgType(unsigned i) const { return Args[i]->getType(); }
 
-  IRBasicBlock* addBasicBlock(std::string_view Name);
+  IRBasicBlock* addBasicBlock(StringRef Name);
   IRBasicBlock* getEntryBlock();
   auto& getBasicBlocks() { return BasicBlocks; }
   unsigned getNumBasicBlocks() const { return static_cast<unsigned>(BasicBlocks.size()); }

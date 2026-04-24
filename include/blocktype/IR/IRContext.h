@@ -8,9 +8,9 @@
 #include <memory>
 #include <new>
 #include <string>
-#include <string_view>
 #include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRTypeContext.h"
 
 namespace blocktype {
@@ -89,7 +89,7 @@ public:
     Cleanups.push_back(std::move(Callback));
   }
 
-  std::string_view saveString(std::string_view Str);
+  StringRef saveString(StringRef Str);
   IRTypeContext& getTypeContext() { return TypeCtx; }
   size_t getMemoryUsage() const { return Allocator.getTotalMemory(); }
   void setThreadingMode(IRThreadingMode Mode) { ThreadingMode = Mode; }

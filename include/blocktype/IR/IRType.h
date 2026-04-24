@@ -4,8 +4,8 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
-#include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/TargetLayout.h"
 
 namespace blocktype {
@@ -144,19 +144,19 @@ public:
 class IRStructType : public IRType {
   friend class IRTypeContext;
   std::string Name;
-  std::vector<IRType*> FieldTypes;
+  SmallVector<IRType*, 16> FieldTypes;
   bool IsPacked;
   mutable bool IsLayoutComputed = false;
-  mutable std::vector<uint64_t> FieldOffsets;
+  mutable SmallVector<uint64_t, 16> FieldOffsets;
 public:
-  IRStructType(std::string_view N, std::vector<IRType*> F, bool P = false)
-    : IRType(Struct), Name(N), FieldTypes(std::move(F)), IsPacked(P) {}
-  std::string_view getName() const { return Name; }
-  const std::vector<IRType*>& getElements() const { return FieldTypes; }
+  IRStructType(StringRef N, SmallVector<IRType*, 16> F, bool P = false)
+    : IRType(Struct), Name(N.str()), FieldTypes(std::move(F)), IsPacked(P) {}
+  StringRef getName() const { return Name; }
+  ArrayRef<IRType*> getElements() const { return FieldTypes; }
   unsigned getNumFields() const { return static_cast<unsigned>(FieldTypes.size()); }
   IRType* getFieldType(unsigned i) const { return FieldTypes[i]; }
   bool isPacked() const { return IsPacked; }
-  void setBody(std::vector<IRType*> Elems, bool Packed = false) {
+  void setBody(SmallVector<IRType*, 16> Elems, bool Packed = false) {
     FieldTypes = std::move(Elems);
     IsPacked = Packed;
     IsLayoutComputed = false;
@@ -172,15 +172,15 @@ public:
 
 class IRFunctionType : public IRType {
   IRType* ReturnType;
-  std::vector<IRType*> ParamTypes;
+  SmallVector<IRType*, 8> ParamTypes;
   bool IsVarArg;
 public:
-  IRFunctionType(IRType* R, std::vector<IRType*> P, bool VA = false)
+  IRFunctionType(IRType* R, SmallVector<IRType*, 8> P, bool VA = false)
     : IRType(Function), ReturnType(R), ParamTypes(std::move(P)), IsVarArg(VA) {
     assert(R && "ReturnType cannot be null");
   }
   IRType* getReturnType() const { return ReturnType; }
-  const std::vector<IRType*>& getParamTypes() const { return ParamTypes; }
+  ArrayRef<IRType*> getParamTypes() const { return ParamTypes; }
   unsigned getNumParams() const { return static_cast<unsigned>(ParamTypes.size()); }
   IRType* getParamType(unsigned i) const { return ParamTypes[i]; }
   bool isVarArg() const { return IsVarArg; }
@@ -213,9 +213,9 @@ public:
 class IROpaqueType : public IRType {
   std::string Name;
 public:
-  explicit IROpaqueType(std::string_view N)
-    : IRType(Opaque), Name(N) {}
-  std::string_view getName() const { return Name; }
+  explicit IROpaqueType(StringRef N)
+    : IRType(Opaque), Name(N.str()) {}
+  StringRef getName() const { return Name; }
   bool equals(const IRType* Other) const override;
   std::string toString() const override;
   uint64_t getSizeInBits(const TargetLayout&) const override;

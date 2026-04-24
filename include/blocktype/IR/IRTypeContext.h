@@ -5,25 +5,22 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRType.h"
 
 namespace blocktype {
 namespace ir {
 
 class IRTypeContext {
-  std::unordered_map<unsigned, std::unique_ptr<IRIntegerType>> IntTypes;
-  std::unordered_map<unsigned, std::unique_ptr<IRFloatType>> FloatTypes;
-  std::vector<std::unique_ptr<IRPointerType>> PointerTypes;
-  std::vector<std::unique_ptr<IRArrayType>> ArrayTypes;
-  std::vector<std::unique_ptr<IRVectorType>> VectorTypes;
-  std::unordered_map<std::string, std::unique_ptr<IRStructType>> NamedStructTypes;
-  std::unordered_map<std::string, std::unique_ptr<IROpaqueType>> OpaqueTypes;
-  std::vector<std::unique_ptr<IRFunctionType>> FunctionTypes;
+  DenseMap<unsigned, std::unique_ptr<IRIntegerType>> IntTypes;
+  DenseMap<unsigned, std::unique_ptr<IRFloatType>> FloatTypes;
+  FoldingSet<IRPointerType> PointerTypes;
+  FoldingSet<IRArrayType> ArrayTypes;
+  FoldingSet<IRVectorType> VectorTypes;
+  StringMap<std::unique_ptr<IRStructType>> NamedStructTypes;
+  StringMap<std::unique_ptr<IROpaqueType>> OpaqueTypes;
+  FoldingSet<IRFunctionType> FunctionTypes;
   IRVoidType VoidType;
   IRIntegerType BoolType;
   unsigned NumTypesCreated = 0;
@@ -49,13 +46,13 @@ public:
   IRPointerType* getPointerType(IRType* Pointee, unsigned AddressSpace = 0);
   IRArrayType* getArrayType(IRType* Element, uint64_t Count);
   IRVectorType* getVectorType(IRType* Element, unsigned Count);
-  IRStructType* getStructType(std::string_view Name, std::vector<IRType*> Elems, bool Packed = false);
-  IRStructType* getAnonStructType(std::vector<IRType*> Elems, bool Packed = false);
-  bool setStructBody(IRStructType* S, std::vector<IRType*> Elems, bool Packed = false);
-  IRFunctionType* getFunctionType(IRType* Ret, std::vector<IRType*> Params, bool VarArg = false);
-  IROpaqueType* getOpaqueType(std::string_view Name);
-  IRStructType* getStructTypeByName(std::string_view Name) const;
-  IROpaqueType* getOpaqueTypeByName(std::string_view Name) const;
+  IRStructType* getStructType(StringRef Name, SmallVector<IRType*, 16> Elems, bool Packed = false);
+  IRStructType* getAnonStructType(SmallVector<IRType*, 16> Elems, bool Packed = false);
+  bool setStructBody(IRStructType* S, SmallVector<IRType*, 16> Elems, bool Packed = false);
+  IRFunctionType* getFunctionType(IRType* Ret, SmallVector<IRType*, 8> Params, bool VarArg = false);
+  IROpaqueType* getOpaqueType(StringRef Name);
+  IRStructType* getStructTypeByName(StringRef Name) const;
+  IROpaqueType* getOpaqueTypeByName(StringRef Name) const;
   unsigned getNumTypesCreated() const { return NumTypesCreated; }
   size_t getMemoryUsage() const;
 };

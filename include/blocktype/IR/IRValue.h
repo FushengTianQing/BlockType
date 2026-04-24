@@ -6,9 +6,8 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <string_view>
-#include <vector>
 
+#include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRType.h"
 
 namespace blocktype {
@@ -104,15 +103,15 @@ protected:
   std::vector<Use*> UseList;
 
 public:
-  IRValue(ValueKind K, IRType* T, unsigned ID, std::string_view N = "")
-    : Kind(K), Ty(T), ValueID(ID), Name(N) {}
+  IRValue(ValueKind K, IRType* T, unsigned ID, StringRef N = "")
+    : Kind(K), Ty(T), ValueID(ID), Name(N.str()) {}
   virtual ~IRValue() = default;
 
   ValueKind getValueKind() const { return Kind; }
   IRType* getType() const { return Ty; }
   unsigned getValueID() const { return ValueID; }
-  std::string_view getName() const { return Name; }
-  void setName(std::string_view N) { Name = N; }
+  StringRef getName() const { return Name; }
+  void setName(StringRef N) { Name = N.str(); }
   bool isConstant() const { return static_cast<uint8_t>(Kind) <= 8; }
   bool isInstruction() const { return Kind == ValueKind::InstructionResult; }
   bool isArgument() const { return Kind == ValueKind::Argument; }
@@ -128,13 +127,13 @@ protected:
   std::vector<Use> Operands;
 
 public:
-  User(ValueKind K, IRType* T, unsigned ID, std::string_view N = "")
+  User(ValueKind K, IRType* T, unsigned ID, StringRef N = "")
     : IRValue(K, T, ID, N) {}
   unsigned getNumOperands() const { return static_cast<unsigned>(Operands.size()); }
   IRValue* getOperand(unsigned i) const { return Operands[i].get(); }
   void setOperand(unsigned i, IRValue* V) { Operands[i].set(V); }
   void addOperand(IRValue* V);
-  const std::vector<Use>& operands() const { return Operands; }
+  ArrayRef<Use> operands() const { return Operands; }
   IRType* getOperandType(unsigned i) const { return Operands[i].get()->getType(); }
 };
 

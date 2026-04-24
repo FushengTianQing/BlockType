@@ -16,9 +16,9 @@ void IRArgument::print(std::ostream& OS) const {
   }
 }
 
-IRFunction::IRFunction(IRModule* M, std::string_view N, IRFunctionType* T,
+IRFunction::IRFunction(IRModule* M, StringRef N, IRFunctionType* T,
                        LinkageKind L, CallingConvention CC)
-    : Parent(M), Name(N), Ty(T), Linkage(L), CallConv(CC) {
+    : Parent(M), Name(N.str()), Ty(T), Linkage(L), CallConv(CC) {
   unsigned NumParams = T->getNumParams();
   Args.reserve(NumParams);
   for (unsigned i = 0; i < NumParams; ++i) {
@@ -26,7 +26,7 @@ IRFunction::IRFunction(IRModule* M, std::string_view N, IRFunctionType* T,
   }
 }
 
-IRBasicBlock* IRFunction::addBasicBlock(std::string_view BBName) {
+IRBasicBlock* IRFunction::addBasicBlock(StringRef BBName) {
   auto BB = std::make_unique<IRBasicBlock>(BBName, this);
   auto* Ptr = BB.get();
   BasicBlocks.push_back(std::move(BB));

@@ -323,23 +323,23 @@ public:
 };
 
 class IRConstantStruct : public IRConstant {
-  std::vector<IRConstant*> Elements;
+  SmallVector<IRConstant*, 16> Elements;
 
 public:
-  IRConstantStruct(IRStructType* Ty, std::vector<IRConstant*> Elems)
+  IRConstantStruct(IRStructType* Ty, SmallVector<IRConstant*, 16> Elems)
     : IRConstant(ValueKind::ConstantStruct, Ty, 0), Elements(std::move(Elems)) {}
-  const std::vector<IRConstant*>& getElements() const { return Elements; }
+  ArrayRef<IRConstant*> getElements() const { return Elements; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantStruct; }
   void print(std::ostream& OS) const override;
 };
 
 class IRConstantArray : public IRConstant {
-  std::vector<IRConstant*> Elements;
+  SmallVector<IRConstant*, 16> Elements;
 
 public:
-  IRConstantArray(IRArrayType* Ty, std::vector<IRConstant*> Elems)
+  IRConstantArray(IRArrayType* Ty, SmallVector<IRConstant*, 16> Elems)
     : IRConstant(ValueKind::ConstantArray, Ty, 0), Elements(std::move(Elems)) {}
-  const std::vector<IRConstant*>& getElements() const { return Elements; }
+  ArrayRef<IRConstant*> getElements() const { return Elements; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantArray; }
   void print(std::ostream& OS) const override;
 };

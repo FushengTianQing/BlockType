@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "blocktype/IR/ADT.h"
+
 namespace blocktype {
 namespace ir {
 
@@ -19,14 +21,14 @@ class TargetLayout {
   bool IsLittleEndian, IsLinux, IsMacOS;
 
 public:
-  explicit TargetLayout(std::string_view TargetTriple);
+  explicit TargetLayout(StringRef TargetTriple);
 
   uint64_t getTypeSizeInBits(IRType* T) const;
   uint64_t getTypeAlignInBits(IRType* T) const;
   uint64_t getPointerSizeInBits() const { return PointerSize * 8; }
   bool isLittleEndian() const { return IsLittleEndian; }
 
-  static std::unique_ptr<TargetLayout> Create(std::string_view Triple);
+  static std::unique_ptr<TargetLayout> Create(StringRef Triple);
 };
 
 } // namespace ir

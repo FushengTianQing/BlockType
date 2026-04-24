@@ -81,8 +81,8 @@ std::unique_ptr<IRInstruction> IRBasicBlock::erase(IRInstruction* I) {
   return nullptr;
 }
 
-std::vector<IRBasicBlock*> IRBasicBlock::getPredecessors() const {
-  std::vector<IRBasicBlock*> Preds;
+SmallVector<IRBasicBlock*, 4> IRBasicBlock::getPredecessors() const {
+  SmallVector<IRBasicBlock*, 4> Preds;
   if (!Parent) return Preds;
   for (auto& BB : Parent->getBasicBlocks()) {
     if (BB.get() == this) continue;
@@ -98,8 +98,8 @@ std::vector<IRBasicBlock*> IRBasicBlock::getPredecessors() const {
   return Preds;
 }
 
-std::vector<IRBasicBlock*> IRBasicBlock::getSuccessors() const {
-  std::vector<IRBasicBlock*> Succs;
+SmallVector<IRBasicBlock*, 4> IRBasicBlock::getSuccessors() const {
+  SmallVector<IRBasicBlock*, 4> Succs;
   auto* Term = getTerminator();
   if (!Term) return Succs;
   for (unsigned i = 0; i < Term->getNumSuccessors(); ++i) {

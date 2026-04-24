@@ -5,34 +5,34 @@
 namespace blocktype {
 namespace ir {
 
-IRFunctionDecl::IRFunctionDecl(std::string_view N, IRFunctionType* T,
+IRFunctionDecl::IRFunctionDecl(StringRef N, IRFunctionType* T,
                                LinkageKind L, CallingConvention CC)
-    : Name(N), Ty(T), Linkage(L), CallConv(CC) {}
+    : Name(N.str()), Ty(T), Linkage(L), CallConv(CC) {}
 
-IRGlobalVariable::IRGlobalVariable(std::string_view N, IRType* T, bool IsConst,
+IRGlobalVariable::IRGlobalVariable(StringRef N, IRType* T, bool IsConst,
                                    LinkageKind L, IRConstant* Init,
                                    unsigned Align, unsigned AS)
-    : Name(N), Ty(T), Linkage(L), Initializer(Init),
+    : Name(N.str()), Ty(T), Linkage(L), Initializer(Init),
       Alignment(Align), IsConstant(IsConst), AddressSpace(AS) {}
 
-IRGlobalAlias::IRGlobalAlias(std::string_view N, IRType* T, IRConstant* A)
-    : Name(N), Ty(T), Aliasee(A) {}
+IRGlobalAlias::IRGlobalAlias(StringRef N, IRType* T, IRConstant* A)
+    : Name(N.str()), Ty(T), Aliasee(A) {}
 
-IRModule::IRModule(std::string_view N, IRTypeContext& Ctx,
-                   std::string_view Triple, std::string_view DL)
-    : TypeCtx(Ctx), Name(N), TargetTriple(Triple), DataLayoutStr(DL) {}
+IRModule::IRModule(StringRef N, IRTypeContext& Ctx,
+                   StringRef Triple, StringRef DL)
+    : TypeCtx(Ctx), Name(N.str()), TargetTriple(Triple.str()), DataLayoutStr(DL.str()) {}
 
-IRFunction* IRModule::getFunction(std::string_view FuncName) const {
+IRFunction* IRModule::getFunction(StringRef FuncName) const {
   for (auto& F : Functions) {
-    if (F->getName() == FuncName) return F.get();
+    if (StringRef(F->getName()) == FuncName) return F.get();
   }
   return nullptr;
 }
 
-IRFunction* IRModule::getOrInsertFunction(std::string_view FuncName, IRFunctionType* FTy) {
+IRFunction* IRModule::getOrInsertFunction(StringRef FuncName, IRFunctionType* FTy) {
   assert(!IsSealed && "Cannot modify sealed module");
   for (auto& F : Functions) {
-    if (F->getName() == FuncName) {
+    if (StringRef(F->getName()) == FuncName) {
       if (F->getFunctionType() == FTy) return F.get();
       return nullptr;
     }
@@ -49,9 +49,9 @@ void IRModule::addFunction(std::unique_ptr<IRFunction> F) {
   Functions.push_back(std::move(F));
 }
 
-IRFunctionDecl* IRModule::getFunctionDecl(std::string_view DeclName) const {
+IRFunctionDecl* IRModule::getFunctionDecl(StringRef DeclName) const {
   for (auto& D : FunctionDecls) {
-    if (D->getName() == DeclName) return D.get();
+    if (StringRef(D->getName()) == DeclName) return D.get();
   }
   return nullptr;
 }
@@ -61,17 +61,17 @@ void IRModule::addFunctionDecl(std::unique_ptr<IRFunctionDecl> D) {
   FunctionDecls.push_back(std::move(D));
 }
 
-IRGlobalVariable* IRModule::getGlobalVariable(std::string_view GlobalName) const {
+IRGlobalVariable* IRModule::getGlobalVariable(StringRef GlobalName) const {
   for (auto& GV : Globals) {
-    if (GV->getName() == GlobalName) return GV.get();
+    if (StringRef(GV->getName()) == GlobalName) return GV.get();
   }
   return nullptr;
 }
 
-IRGlobalVariable* IRModule::getOrInsertGlobal(std::string_view GlobalName, IRType* Ty) {
+IRGlobalVariable* IRModule::getOrInsertGlobal(StringRef GlobalName, IRType* Ty) {
   assert(!IsSealed && "Cannot modify sealed module");
   for (auto& GV : Globals) {
-    if (GV->getName() == GlobalName) {
+    if (StringRef(GV->getName()) == GlobalName) {
       if (GV->getType() == Ty) return GV.get();
       return nullptr;
     }
