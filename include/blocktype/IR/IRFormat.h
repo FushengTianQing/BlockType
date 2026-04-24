@@ -23,6 +23,7 @@ struct IRFormatVersion {
   std::string toString() const;
 };
 
+#pragma pack(push, 1)
 struct IRFileHeader {
   char Magic[4] = {'B', 'T', 'I', 'R'};
   IRFormatVersion Version = IRFormatVersion::Current();
@@ -31,6 +32,7 @@ struct IRFileHeader {
   uint32_t StringTableOffset = 0;
   uint32_t StringTableSize = 0;
 };
+#pragma pack(pop)
 
 } // namespace ir
 } // namespace blocktype
