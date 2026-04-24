@@ -308,11 +308,20 @@ std::shared_ptr<CompilerInvocation> createCompilerInvocation() {
 }
 
 int main(int argc, char *argv[]) {
-  // Initialize LLVM Target components (must be called before any Target operations)
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmPrinters();
-  llvm::InitializeAllAsmParsers();
+  // Initialize LLVM Target components for supported platforms only.
+  // We only link AArch64 and X86 backends, so we must not call
+  // InitializeAll*() which would reference symbols from unlinked backends.
+  LLVMInitializeX86TargetInfo();
+  LLVMInitializeX86Target();
+  LLVMInitializeX86TargetMC();
+  LLVMInitializeX86AsmPrinter();
+  LLVMInitializeX86AsmParser();
+
+  LLVMInitializeAArch64TargetInfo();
+  LLVMInitializeAArch64Target();
+  LLVMInitializeAArch64TargetMC();
+  LLVMInitializeAArch64AsmPrinter();
+  LLVMInitializeAArch64AsmParser();
 
   // 解析命令行参数
   cl::HideUnrelatedOptions(BlockTypeCategory);
