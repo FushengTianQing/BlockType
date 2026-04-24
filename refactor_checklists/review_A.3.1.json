@@ -4,31 +4,161 @@
   "description": "审查代码 checklist",
   "warning": "严格按照文档要点，完全实现。禁止简化参数、函数、算法。",
   "items": [
-    {"id": "R.01", "status": "done", "category": "接口签名", "item": "逐项对标任务流文档中的 class/struct/enum/函数签名，确认完全一致"},
-    {"id": "R.02", "status": "done", "category": "接口签名", "item": "核对构造函数参数（含默认参数），确认与文档一致"},
-    {"id": "R.03", "status": "done", "category": "接口签名", "item": "核对返回值类型，确认与文档一致"},
-    {"id": "R.04", "status": "done", "category": "接口签名", "item": "核对 const 修饰，确认与文档一致"},
-    {"id": "R.05", "status": "done", "category": "命名空间", "item": "确认所有代码在 namespace blocktype::ir 中"},
-    {"id": "R.06", "status": "done", "category": "命名空间", "item": "确认 DialectID 在 namespace blocktype::ir::dialect 中（不适用）"},
-    {"id": "R.07", "status": "done", "category": "文件路径", "item": "确认头文件在 include/blocktype/IR/ 下（文件名 IRFormat.h vs 文档 IRFormatVersion.h，内容完整）"},
-    {"id": "R.08", "status": "done", "category": "文件路径", "item": "确认源文件在 src/IR/ 下（文件名 IRFormat.cpp vs 文档 IRFormatVersion.cpp，内容完整）"},
-    {"id": "R.09", "status": "done", "category": "依赖限制", "item": "确认 libblocktype-ir 不链接 LLVM（grep CMakeLists.txt 无 llvm）"},
-    {"id": "R.10", "status": "done", "category": "依赖限制", "item": "确认不 #include 任何 llvm/ 头文件（grep IRFormat.h/IRFormat.cpp 无 llvm）"},
-    {"id": "R.11", "status": "done", "category": "持有关系", "item": "核对持有关系（不适用，A.3.1 为 POD struct）"},
-    {"id": "R.12", "status": "done", "category": "调用关系", "item": "核对调用关系（不适用）"},
-    {"id": "R.13", "status": "done", "category": "生命周期", "item": "核对生命周期约束（不适用）"},
-    {"id": "R.14", "status": "done", "category": "内存管理", "item": "核对内存管理规则（不适用）"},
-    {"id": "R.15", "status": "done", "category": "实现约束", "item": "逐项核对实现约束：版本号独立/魔数BTIR/兼容性语义/sizeof常量"},
-    {"id": "R.16", "status": "done", "category": "验收标准", "item": "逐项执行验收断言（test_ir_format.cpp 编译运行通过）"},
-    {"id": "R.17", "status": "done", "category": "编译", "item": "确认编译通过，无错误无警告"},
-    {"id": "R.18", "status": "done", "category": "代码质量", "item": "检查是否有占位符实现（无）"},
-    {"id": "R.19", "status": "done", "category": "代码质量", "item": "检查是否有 TODO/FIXME/HACK（无）"},
-    {"id": "R.20", "status": "done", "category": "代码质量", "item": "检查是否有硬编码的魔法数字（仅版本号和魔数定义，合理）"},
-    {"id": "R.21", "status": "done", "category": "完整性", "item": "确认所有产出文件已创建（IRFormat.h + IRFormat.cpp，文件名与文档略有差异但内容完整）"},
-    {"id": "R.22", "status": "done", "category": "完整性", "item": "确认所有枚举值已定义（不适用）"},
-    {"id": "R.23", "status": "done", "category": "完整性", "item": "确认所有方法已实现（Current/isCompatibleWith/toString）"},
-    {"id": "R.24", "status": "done", "category": "严禁简化", "item": "对照文档核查：所有字段和方法完整实现，无简化"},
-    {"id": "R.25", "status": "done", "category": "Git", "item": "确认 Git 提交信息格式正确"},
-    {"id": "R.26", "status": "done", "category": "Git", "item": "确认已推送到远端"}
+    {
+      "id": "R.01",
+      "status": "done",
+      "category": "接口签名",
+      "item": "逐项对标任务流文档中的 class/struct/enum/函数签名，确认完全一致"
+    },
+    {
+      "id": "R.02",
+      "status": "done",
+      "category": "接口签名",
+      "item": "核对构造函数参数（含默认参数），确认与文档一致"
+    },
+    {
+      "id": "R.03",
+      "status": "done",
+      "category": "接口签名",
+      "item": "核对返回值类型，确认与文档一致"
+    },
+    {
+      "id": "R.04",
+      "status": "done",
+      "category": "接口签名",
+      "item": "核对 const 修饰，确认与文档一致"
+    },
+    {
+      "id": "R.05",
+      "status": "done",
+      "category": "命名空间",
+      "item": "确认所有代码在 namespace blocktype::ir 中"
+    },
+    {
+      "id": "R.06",
+      "status": "done",
+      "category": "命名空间",
+      "item": "确认 DialectID 在 namespace blocktype::ir::dialect 中（不适用）"
+    },
+    {
+      "id": "R.07",
+      "status": "done",
+      "category": "文件路径",
+      "item": "确认头文件在 include/blocktype/IR/ 下（文件名 IRFormat.h vs 文档 IRFormatVersion.h，内容完整）"
+    },
+    {
+      "id": "R.08",
+      "status": "done",
+      "category": "文件路径",
+      "item": "确认源文件在 src/IR/ 下（文件名 IRFormat.cpp vs 文档 IRFormatVersion.cpp，内容完整）"
+    },
+    {
+      "id": "R.09",
+      "status": "done",
+      "category": "依赖限制",
+      "item": "确认 libblocktype-ir 不链接 LLVM（grep CMakeLists.txt 无 llvm）"
+    },
+    {
+      "id": "R.10",
+      "status": "done",
+      "category": "依赖限制",
+      "item": "确认不 #include 任何 llvm/ 头文件（grep IRFormat.h/IRFormat.cpp 无 llvm）"
+    },
+    {
+      "id": "R.11",
+      "status": "done",
+      "category": "持有关系",
+      "item": "核对持有关系（不适用，A.3.1 为 POD struct）"
+    },
+    {
+      "id": "R.12",
+      "status": "done",
+      "category": "调用关系",
+      "item": "核对调用关系（不适用）"
+    },
+    {
+      "id": "R.13",
+      "status": "done",
+      "category": "生命周期",
+      "item": "核对生命周期约束（不适用）"
+    },
+    {
+      "id": "R.14",
+      "status": "done",
+      "category": "内存管理",
+      "item": "核对内存管理规则（不适用）"
+    },
+    {
+      "id": "R.15",
+      "status": "done",
+      "category": "实现约束",
+      "item": "逐项核对实现约束：版本号独立/魔数BTIR/兼容性语义/sizeof常量"
+    },
+    {
+      "id": "R.16",
+      "status": "done",
+      "category": "验收标准",
+      "item": "逐项执行验收断言（test_ir_format.cpp 编译运行通过）"
+    },
+    {
+      "id": "R.17",
+      "status": "done",
+      "category": "编译",
+      "item": "确认编译通过，无错误无警告"
+    },
+    {
+      "id": "R.18",
+      "status": "done",
+      "category": "代码质量",
+      "item": "检查是否有占位符实现（无）"
+    },
+    {
+      "id": "R.19",
+      "status": "done",
+      "category": "代码质量",
+      "item": "检查是否有 TODO/FIXME/HACK（无）"
+    },
+    {
+      "id": "R.20",
+      "status": "done",
+      "category": "代码质量",
+      "item": "检查是否有硬编码的魔法数字（仅版本号和魔数定义，合理）"
+    },
+    {
+      "id": "R.21",
+      "status": "done",
+      "category": "完整性",
+      "item": "确认所有产出文件已创建（IRFormat.h + IRFormat.cpp，文件名与文档略有差异但内容完整）"
+    },
+    {
+      "id": "R.22",
+      "status": "done",
+      "category": "完整性",
+      "item": "确认所有枚举值已定义（不适用）"
+    },
+    {
+      "id": "R.23",
+      "status": "done",
+      "category": "完整性",
+      "item": "确认所有方法已实现（Current/isCompatibleWith/toString）"
+    },
+    {
+      "id": "R.24",
+      "status": "done",
+      "category": "严禁简化",
+      "item": "对照文档核查：所有字段和方法完整实现，无简化"
+    },
+    {
+      "id": "R.25",
+      "status": "done",
+      "category": "Git",
+      "item": "确认 Git 提交信息格式正确"
+    },
+    {
+      "id": "R.26",
+      "status": "done",
+      "category": "Git",
+      "item": "确认已推送到远端"
+    }
   ]
 }

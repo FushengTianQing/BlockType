@@ -568,3 +568,5 @@
 [2026-04-24T18:02:49Z] [INFO] 审查 checklist 已存在: refactor_checklists/review_A.3.1.json
 [2026-04-24T18:02:49Z] [INFO] 任务 A.3.1 已标记为 in_progress
 [2026-04-24T18:02:49Z] [INFO] ⚠️  请按照开发 checklist 逐项执行，每完成一项使用 check <id> 标记
+[2026-04-24T18:06:10Z] [INFO] ✅ Checklist 项 R.01 已标记为完成
+[2026-04-24T18:06:10Z] [INFO] 当前状态: Phase=A Task=A.3.1 Status=in_progress 已完成=5
