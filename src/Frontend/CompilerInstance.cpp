@@ -353,12 +353,15 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
     Opt.FloatABIType = llvm::FloatABI::Hard;
 
   // PIC/PIE relocation model
-  // TODO: PIE conflicts with static linking (-static). When the linker
-  // is implemented, PIE should be disabled automatically when -static
-  // is specified. For now, the user must manually use -fno-PIE with -static.
-  auto RM = Invocation->TargetOpts.PIE
-                ? llvm::Reloc::PIC_
-                : llvm::Reloc::Static;
+  // PIE conflicts with static linking (-static): static executables must use
+  // Reloc::Static. If both PIE and StaticLink are set, disable PIE with a
+  // warning and use Static relocation.
+  bool UsePIE = Invocation->TargetOpts.PIE;
+  if (UsePIE && Invocation->CodeGenOpts.StaticLink) {
+    UsePIE = false;
+    errs() << "Warning: -static and PIE are incompatible; disabling PIE\n";
+  }
+  auto RM = UsePIE ? llvm::Reloc::PIC_ : llvm::Reloc::Static;
 
   // CodeGenOptLevel (implemented in 8.3.1)
   auto CM = [&]() -> llvm::CodeGenOptLevel {
@@ -432,40 +435,46 @@ bool CompilerInstance::linkExecutable(const std::vector<std::string> &ObjectFile
     outs() << "  Linking executable: " << OutputPath << "\n";
   }
 
-  // TODO: Implement linking by invoking system linker
-  // For now, we skip linking
-  errs() << "Warning: Linking not yet implemented\n";
-  
   // Build linker command
   std::string LinkerCmd = "clang++";  // Use clang++ as linker
-  
+
   // Add output file
   LinkerCmd += " -o " + OutputPath.str();
-  
+
+  // Static linking: add -static flag and disable PIE at link time
+  if (Invocation->CodeGenOpts.StaticLink) {
+    LinkerCmd += " -static";
+    // PIE was already disabled in generateObjectFile(); ensure linker
+    // does not add PIE flags either.
+  } else if (Invocation->TargetOpts.PIE) {
+    // Pass PIE flag to linker when PIE is enabled
+    LinkerCmd += " -pie";
+  }
+
   // Add object files
   for (const auto &ObjFile : ObjectFiles) {
     LinkerCmd += " " + ObjFile;
   }
-  
+
   // Add library paths
   for (const auto &LibPath : Invocation->FrontendOpts.LibraryPaths) {
     LinkerCmd += " -L" + LibPath;
   }
-  
+
   // Add libraries
   for (const auto &Lib : Invocation->FrontendOpts.Libraries) {
     LinkerCmd += " -l" + Lib;
   }
-  
+
   // Add additional linker flags
   for (const auto &Flag : Invocation->FrontendOpts.LinkerFlags) {
     LinkerCmd += " " + Flag;
   }
-  
+
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "  Linker command: " << LinkerCmd << "\n";
   }
-  
+
   // Execute linker
   int Result = std::system(LinkerCmd.c_str());
   return Result == 0;

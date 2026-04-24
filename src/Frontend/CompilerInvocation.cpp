@@ -337,6 +337,10 @@ bool CompilerInvocation::parseCommandLine(int Argc, const char *const *Argv) {
       TargetOpts.PIE = false;
       continue;
     }
+    if (Arg == "-static") {
+      CodeGenOpts.StaticLink = true;
+      continue;
+    }
     if (Arg.startswith("-mfloat-abi=")) {
       llvm::StringRef ABIStr = Arg.substr(12);
       if (ABIStr == "hard" || ABIStr == "soft" || ABIStr == "softfp") {

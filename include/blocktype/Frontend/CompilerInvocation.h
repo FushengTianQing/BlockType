@@ -112,6 +112,9 @@ struct CodeGenOptions {
 
   /// Link into executable (default behavior).
   bool LinkExecutable = true;
+
+  /// Static linking (-static). Conflicts with PIE.
+  bool StaticLink = false;
 };
 
 /// DiagnosticOptions - Diagnostic options.
