@@ -29,6 +29,6 @@
     {"id": "A.4.D.23", "status": "done", "category": "动作", "item": "编译通过"},
     {"id": "A.4.D.24", "status": "done", "category": "动作", "item": "验收断言测试通过：编译运行 tests/IR/test_ir_module.cpp，所有 assert 通过"},
     {"id": "A.4.D.25", "status": "done", "category": "动作", "item": "执行审查 checklist"},
-    {"id": "A.4.D.26", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
+    {"id": "A.4.D.26", "status": "done", "category": "动作", "item": "Git 提交并推送"}
   ]
 }

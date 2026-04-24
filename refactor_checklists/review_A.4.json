@@ -28,7 +28,7 @@
     {"id": "R.22", "status": "done", "category": "完整性", "item": "IRFeature 枚举已定义（None/Exceptions/Threads/SIMD）"},
     {"id": "R.23", "status": "done", "category": "完整性", "item": "所有方法已实现（含 getPredecessors/getSuccessors/print 等）"},
     {"id": "R.24", "status": "done", "category": "严禁简化", "item": "getOrInsertFunction 三段语义完整 / getPredecessors+getSuccessors 基于 Successors 列表完整实现 / IRInstruction 新增 Successors 字段"},
-    {"id": "R.25", "status": "pending", "category": "Git", "item": "确认 Git 提交信息格式正确"},
-    {"id": "R.26", "status": "pending", "category": "Git", "item": "确认已推送到远端"}
+    {"id": "R.25", "status": "done", "category": "Git", "item": "确认 Git 提交信息格式正确"},
+    {"id": "R.26", "status": "done", "category": "Git", "item": "确认已推送到远端"}
   ]
 }
