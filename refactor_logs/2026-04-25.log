@@ -545,3 +545,26 @@
 [2026-04-24T17:24:51Z] [INFO] ✅ Checklist 项 A.3.1.D.16 已标记为完成
 [2026-04-24T17:24:51Z] [INFO] 当前状态: Phase=A Task=A.3.1 Status=in_progress 已完成=5
 [2026-04-24T17:49:16Z] [INFO] 当前状态: Phase=A Task=A.3.1 Status=in_progress 已完成=5
+[2026-04-24T18:02:44Z] [INFO] === 显示当前任务 ===
+[2026-04-24T18:02:44Z] [INFO] ====================================
+[2026-04-24T18:02:44Z] [INFO] 🚨 任务流总体规则提醒 🚨
+[2026-04-24T18:02:44Z] [INFO] 1. 严格按照 11-15 AI coder 任务流文档执行
+[2026-04-24T18:02:44Z] [INFO] 2. 每个 Task 完成后必须执行 Git 提交并推送
+[2026-04-24T18:02:44Z] [INFO] 3. 遵循 Phase 文档中的总体要求和约束
+[2026-04-24T18:02:44Z] [INFO] 4. 确保接口签名与 01-04 文档一致
+[2026-04-24T18:02:44Z] [INFO] 5. 执行验收标准中的测试用例
+[2026-04-24T18:02:44Z] [INFO] 6. 注意接口间的关联关系（holding/calling）
+[2026-04-24T18:02:44Z] [INFO] 7. 遇到问题优先参考任务流文档中的解决方案
+[2026-04-24T18:02:44Z] [INFO] 8. ⚠️ 每个 Task 开始时必须生成 checklist，完成时必须验证 checklist
+[2026-04-24T18:02:44Z] [INFO] 9. ⚠️ 开发 checklist 全部完成 + 审查 checklist 通过后才能标记 done
+[2026-04-24T18:02:44Z] [INFO] ====================================
+[2026-04-24T18:02:44Z] [INFO] 当前状态: Phase=A Task=A.3.1 Status=in_progress 已完成=5
+[2026-04-24T18:02:44Z] [INFO] 检测环境状态...
+[2026-04-24T18:02:44Z] [INFO] Git仓库状态正常
+[2026-04-24T18:02:44Z] [INFO] 环境检查完成
+[2026-04-24T18:02:49Z] [INFO] === 标记任务开始: A.3.1 ===
+[2026-04-24T18:02:49Z] [INFO] 当前状态: Phase=A Task=A.3.1 Status=in_progress 已完成=5
+[2026-04-24T18:02:49Z] [INFO] 开发 checklist 已存在: refactor_checklists/dev_A.3.1.json
+[2026-04-24T18:02:49Z] [INFO] 审查 checklist 已存在: refactor_checklists/review_A.3.1.json
+[2026-04-24T18:02:49Z] [INFO] 任务 A.3.1 已标记为 in_progress
+[2026-04-24T18:02:49Z] [INFO] ⚠️  请按照开发 checklist 逐项执行，每完成一项使用 check <id> 标记

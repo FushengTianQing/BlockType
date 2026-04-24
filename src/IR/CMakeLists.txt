@@ -1,8 +1,11 @@
 add_library(blocktype-ir
+  IRBasicBlock.cpp
   IRConstant.cpp
   IRContext.cpp
   IRFormat.cpp
+  IRFunction.cpp
   IRInstruction.cpp
+  IRModule.cpp
   IRType.cpp
   IRTypeContext.cpp
   IRValue.cpp
