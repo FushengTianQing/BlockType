@@ -174,8 +174,8 @@ generate_dev_checklist() {
     {"id": "A.1.D.27", "status": "pending", "category": "验收", "item": "V2: IRTypeContext 唯一化 assert(Int32_1==Int32_2)"},
     {"id": "A.1.D.28", "status": "pending", "category": "验收", "item": "V3: 指针类型唯一化 assert(PtrI8_1==PtrI8_2)"},
     {"id": "A.1.D.29", "status": "pending", "category": "动作", "item": "编译通过：cmake --build build --target blocktype-ir 退出码==0"},
-    {"id": "A.1.D.30", "status": "pending", "category": "动作", "item": "Git 提交并推送：git add -A && git commit -m 'feat(A): 完成 A.1 — IRType 体系 + IRTypeContext' && git push origin HEAD"},
-    {"id": "A.1.D.31", "status": "pending", "category": "动作", "item": "执行审查 checklist：./refactor_workflow.sh review"}
+    {"id": "A.1.D.30", "status": "pending", "category": "动作", "item": "执行审查 checklist：./refactor_workflow.sh review"},
+    {"id": "A.1.D.31", "status": "pending", "category": "动作", "item": "Git 提交并推送：git add -A && git commit -m 'feat(A): 完成 A.1 — IRType 体系 + IRTypeContext' && git push origin HEAD"}
   ]
 }
 CHECKLISTEOF
@@ -202,8 +202,8 @@ CHECKLISTEOF
     {"id": "A.1.1.D.12", "status": "pending", "category": "验收", "item": "V2: 析构自动释放（无内存泄漏）"},
     {"id": "A.1.1.D.13", "status": "pending", "category": "验收", "item": "V3: addCleanup 回调正确执行 assert(CleanupCalled==true)"},
     {"id": "A.1.1.D.14", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.1.1.D.15", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.1.1.D.16", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.1.1.D.15", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.1.1.D.16", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -226,8 +226,8 @@ CHECKLISTEOF
     {"id": "A.1.2.D.08", "status": "pending", "category": "验收", "item": "V2: 设置线程模式 assert(Ctx.getThreadingMode()==MultiInstance)"},
     {"id": "A.1.2.D.09", "status": "pending", "category": "验收", "item": "V3: sealModule 后不可修改"},
     {"id": "A.1.2.D.10", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.1.2.D.11", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.1.2.D.12", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.1.2.D.11", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.1.2.D.12", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -260,8 +260,8 @@ CHECKLISTEOF
     {"id": "A.2.D.18", "status": "pending", "category": "验收", "item": "V3: aarch64 小端 assert(LayoutARM->isLittleEndian()==true)"},
     {"id": "A.2.D.19", "status": "pending", "category": "验收", "item": "V4: 类型大小 assert(Layout->getTypeSizeInBits(Ctx.getInt32Ty())==32)"},
     {"id": "A.2.D.20", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.2.D.21", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.2.D.22", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.2.D.21", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.2.D.22", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -301,8 +301,8 @@ CHECKLISTEOF
     {"id": "A.3.D.25", "status": "pending", "category": "验收", "item": "V2: Use/User 双向链接 getUser()->getOperand(0)==V1"},
     {"id": "A.3.D.26", "status": "pending", "category": "验收", "item": "V3: IRConstantUndef 缓存（同类型返回同一指针）"},
     {"id": "A.3.D.27", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.3.D.28", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.3.D.29", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.3.D.28", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.3.D.29", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -329,8 +329,8 @@ CHECKLISTEOF
     {"id": "A.3.1.D.12", "status": "pending", "category": "验收", "item": "V2: 兼容性判断"},
     {"id": "A.3.1.D.13", "status": "pending", "category": "验收", "item": "V3: IRFileHeader 大小固定 static_assert"},
     {"id": "A.3.1.D.14", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.3.1.D.15", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.3.1.D.16", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.3.1.D.15", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.3.1.D.16", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -366,8 +366,8 @@ CHECKLISTEOF
     {"id": "A.4.D.21", "status": "pending", "category": "验收", "item": "V2: addBasicBlock assert(Entry!=nullptr && Entry->getName()==\"entry\")"},
     {"id": "A.4.D.22", "status": "pending", "category": "验收", "item": "V3: getTerminator 无终结指令时返回 nullptr"},
     {"id": "A.4.D.23", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.4.D.24", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.4.D.25", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.4.D.24", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.4.D.25", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -401,8 +401,8 @@ CHECKLISTEOF
     {"id": "A.5.D.19", "status": "pending", "category": "验收", "item": "V2: createRetVoid assert(Ret!=nullptr)"},
     {"id": "A.5.D.20", "status": "pending", "category": "验收", "item": "V3: createCall assert(Call!=nullptr)"},
     {"id": "A.5.D.21", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.5.D.22", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.5.D.23", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.5.D.22", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.5.D.23", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -430,8 +430,8 @@ CHECKLISTEOF
     {"id": "A.6.D.13", "status": "pending", "category": "验收", "item": "V2: 含 OpaqueType 的 IRModule 不通过 assert(VerifierPass().run(ModuleWithOpaque)==false)"},
     {"id": "A.6.D.14", "status": "pending", "category": "验收", "item": "V3: 无终结指令的 BB 不通过 assert(VerifierPass().run(ModuleNoTerminator)==false)"},
     {"id": "A.6.D.15", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.6.D.16", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.6.D.17", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.6.D.16", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.6.D.17", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -461,8 +461,8 @@ CHECKLISTEOF
     {"id": "A.7.D.15", "status": "pending", "category": "验收", "item": "V2: 二进制格式往返（writeBitcode→parseBitcode→比较结构等价性）"},
     {"id": "A.7.D.16", "status": "pending", "category": "验收", "item": "V3: IRFileHeader 魔数（二进制数据前4字节==BTIR）"},
     {"id": "A.7.D.17", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.7.D.18", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.7.D.19", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.7.D.18", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.7.D.19", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -498,8 +498,8 @@ CHECKLISTEOF
     {"id": "A.8.D.21", "status": "pending", "category": "验收", "item": "V2: 单元测试全部通过 cd build && ctest -R 'IR' --output-on-failure"},
     {"id": "A.8.D.22", "status": "pending", "category": "验收", "item": "V3: libblocktype-ir 无 LLVM 符号 nm libblocktype-ir.a | grep 'llvm::' | wc -l ==0"},
     {"id": "A.8.D.23", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.8.D.24", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.8.D.25", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.8.D.24", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.8.D.25", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -539,8 +539,8 @@ CHECKLISTEOF
     {"id": "A.F1.D.25", "status": "pending", "category": "验收", "item": "V1: DialectCapability 位掩码 assert(Cap.hasDialect(Core) && Cap.hasDialect(Cpp) && !Cap.hasDialect(Debug))"},
     {"id": "A.F1.D.26", "status": "pending", "category": "验收", "item": "V2: DialectLoweringPass 可运行（构建含 bt_cpp Invoke 的 IRModule，Pass.run 返回 true）"},
     {"id": "A.F1.D.27", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "A.F1.D.28", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "A.F1.D.29", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "A.F1.D.28", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "A.F1.D.29", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
@@ -560,8 +560,8 @@ CHECKLISTEOF
     {"id": "${task}.D.04", "status": "pending", "category": "约束", "item": "验证所有实现约束"},
     {"id": "${task}.D.05", "status": "pending", "category": "验收", "item": "执行所有验收标准"},
     {"id": "${task}.D.06", "status": "pending", "category": "动作", "item": "编译通过"},
-    {"id": "${task}.D.07", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
-    {"id": "${task}.D.08", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+    {"id": "${task}.D.07", "status": "pending", "category": "动作", "item": "执行审查 checklist"},
+    {"id": "${task}.D.08", "status": "pending", "category": "动作", "item": "Git 提交并推送"}
   ]
 }
 CHECKLISTEOF
