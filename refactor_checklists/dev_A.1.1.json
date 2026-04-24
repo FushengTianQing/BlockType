@@ -1,0 +1,103 @@
+{
+  "task": "A.1.1",
+  "type": "dev",
+  "description": "IRContext + BumpPtrAllocator 内存管理",
+  "items": [
+    {
+      "id": "A.1.1.D.01",
+      "status": "done",
+      "category": "前提",
+      "item": "阅读任务流文档 Task A.1.1 全部内容"
+    },
+    {
+      "id": "A.1.1.D.02",
+      "status": "done",
+      "category": "前提",
+      "item": "确认 A.1 已完成（依赖）"
+    },
+    {
+      "id": "A.1.1.D.03",
+      "status": "done",
+      "category": "产出",
+      "item": "新增 include/blocktype/IR/IRContext.h"
+    },
+    {
+      "id": "A.1.1.D.04",
+      "status": "done",
+      "category": "产出",
+      "item": "新增 src/IR/IRContext.cpp"
+    },
+    {
+      "id": "A.1.1.D.05",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 IRThreadingMode 枚举（SingleThread/MultiInstance/SharedReadOnly）"
+    },
+    {
+      "id": "A.1.1.D.06",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 IRContext（BumpPtrAllocator+Cleanups+IRTypeContext+create<T>+saveString+getTypeContext+getMemoryUsage+sealModule）"
+    },
+    {
+      "id": "A.1.1.D.07",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 BumpPtrAllocator（从 blocktype-basic 引入，Allocate方法签名 void* Allocate(size_t,size_t)）"
+    },
+    {
+      "id": "A.1.1.D.08",
+      "status": "done",
+      "category": "约束",
+      "item": "验证：不依赖 LLVM（使用自实现 BumpPtrAllocator）"
+    },
+    {
+      "id": "A.1.1.D.09",
+      "status": "done",
+      "category": "约束",
+      "item": "验证：IRContext 拥有所有 IR 节点内存"
+    },
+    {
+      "id": "A.1.1.D.10",
+      "status": "done",
+      "category": "约束",
+      "item": "验证：IRModule 仅拥有逻辑结构"
+    },
+    {
+      "id": "A.1.1.D.11",
+      "status": "done",
+      "category": "验收",
+      "item": "V1: create 分配成功 assert(IntTy!=nullptr && IntTy->getBitWidth()==32)"
+    },
+    {
+      "id": "A.1.1.D.12",
+      "status": "done",
+      "category": "验收",
+      "item": "V2: 析构自动释放（无内存泄漏）"
+    },
+    {
+      "id": "A.1.1.D.13",
+      "status": "done",
+      "category": "验收",
+      "item": "V3: addCleanup 回调正确执行 assert(CleanupCalled==true)"
+    },
+    {
+      "id": "A.1.1.D.14",
+      "status": "done",
+      "category": "动作",
+      "item": "编译通过"
+    },
+    {
+      "id": "A.1.1.D.15",
+      "status": "done",
+      "category": "动作",
+      "item": "Git 提交并推送"
+    },
+    {
+      "id": "A.1.1.D.16",
+      "status": "done",
+      "category": "动作",
+      "item": "执行审查 checklist"
+    }
+  ]
+}
