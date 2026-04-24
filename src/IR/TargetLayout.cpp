@@ -1,6 +1,7 @@
 #include "blocktype/IR/TargetLayout.h"
 #include "blocktype/IR/IRType.h"
 
+#include <algorithm>
 #include <cassert>
 
 namespace blocktype {
@@ -28,6 +29,8 @@ TargetLayout::TargetLayout(const std::string& TargetTriple)
     IsMacOS = false;
     IsLinux = true;
   }
+
+  (void)IsLinux;
 }
 
 uint64_t TargetLayout::getTypeSizeInBits(IRType* T) const {

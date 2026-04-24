@@ -1,0 +1,139 @@
+{
+  "task": "A.2",
+  "type": "dev",
+  "description": "TargetLayout（独立于 LLVM DataLayout）",
+  "items": [
+    {
+      "id": "A.2.D.01",
+      "status": "done",
+      "category": "前提",
+      "item": "阅读任务流文档 Task A.2 全部内容"
+    },
+    {
+      "id": "A.2.D.02",
+      "status": "done",
+      "category": "前提",
+      "item": "确认 A.1 已完成（依赖）"
+    },
+    {
+      "id": "A.2.D.03",
+      "status": "done",
+      "category": "产出",
+      "item": "新增 include/blocktype/IR/TargetLayout.h"
+    },
+    {
+      "id": "A.2.D.04",
+      "status": "done",
+      "category": "产出",
+      "item": "新增 src/IR/TargetLayout.cpp"
+    },
+    {
+      "id": "A.2.D.05",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 TargetLayout 类（TripleStr/PointerSize/IntSize/LongSize等布局参数、从Triple推断布局）"
+    },
+    {
+      "id": "A.2.D.06",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 getTypeSizeInBits(IRType*) 对各子类的计算规则"
+    },
+    {
+      "id": "A.2.D.07",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 getTypeAlignInBits(IRType*)"
+    },
+    {
+      "id": "A.2.D.08",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 getPointerSizeInBits()"
+    },
+    {
+      "id": "A.2.D.09",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 isLittleEndian()"
+    },
+    {
+      "id": "A.2.D.10",
+      "status": "done",
+      "category": "实现",
+      "item": "实现 static Create(StringRef Triple) 工厂方法"
+    },
+    {
+      "id": "A.2.D.11",
+      "status": "done",
+      "category": "实现",
+      "item": "支持 x86_64-unknown-linux-gnu 平台布局参数"
+    },
+    {
+      "id": "A.2.D.12",
+      "status": "done",
+      "category": "实现",
+      "item": "支持 aarch64-unknown-linux-gnu 平台布局参数"
+    },
+    {
+      "id": "A.2.D.13",
+      "status": "done",
+      "category": "实现",
+      "item": "支持 x86_64-apple-macosx 平台布局参数"
+    },
+    {
+      "id": "A.2.D.14",
+      "status": "done",
+      "category": "约束",
+      "item": "验证：不依赖 LLVM DataLayout"
+    },
+    {
+      "id": "A.2.D.15",
+      "status": "done",
+      "category": "约束",
+      "item": "验证：从 Triple 字符串推断布局"
+    },
+    {
+      "id": "A.2.D.16",
+      "status": "done",
+      "category": "验收",
+      "item": "V1: x86_64 指针大小 assert(Layout->getPointerSizeInBits()==64)"
+    },
+    {
+      "id": "A.2.D.17",
+      "status": "done",
+      "category": "验收",
+      "item": "V2: x86_64 小端 assert(Layout->isLittleEndian()==true)"
+    },
+    {
+      "id": "A.2.D.18",
+      "status": "done",
+      "category": "验收",
+      "item": "V3: aarch64 小端 assert(LayoutARM->isLittleEndian()==true)"
+    },
+    {
+      "id": "A.2.D.19",
+      "status": "done",
+      "category": "验收",
+      "item": "V4: 类型大小 assert(Layout->getTypeSizeInBits(Ctx.getInt32Ty())==32)"
+    },
+    {
+      "id": "A.2.D.20",
+      "status": "done",
+      "category": "动作",
+      "item": "编译通过"
+    },
+    {
+      "id": "A.2.D.21",
+      "status": "done",
+      "category": "动作",
+      "item": "Git 提交并推送"
+    },
+    {
+      "id": "A.2.D.22",
+      "status": "done",
+      "category": "动作",
+      "item": "执行审查 checklist"
+    }
+  ]
+}
