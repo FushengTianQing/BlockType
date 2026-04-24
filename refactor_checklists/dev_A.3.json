@@ -1,0 +1,33 @@
+{
+  "task": "A.3",
+  "type": "dev",
+  "description": "IRValue + IRConstant + Use/User 体系",
+  "items": [
+    {"id": "A.3.D.01", "status": "pending", "category": "前提", "item": "阅读任务流文档 Task A.3 全部内容"},
+    {"id": "A.3.D.02", "status": "pending", "category": "前提", "item": "确认 A.1 + A.2 已完成（依赖）"},
+    {"id": "A.3.D.03", "status": "pending", "category": "产出", "item": "新增 include/blocktype/IR/IRValue.h"},
+    {"id": "A.3.D.04", "status": "pending", "category": "产出", "item": "新增 include/blocktype/IR/IRInstruction.h"},
+    {"id": "A.3.D.05", "status": "pending", "category": "产出", "item": "新增 include/blocktype/IR/IRConstant.h"},
+    {"id": "A.3.D.06", "status": "pending", "category": "产出", "item": "新增 src/IR/IRValue.cpp"},
+    {"id": "A.3.D.07", "status": "pending", "category": "产出", "item": "新增 src/IR/IRInstruction.cpp"},
+    {"id": "A.3.D.08", "status": "pending", "category": "产出", "item": "新增 src/IR/IRConstant.cpp"},
+    {"id": "A.3.D.09", "status": "pending", "category": "实现", "item": "实现 ValueKind 枚举（12种值类型）"},
+    {"id": "A.3.D.10", "status": "pending", "category": "实现", "item": "实现 Opcode 枚举（全部操作码）"},
+    {"id": "A.3.D.11", "status": "pending", "category": "实现", "item": "实现 ICmpPred/FCmpPred 枚举"},
+    {"id": "A.3.D.12", "status": "pending", "category": "实现", "item": "实现 LinkageKind/CallingConvention/FunctionAttr 枚举"},
+    {"id": "A.3.D.13", "status": "pending", "category": "实现", "item": "实现 IRValue（ValueKind+IRType*+ValueID+Name+replaceAllUsesWith+getNumUses+print）"},
+    {"id": "A.3.D.14", "status": "pending", "category": "实现", "item": "实现 Use（Val+Owner双向引用+set维护def-use链）"},
+    {"id": "A.3.D.15", "status": "pending", "category": "实现", "item": "实现 User（Operands列表+getOperand/setOperand/addOperand）"},
+    {"id": "A.3.D.16", "status": "pending", "category": "实现", "item": "实现 IRInstruction（Opcode+DialectID+Parent+isTerminator/isBinaryOp/isCast/isMemoryOp/isComparison+eraseFromParent+print）"},
+    {"id": "A.3.D.17", "status": "pending", "category": "实现", "item": "实现 IRConstant 系列（IRConstantInt/IRConstantFP/IRConstantNull/IRConstantUndef/IRConstantAggregateZero/IRConstantStruct/IRConstantArray/IRConstantFunctionRef/IRConstantGlobalRef）"},
+    {"id": "A.3.D.18", "status": "pending", "category": "约束", "item": "验证：Use-Def chain 双向正确（Use::set 更新 def-use 链）"},
+    {"id": "A.3.D.19", "status": "pending", "category": "约束", "item": "验证：IRConstant 子类不可变（immutable）"},
+    {"id": "A.3.D.20", "status": "pending", "category": "约束", "item": "验证：IRConstantUndef 缓存（同一类型返回同一指针）"},
+    {"id": "A.3.D.21", "status": "pending", "category": "验收", "item": "V1: 常量整数值 assert(CI->getZExtValue()==42)"},
+    {"id": "A.3.D.22", "status": "pending", "category": "验收", "item": "V2: Use/User 双向链接 getUser()->getOperand(0)==V1"},
+    {"id": "A.3.D.23", "status": "pending", "category": "验收", "item": "V3: IRConstantUndef 缓存（同类型返回同一指针）"},
+    {"id": "A.3.D.24", "status": "pending", "category": "动作", "item": "编译通过"},
+    {"id": "A.3.D.25", "status": "pending", "category": "动作", "item": "Git 提交并推送"},
+    {"id": "A.3.D.26", "status": "pending", "category": "动作", "item": "执行审查 checklist"}
+  ]
+}
