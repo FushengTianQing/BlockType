@@ -70,8 +70,9 @@ struct TargetOptions {
   /// Enable PIE (position-independent executable). Default true.
   bool PIE = true;
 
-  /// Code model: "default"/"small"/"large".
-  std::string CodeModel = "default";
+  /// Code model: "small"/"large". Default "small" (LLVM 18 removed
+  /// CodeModel::Default; Small is the effective default on most platforms).
+  std::string CodeModel = "small";
 };
 
 /// CodeGenOptions - Code generation options.
@@ -84,9 +85,6 @@ struct CodeGenOptions {
 
   /// Enable position-independent code.
   bool PIC = false;
-
-  /// Enable PIE (position-independent executable).
-  bool PIE = false;
 
   /// Emit LLVM IR instead of object file.
   bool EmitLLVM = false;

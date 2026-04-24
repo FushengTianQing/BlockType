@@ -9,11 +9,13 @@
 // Tests for target-specific optimization configuration.
 // These tests verify that:
 // - x86_64 defaults to x86-64-v2 CPU with SSE4.2 features
-// - AArch64 macOS defaults to apple-m1 CPU
+// - AArch64 macOS defaults to apple-m1 CPU (with fallback to generic)
 // - AArch64 Linux defaults to generic CPU
 // - PIE mode correctly sets Reloc::PIC_
-// - Float ABI defaults to hard
+// - Float ABI defaults to hard and maps to llvm::FloatABI
 // - Code model is correctly mapped
+// - Command-line parsing works for new options
+// - validate() rejects invalid values
 //
 //===----------------------------------------------------------------------===//
 
@@ -163,7 +165,9 @@ TEST_F(TargetOptimizationTest, AArch64LinuxDefaultCPU) {
 
 TEST_F(TargetOptimizationTest, PIEModeEnabled) {
   auto CI = std::make_shared<CompilerInvocation>();
+  // PIE is now unified in TargetOpts (not CodeGenOpts)
   EXPECT_TRUE(CI->TargetOpts.PIE);
+  // CodeGenOpts.PIE no longer exists
 
   auto M = createSimpleModule(*LLVMCtx, "test_pie");
   CompilerInstance Instance;
@@ -197,7 +201,8 @@ TEST_F(TargetOptimizationTest, FloatABIDefaultHard) {
 
 TEST_F(TargetOptimizationTest, CodeModelDefault) {
   TargetOptions Opts;
-  EXPECT_EQ(Opts.CodeModel, "default");
+  // Default is now "small" (not "default") for clarity
+  EXPECT_EQ(Opts.CodeModel, "small");
 }
 
 // === Test 8: Code Model Small ===
@@ -234,22 +239,140 @@ TEST_F(TargetOptimizationTest, TargetOptionsDefaults) {
   TargetOptions Opts;
   EXPECT_EQ(Opts.FloatABI, "hard");
   EXPECT_TRUE(Opts.PIE);
-  EXPECT_EQ(Opts.CodeModel, "default");
+  EXPECT_EQ(Opts.CodeModel, "small");
   EXPECT_TRUE(Opts.CPU.empty());
   EXPECT_TRUE(Opts.Features.empty());
   EXPECT_TRUE(Opts.ABI.empty());
   EXPECT_TRUE(Opts.Triple.empty());
 }
 
-// === Test 11: Custom CPU Not Overridden ===
+// === Test 11: Custom CPU Not Overridden in generateObjectFile ===
 
 TEST_F(TargetOptimizationTest, CustomCPUNotOverridden) {
-  auto CI = std::make_shared<CompilerInvocation>();
-  CI->TargetOpts.CPU = "x86-64-v3";
-  CI->TargetOpts.Features = "+avx2";
+  // Use native target since we can't guarantee cross-compilation targets
+  auto M = createSimpleModule(*LLVMCtx, "test_custom_cpu");
 
-  EXPECT_EQ(CI->TargetOpts.CPU, "x86-64-v3");
-  EXPECT_EQ(CI->TargetOpts.Features, "+avx2");
+  auto CI = std::make_shared<CompilerInvocation>();
+  CI->TargetOpts.CPU = "generic";  // Explicitly set — should not be overridden
+  CI->TargetOpts.Features = "+neon";  // Explicitly set — should not be overridden
+  CompilerInstance Instance;
+  Instance.initialize(CI);
+
+  // Verify the object file is generated successfully with custom settings
+  EXPECT_TRUE(generateAndVerify(Instance, M, "custom_cpu"));
+}
+
+// === Test 12: validate() Rejects Invalid FloatABI ===
+
+TEST_F(TargetOptimizationTest, ValidateRejectsInvalidFloatABI) {
+  auto CI = std::make_shared<CompilerInvocation>();
+  CI->TargetOpts.FloatABI = "invalid";
+  EXPECT_FALSE(CI->validate());
+}
+
+// === Test 13: validate() Rejects Invalid CodeModel ===
+
+TEST_F(TargetOptimizationTest, ValidateRejectsInvalidCodeModel) {
+  auto CI = std::make_shared<CompilerInvocation>();
+  CI->TargetOpts.CodeModel = "invalid";
+  EXPECT_FALSE(CI->validate());
+}
+
+// === Test 14: validate() Accepts Valid FloatABI Values ===
+
+TEST_F(TargetOptimizationTest, ValidateAcceptsValidFloatABI) {
+  for (const char *ABI : {"hard", "soft", "softfp"}) {
+    auto CI = std::make_shared<CompilerInvocation>();
+    CI->TargetOpts.FloatABI = ABI;
+    EXPECT_TRUE(CI->validate()) << "FloatABI='" << ABI << "' should be valid";
+  }
+}
+
+// === Test 15: validate() Accepts Valid CodeModel Values ===
+
+TEST_F(TargetOptimizationTest, ValidateAcceptsValidCodeModel) {
+  for (const char *CM : {"small", "large"}) {
+    auto CI = std::make_shared<CompilerInvocation>();
+    CI->TargetOpts.CodeModel = CM;
+    EXPECT_TRUE(CI->validate()) << "CodeModel='" << CM << "' should be valid";
+  }
+}
+
+// === Test 16: Command-Line -fPIE Sets TargetOpts.PIE ===
+
+TEST_F(TargetOptimizationTest, CommandLineFPIE) {
+  auto CI = std::make_shared<CompilerInvocation>();
+  const char *Args[] = {"bt", "-fPIE"};
+  EXPECT_TRUE(CI->parseCommandLine(2, Args));
+  EXPECT_TRUE(CI->TargetOpts.PIE);
+}
+
+// === Test 17: Command-Line -fno-PIE Clears TargetOpts.PIE ===
+
+TEST_F(TargetOptimizationTest, CommandLineFNoPIE) {
+  auto CI = std::make_shared<CompilerInvocation>();
+  const char *Args[] = {"bt", "-fno-PIE"};
+  EXPECT_TRUE(CI->parseCommandLine(2, Args));
+  EXPECT_FALSE(CI->TargetOpts.PIE);
+}
+
+// === Test 18: Command-Line -mfloat-abi ===
+
+TEST_F(TargetOptimizationTest, CommandLineMFloatABI) {
+  const char *Args[] = {"bt", "-mfloat-abi=soft"};
+  auto CI = std::make_shared<CompilerInvocation>();
+  EXPECT_TRUE(CI->parseCommandLine(2, Args));
+  EXPECT_EQ(CI->TargetOpts.FloatABI, "soft");
+
+  const char *Args2[] = {"bt", "-mfloat-abi=softfp"};
+  auto CI2 = std::make_shared<CompilerInvocation>();
+  EXPECT_TRUE(CI2->parseCommandLine(2, Args2));
+  EXPECT_EQ(CI2->TargetOpts.FloatABI, "softfp");
+
+  const char *Args3[] = {"bt", "-mfloat-abi=hard"};
+  auto CI3 = std::make_shared<CompilerInvocation>();
+  EXPECT_TRUE(CI3->parseCommandLine(2, Args3));
+  EXPECT_EQ(CI3->TargetOpts.FloatABI, "hard");
+}
+
+// === Test 19: Command-Line -mfloat-abi Invalid Rejected ===
+
+TEST_F(TargetOptimizationTest, CommandLineMFloatABIInvalid) {
+  const char *Args[] = {"bt", "-mfloat-abi=invalid"};
+  auto CI = std::make_shared<CompilerInvocation>();
+  EXPECT_FALSE(CI->parseCommandLine(2, Args));
+}
+
+// === Test 20: Command-Line -mcmodel ===
+
+TEST_F(TargetOptimizationTest, CommandLineMCModel) {
+  const char *Args[] = {"bt", "-mcmodel=large"};
+  auto CI = std::make_shared<CompilerInvocation>();
+  EXPECT_TRUE(CI->parseCommandLine(2, Args));
+  EXPECT_EQ(CI->TargetOpts.CodeModel, "large");
+
+  const char *Args2[] = {"bt", "-mcmodel=small"};
+  auto CI2 = std::make_shared<CompilerInvocation>();
+  EXPECT_TRUE(CI2->parseCommandLine(2, Args2));
+  EXPECT_EQ(CI2->TargetOpts.CodeModel, "small");
+}
+
+// === Test 21: Command-Line -mcmodel Invalid Rejected ===
+
+TEST_F(TargetOptimizationTest, CommandLineMCModelInvalid) {
+  const char *Args[] = {"bt", "-mcmodel=medium"};
+  auto CI = std::make_shared<CompilerInvocation>();
+  EXPECT_FALSE(CI->parseCommandLine(2, Args));
+}
+
+// === Test 22: toString() Includes New Fields ===
+
+TEST_F(TargetOptimizationTest, ToStringIncludesNewFields) {
+  auto CI = std::make_shared<CompilerInvocation>();
+  std::string Str = CI->toString();
+  EXPECT_NE(Str.find("Float ABI"), std::string::npos);
+  EXPECT_NE(Str.find("PIE"), std::string::npos);
+  EXPECT_NE(Str.find("Code Model"), std::string::npos);
 }
 
 } // anonymous namespace

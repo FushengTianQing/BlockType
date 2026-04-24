@@ -79,6 +79,20 @@ bool CompilerInvocation::validate() const {
     }
   }
 
+  // Validate TargetOptions
+  if (TargetOpts.FloatABI != "hard" && TargetOpts.FloatABI != "soft" &&
+      TargetOpts.FloatABI != "softfp") {
+    errs() << "Error: Invalid float ABI: " << TargetOpts.FloatABI << "\n";
+    errs() << "Valid values: hard, soft, softfp\n";
+    return false;
+  }
+
+  if (TargetOpts.CodeModel != "small" && TargetOpts.CodeModel != "large") {
+    errs() << "Error: Invalid code model: " << TargetOpts.CodeModel << "\n";
+    errs() << "Valid values: small, large\n";
+    return false;
+  }
+
   // Check that input files are specified (unless showing help/version)
   if (!FrontendOpts.ShowHelp && !FrontendOpts.ShowVersion &&
       FrontendOpts.InputFiles.empty()) {
@@ -106,6 +120,9 @@ std::string CompilerInvocation::toString() const {
   OS << "  Triple: " << TargetOpts.Triple << "\n";
   OS << "  CPU: " << TargetOpts.CPU << "\n";
   OS << "  Features: " << TargetOpts.Features << "\n";
+  OS << "  Float ABI: " << TargetOpts.FloatABI << "\n";
+  OS << "  PIE: " << (TargetOpts.PIE ? "enabled" : "disabled") << "\n";
+  OS << "  Code Model: " << TargetOpts.CodeModel << "\n";
 
   OS << "\n[Code Generation Options]\n";
   OS << "  Optimization Level: " << CodeGenOpts.OptimizationLevel << "\n";
@@ -312,8 +329,34 @@ bool CompilerInvocation::parseCommandLine(int Argc, const char *const *Argv) {
       CodeGenOpts.PIC = true;
       continue;
     }
-    if (Arg == "-PIE" || Arg == "-fPIE") {
-      CodeGenOpts.PIE = true;
+    if (Arg == "-fPIE") {
+      TargetOpts.PIE = true;
+      continue;
+    }
+    if (Arg == "-fno-PIE" || Arg == "-fno-pie") {
+      TargetOpts.PIE = false;
+      continue;
+    }
+    if (Arg.startswith("-mfloat-abi=")) {
+      llvm::StringRef ABIStr = Arg.substr(12);
+      if (ABIStr == "hard" || ABIStr == "soft" || ABIStr == "softfp") {
+        TargetOpts.FloatABI = ABIStr.str();
+      } else {
+        errs() << "Error: Invalid float ABI '" << ABIStr
+               << "'; expected hard|soft|softfp\n";
+        return false;
+      }
+      continue;
+    }
+    if (Arg.startswith("-mcmodel=")) {
+      llvm::StringRef CMStr = Arg.substr(9);
+      if (CMStr == "small" || CMStr == "large") {
+        TargetOpts.CodeModel = CMStr.str();
+      } else {
+        errs() << "Error: Invalid code model '" << CMStr
+               << "'; expected small|large\n";
+        return false;
+      }
       continue;
     }
     if (Arg == "-E") {

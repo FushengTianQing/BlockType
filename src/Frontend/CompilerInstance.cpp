@@ -344,7 +344,18 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
     if (Features.empty()) Features = "+neon,+fp-armv8";
   }
 
+  // Float ABI mapping (LLVM supports Default/Soft/Hard; "softfp" maps to Default)
+  if (Invocation->TargetOpts.FloatABI == "soft")
+    Opt.FloatABIType = llvm::FloatABI::Soft;
+  else if (Invocation->TargetOpts.FloatABI == "softfp")
+    Opt.FloatABIType = llvm::FloatABI::Default;  // softfp = target default
+  else
+    Opt.FloatABIType = llvm::FloatABI::Hard;
+
   // PIC/PIE relocation model
+  // TODO: PIE conflicts with static linking (-static). When the linker
+  // is implemented, PIE should be disabled automatically when -static
+  // is specified. For now, the user must manually use -fno-PIE with -static.
   auto RM = Invocation->TargetOpts.PIE
                 ? llvm::Reloc::PIC_
                 : llvm::Reloc::Static;
@@ -362,10 +373,27 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
 
   // Code model (LLVM 18 removed CodeModel::Default, use Small as default)
   auto CMModel = llvm::CodeModel::Small;
-  if (Invocation->TargetOpts.CodeModel == "small")
-    CMModel = llvm::CodeModel::Small;
-  else if (Invocation->TargetOpts.CodeModel == "large")
+  if (Invocation->TargetOpts.CodeModel == "large")
     CMModel = llvm::CodeModel::Large;
+  // "small" or any other value → CodeModel::Small (the default)
+
+  // Verify apple-m1 CPU is supported; fall back to "generic" if not
+  if (CPU == "apple-m1") {
+    // Try creating a TargetMachine with apple-m1; if it fails, fall back
+    std::string TestError;
+    auto *TestTarget = llvm::TargetRegistry::lookupTarget(TargetTripleStr, TestError);
+    if (TestTarget) {
+      auto TestTM = TestTarget->createTargetMachine(
+          TargetTripleStr, CPU, Features, Opt, RM, CMModel, CM);
+      if (!TestTM) {
+        errs() << "Warning: CPU 'apple-m1' not supported by this LLVM version, "
+               << "falling back to 'generic'\n";
+        CPU = "generic";
+      } else {
+        delete TestTM;
+      }
+    }
+  }
 
   auto TM = Target->createTargetMachine(TargetTripleStr, CPU, Features, Opt,
                                          RM, CMModel, CM);
