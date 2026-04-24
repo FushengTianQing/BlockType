@@ -7,5 +7,77 @@
     "content": "## 审查任务：Task 7.3.2 Contract 语义 + Task 8.1.2 ABI 支持\n\n请审查以下两个已完成的任务：\n\n### 1. Task 8.1.2 ABI 支持\n新增文件：\n- `include/blocktype/CodeGen/ABIInfo.h`\n- `src/CodeGen/ABIInfo.cpp`\n- `tests/unit/CodeGen/ABIInfoTest.cpp`\n\n修改文件：\n- `include/blocktype/CodeGen/CodeGenTypes.h`（扩展 ABIArgKind）\n- `src/CodeGen/CodeGenTypes.cpp`（使用 ABIInfo）\n- `src/CodeGen/CMakeLists.txt`\n\n### 2. Task 7.3.2 Contract 语义\n修改文件：\n- `include/blocktype/Sema/SemaCXX.h`\n- `src/Sema/SemaCXX.cpp`\n- `src/Sema/SemaDecl.cpp`\n- `include/blocktype/Basic/DiagnosticSemaKinds.def`\n- `src/Frontend/CompilerInvocation.cpp`\n- `include/blocktype/CodeGen/CodeGenModule.h`\n- `src/CodeGen/CodeGenExpr.cpp`\n- `src/Frontend/CompilerInstance.cpp`\n\n新增测试：\n- `tests/cpp26/contracts_inheritance.cpp`\n- `tests/cpp26/contracts_virtual.cpp`\n- `tests/cpp26/contracts_mode.cpp`\n\n### 注意\ndev-tester 报告 918 测试中 916 通过、2 个失败（声称与本次修改无关）。请确认这 2 个失败是否确实是预存问题。\n\n### 审查维度\n1. 代码质量和风格一致性\n2. 潜在 bug 和边界情况\n3. 测试覆盖是否充分\n4. 是否引入回归风险\n5. 2 个失败测试的根因分析",
     "timestamp": "2026-04-23T18:31:22.656Z",
     "read": true
+  },
+  {
+    "id": "msg-1776971933981-xy482u",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 审查任务：Task 8.1.3 — 名称修饰增强\n\n请审查以下已完成的任务：\n\n### 修改文件\n- `include/blocktype/CodeGen/Mangler.h` — 添加 Substitutions 表 + 编码/查找/重置方法\n- `src/CodeGen/Mangler.cpp` — 集成 substitution 到编码流程 + St 缩写 + 模板参数改进\n- `tests/unit/CodeGen/ManglerTest.cpp` — 添加 9 个 substitution 测试\n\n### 实现概要\n1. Substitution 表基础设施（addSubstitution/getSubstitutionEncoding/trySubstitution/resetSubstitutions）\n2. 集成到 mangleNestedName/mangleRecordType/mangleEnumType\n3. std 命名空间使用 St 缩写（std::foo → _ZSt3fooi）\n4. 重复命名空间/类名使用 S_/S0_ 回指\n5. 模板类型参数不再使用 vendor extension u5tparam\n6. 所有顶层 mangle 入口重置 substitution\n\n### 测试结果\n- 55/55 Mangler 测试通过（新增 9 个）\n- 916/918 总测试通过（2 个预存失败与本次无关）\n- c++filt 验证通过\n\n### 审查维度\n1. substitution 编码算法正确性（S_/S0_/SA_ 序列）\n2. std 命名空间 St 缩写是否符合 Itanium ABI 规范\n3. substitution 时机是否正确（过早/过晚记录）\n4. 模板参数编码改进是否完整\n5. 测试覆盖是否充分\n6. 是否引入回归风险",
+    "timestamp": "2026-04-23T19:18:53.981Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776981312727-6t1vhn",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 审查任务：Task 8.2.1 — 内建函数\n\n请审查以下已完成的任务：\n\n### 新建文件\n- `include/blocktype/Basic/Builtins.def` — 22 个内建函数定义表\n- `include/blocktype/Basic/Builtins.h` — BuiltinID 枚举、BuiltinInfo 结构体、Builtins 查询类\n- `src/Basic/Builtins.cpp` — BuiltinTable、StringMap 查找、LLVM Intrinsic 映射\n- `tests/unit/Basic/BuiltinTest.cpp` — 13 个单元测试\n\n### 修改文件\n- `src/Basic/CMakeLists.txt` — 添加 Builtins.cpp\n- `include/blocktype/AST/Expr.h` — CallExpr 添加 IsBuiltinCall 标志\n- `include/blocktype/AST/ASTContext.h` — 添加 createImplicitBuiltinDecl\n- `src/AST/ASTContext.cpp` — 实现 createImplicitBuiltinDecl\n- `src/Sema/SemaExpr.cpp` — 识别 __builtin_ 前缀 + 标记 IsBuiltinCall\n- `include/blocktype/CodeGen/CodeGenFunction.h` — 声明 EmitBuiltinCall\n- `src/CodeGen/CodeGenExpr.cpp` — 实现 EmitBuiltinCall（23 个 case）\n\n### 实现概要\n- Builtins.def 定义 22 个内建函数（abs/labs/llabs, ctz/clz/popcount 系列, bswap 系列, expect/unreachable/trap, strlen/memcpy/memset/memmove, is_constant_evaluated）\n- Sema: ActOnDeclRefExpr 识别 __builtin_ 前缀，创建隐式 FunctionDecl\n- CodeGen: EmitBuiltinCall 映射到 LLVM Intrinsic 或外部函数调用\n- 929/932 测试通过（3 个预存失败）\n\n### 审查维度\n1. Builtins.def 签名定义是否正确\n2. Sema 隐式 FunctionDecl 创建是否安全\n3. CodeGen EmitBuiltinCall 的 LLVM Intrinsic 映射是否正确\n4. CallExpr IsBuiltinCall 标志是否影响现有调用路径\n5. 测试覆盖是否充分\n6. 是否引入回归风险",
+    "timestamp": "2026-04-23T21:55:12.727Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776981456245-93hrui",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "补充信息：审查 Task 8.2.1 时，请参考 planner 的详细规划文档：\n\n`docs/plan/task_8_wave2_wave3_plan.md` 中 \"Task 8.2.1 — 内建函数\" 部分\n\n该文档包含：\n- 预期的 Builtins.def 签名格式\n- Builtins.h/cpp 的设计接口\n- Sema/CodeGen 集成的代码示例\n- 风险评估（类型签名平台差异、CallExpr 修改影响、LLVM Intrinsic API 版本差异）\n- 验收标准清单\n\n请对照规划文档检查实现是否与设计意图一致。",
+    "timestamp": "2026-04-23T21:57:36.245Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776981645062-37ovab",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 补充通知：Task 8.2.1 审查参考文档\n\n之前发送的 Task 8.2.1 审查任务，补充以下参考信息：\n\n请参考 planner 的详细规划文档：`docs/plan/task_8_wave2_wave3_plan.md` 中 \"Task 8.2.1 — 内建函数\" 部分\n\n该文档包含：\n- 预期的 Builtins.def 签名格式和完整定义\n- Builtins.h/cpp 的设计接口和代码示例\n- Sema/CodeGen 集成的代码示例\n- 风险评估（类型签名平台差异、CallExpr 修改影响、LLVM Intrinsic API 版本差异、ASTContext::createImplicitBuiltinDecl 需新增）\n- 验收标准清单\n\n请对照规划文档检查实现是否与设计意图一致。",
+    "timestamp": "2026-04-23T22:00:45.062Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776981698654-7tv17f",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 重新审查任务：Task 8.2.1 — 内建函数\n\n之前的审查结果可能遗漏了与规划文档的对照，请参照 planner 的详细规划文档重新审查。\n\n**规划文档路径：** `docs/plan/task_8_wave2_wave3_plan.md` 中 \"Task 8.2.1 — 内建函数\" 部分\n\n### 审查文件清单\n\n**新建文件：**\n- `include/blocktype/Basic/Builtins.def` — 22 个内建函数定义表\n- `include/blocktype/Basic/Builtins.h` — BuiltinID 枚举、BuiltinInfo 结构体、Builtins 查询类\n- `src/Basic/Builtins.cpp` — BuiltinTable、StringMap 查找、LLVM Intrinsic 映射\n- `tests/unit/Basic/BuiltinTest.cpp` — 13 个单元测试\n\n**修改文件：**\n- `src/Basic/CMakeLists.txt` — 添加 Builtins.cpp\n- `include/blocktype/AST/Expr.h` — CallExpr 添加 IsBuiltinCall 标志\n- `include/blocktype/AST/ASTContext.h` — 添加 createImplicitBuiltinDecl\n- `src/AST/ASTContext.cpp` — 实现 createImplicitBuiltinDecl\n- `src/Sema/SemaExpr.cpp` — 识别 __builtin_ 前缀 + 标记 IsBuiltinCall\n- `include/blocktype/CodeGen/CodeGenFunction.h` — 声明 EmitBuiltinCall\n- `src/CodeGen/CodeGenExpr.cpp` — 实现 EmitBuiltinCall（23 个 case）\n\n### 规划文档中的关键设计要点（请对照检查）\n\n1. **Builtins.def 签名格式** — 规划文档中有完整的 22 个定义，请对照实际实现是否一致\n2. **Builtins.h 接口设计** — 规划中有 BuiltinID/BuiltinInfo/Builtins 类的完整接口，请对照\n3. **Builtins.cpp 实现** — 规划中有 StringMap 查找、getLLVMIntrinsicName 映射的完整实现，请对照\n4. **Sema 集成** — 规划中要求 ActOnDeclRefExpr 识别 __builtin_、ASTContext::createImplicitBuiltinDecl、CallExpr::IsBuiltinCall\n5. **CodeGen 集成** — 规划中有 EmitBuiltinCall 的完整代码示例（每个 case 的映射），请对照实际实现是否遗漏或偏离\n6. **风险评估对照** — 规划列出了 4 个风险（类型签名平台差异、CallExpr 修改、LLVM Intrinsic API 版本、createImplicitBuiltinDecl 需新增），请检查这些风险是否已被正确处理\n\n### 验收标准（请逐项检查）\n- [ ] Builtins.def 定义表创建，包含 22+ 个内建函数\n- [ ] Builtins::isBuiltin/lookup/getInfo 工作正确\n- [ ] Sema 识别 __builtin_ 前缀并创建隐式 FunctionDecl\n- [ ] CodeGen EmitBuiltinCall 正确映射到 LLVM Intrinsic\n- [ ] __builtin_abs/ctz/clz/popcount/bswap 工作\n- [ ] __builtin_trap/unreachable/is_constant_evaluated 工作\n- [ ] __builtin_memcpy/memset/memmove 工作\n- [ ] 9 个端到端测试用例通过\n- [ ] 所有现有测试通过\n\n### 审查维度\n1. 实现与规划文档设计意图的一致性\n2. 代码质量和风格一致性\n3. 潜在 bug 和边界情况\n4. 测试覆盖是否充分\n5. 是否引入回归风险\n6. 规划文档中列出的风险是否已被处理",
+    "timestamp": "2026-04-23T22:01:38.654Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776982508713-0y3q27",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 审查任务：Task 8.2.1 内建函数 — 审查修复\n\n规划文档：docs/plan/task_8_wave2_wave3_plan.md，章节：Task 8.2.1 — 内建函数\n\ndev-tester 已完成你之前发现的全部 7 项修复，请审查修复是否正确：\n\n| # | 优先级 | 修复内容 |\n|---|--------|---------|\n| 1 | 高 | `getInfo` 越界保护 — 添加 `assert(ID != NotBuiltin)` |\n| 2 | 高 | `createImplicitBuiltinDecl` 参数类型丢失 — 完整解析 `Type` 签名字符串，构建参数类型列表 |\n| 3 | 中 | `__builtin_expect` 改用 `llvm.expect` intrinsic |\n| 4 | 低 | `__builtin_is_constant_evaluated` 添加 TODO 注释 |\n| 5 | 低 | `getLLVMIntrinsicName` default 分支添加注释说明 |\n| 6 | 低 | `__builtin_labs`/`__builtin_llabs` 改用 `llvm.abs` intrinsic |\n| 7 | 低 | 补充 9 个端到端测试 `BuiltinFunctionsTest.cpp` |\n\n重点审查项：\n- 修复2：`parseBuiltinTypeChar` 的类型解析是否完整正确，是否覆盖了所有签名字符\n- 修复3：`llvm.expect` 的使用方式是否符合 LLVM API\n- 修复6：`llvm.abs` 对 i64 类型的处理是否正确\n- 修复7：端到端测试是否覆盖了关键路径\n\n测试结果：938/941 通过（3个预存失败与本次无关）\n\n涉及文件：\n- include/blocktype/Basic/Builtins.h\n- include/blocktype/AST/ASTContext.h\n- src/Basic/Builtins.cpp\n- src/AST/ASTContext.cpp\n- src/CodeGen/CodeGenExpr.cpp\n- tests/unit/Basic/BuiltinTest.cpp\n- tests/unit/CodeGen/BuiltinFunctionsTest.cpp（新增）",
+    "timestamp": "2026-04-23T22:15:08.713Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776983854462-g7bp3g",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 审查任务：Task 8.2.2 — 调用约定\n\n规划文档：docs/plan/task_8_wave2_wave3_plan.md，章节：Task 8.2.2 — 调用约定\n\ndev-tester 已完成 Task 8.2.2 调用约定的实现，请审查。\n\n### 实现摘要\n\n**修改文件：**\n\n| 文件 | 说明 |\n|------|------|\n| `src/CodeGen/CodeGenModule.cpp` | `GetOrCreateFunctionDecl()` 设置 calling convention C + signext/zeroext 参数属性 + 返回值 signext/zeroext |\n| `include/blocktype/CodeGen/CodeGenTypes.h` | 添加 `shouldSignExtend`/`shouldZeroExtend` 声明 |\n| `src/CodeGen/CodeGenTypes.cpp` | 实现 sign/zero extend 判断（x86_64 需要，AArch64 不需要，bool 特殊处理） |\n| `src/CodeGen/CodeGenFunction.cpp` | `EmitCallOrInvoke()` 间接调用设置 calling convention C |\n| `src/CodeGen/CGCXX.cpp` | `EmitVirtualCall()` 虚函数间接调用设置 calling convention C |\n| `tests/unit/CodeGen/CallingConventionTest.cpp` | 新建 15 个测试用例 |\n| `tests/unit/CodeGen/CMakeLists.txt` | 添加测试文件 |\n\n### 测试结果\n- 15/15 CallingConvention 测试通过\n- 204/204 CodeGen 测试通过\n- 953/956 全量测试通过（3个预存失败与本次无关）\n\n### 重点审查项\n1. `shouldSignExtend`/`shouldZeroExtend` 的类型判断逻辑是否正确（特别是 bool 的特殊处理）\n2. signext/zeroext 参数属性设置的位置和方式是否正确\n3. 返回值 signext/zeroext 通过 `Fn->addRetAttr()` 设置是否正确\n4. 间接调用 calling convention 的判断条件（`!isa<Function>(Callee.getCallee())`）\n5. 虚函数调用的 calling convention 设置\n6. 测试覆盖是否充分\n\n### 验收标准对照\n- [ ] 函数 calling convention 正确设置（C conv）\n- [ ] signext 属性正确（x86_64 有符号 i1/i8/i16）\n- [ ] zeroext 属性正确（x86_64 无符号 i1/i8/i16）\n- [ ] 返回值 signext/zeroext 正确\n- [ ] 间接调用 calling convention 正确\n- [ ] AArch64 不添加 signext/zeroext\n- [ ] 所有现有测试通过",
+    "timestamp": "2026-04-23T22:37:34.462Z",
+    "read": true
+  },
+  {
+    "id": "msg-1776986632910-ndnd8p",
+    "from": "team-lead",
+    "to": "reviewer",
+    "type": "message",
+    "content": "## 审查任务：Task 8.3.1 — 基本优化\n\n规划文档：docs/plan/task_8_wave2_wave3_plan.md，章节：Task 8.3.1 — 基本优化\n\ndev-worker 已完成 Task 8.3.1 基本优化的实现，请审查。\n\n### 实现摘要\n\n| 文件 | 说明 |\n|------|------|\n| `src/Frontend/CompilerInstance.cpp` | 实现 `runOptimizationPasses()`（PassBuilder + O0/O1/O2/O3 pipeline）+ `generateObjectFile()`（TargetMachine + legacy PM + addPassesToEmitFile） |\n| `tools/driver.cpp` | main() 开头添加 LLVM Target 初始化（InitializeAllTargets/MCs/AsmPrinters/AsmParsers） |\n| `tests/unit/CodeGen/OptimizationTest.cpp` | 新建 9 个测试用例 |\n| `tests/unit/CodeGen/CMakeLists.txt` | 添加测试文件和链接库 |\n\n### 关键实现细节\n- O0 直接返回 true（无优化）\n- O1/O2/O3 使用 `PassBuilder::buildPerModuleDefaultPipeline()`\n- `generateObjectFile()` 使用 `TargetRegistry::lookupTarget()` + `TargetMachine` + `legacy::PassManager` + `addPassesToEmitFile()`\n- LLVM 18 兼容性：`llvm/TargetParser/Host.h`（从 `llvm/Support/Host.h` 迁移）、`CodeModel::Small`（LLVM 18 无 Default）\n\n### 测试结果\n- 9/9 Optimization 测试通过\n- 911/913 全量测试通过（2个预存失败与本次无关）\n\n### 重点审查项\n1. PassBuilder pipeline 构建是否正确（Analysis Manager 注册顺序）\n2. `generateObjectFile()` 的 TargetMachine 创建和错误处理\n3. LLVM 18 兼容性修复是否正确\n4. driver.cpp 初始化位置是否正确（必须在任何 Target 操作之前）\n5. 测试覆盖是否充分\n\n### 验收标准\n- [ ] -O0 无优化（直接返回）\n- [ ] -O1/-O2/-O3 使用 PassBuilder 正确优化\n- [ ] generateObjectFile() 生成有效 .o 文件\n- [ ] macOS ARM64 目标代码正确\n- [ ] 所有现有测试通过",
+    "timestamp": "2026-04-23T23:23:52.910Z",
+    "read": true
   }
 ]

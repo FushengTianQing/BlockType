@@ -1,0 +1,11 @@
+[
+  {
+    "id": "shutdown-1776986722915",
+    "from": "team-lead",
+    "to": "reviewer-831",
+    "type": "shutdown_request",
+    "content": "{\"type\":\"shutdown_request\",\"request_id\":\"shutdown-1776986722915\",\"reason\":\"任务已取消，请关闭。原 reviewer 会处理此审查任务。\",\"from\":\"team-lead\",\"timestamp\":\"2026-04-23T23:25:22.915Z\"}",
+    "timestamp": "2026-04-23T23:25:22.915Z",
+    "read": true
+  }
+]

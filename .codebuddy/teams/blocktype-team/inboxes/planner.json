@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "id": "msg-1776969951271-1ti1j1",
+    "from": "team-lead",
+    "to": "planner",
+    "type": "message",
+    "content": "你之前完成了 Phase 8 Wave 2/3 详细规划，说\"规划文档已保存为 artifact\"。但我在文件系统中找不到这个文档。请将完整的 Wave 2/3 详细规划写入文件 `docs/plan/task_8_wave2_wave3_plan.md`，包含每个 Task 的：\n1. 文件变更清单\n2. 详细开发步骤（含代码示例）\n3. 风险评估\n4. 验收标准\n\n这样 dev-tester 可以直接参照执行。",
+    "timestamp": "2026-04-23T18:45:51.271Z",
+    "read": true
+  }
+]
