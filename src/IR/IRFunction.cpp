@@ -7,7 +7,7 @@
 namespace blocktype {
 namespace ir {
 
-void IRArgument::print(std::ostream& OS) const {
+void IRArgument::print(raw_ostream& OS) const {
   if (!Name.empty()) {
     OS << Name;
   }
@@ -38,7 +38,7 @@ IRBasicBlock* IRFunction::getEntryBlock() {
   return BasicBlocks.front().get();
 }
 
-void IRFunction::print(std::ostream& OS) const {
+void IRFunction::print(raw_ostream& OS) const {
   OS << "define ";
   OS << Ty->getReturnType()->toString() << " @" << Name << "(";
   for (unsigned i = 0; i < getNumArgs(); ++i) {

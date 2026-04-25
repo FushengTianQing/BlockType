@@ -10,6 +10,7 @@ add_library(blocktype-ir
   IRTypeContext.cpp
   IRValue.cpp
   TargetLayout.cpp
+  raw_ostream.cpp
 )
 
 target_include_directories(blocktype-ir

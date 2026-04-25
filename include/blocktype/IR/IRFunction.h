@@ -30,7 +30,7 @@ public:
   bool hasAttr(unsigned A) const { return (Attrs & A) != 0; }
   void addAttr(unsigned A) { Attrs |= A; }
 
-  void print(std::ostream& OS) const;
+  void print(raw_ostream& OS) const;
 };
 
 class IRModule;
@@ -74,7 +74,7 @@ public:
   bool isDeclaration() const { return BasicBlocks.empty(); }
   bool isDefinition() const { return !BasicBlocks.empty(); }
 
-  void print(std::ostream& OS) const;
+  void print(raw_ostream& OS) const;
 };
 
 } // namespace ir

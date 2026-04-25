@@ -42,7 +42,7 @@ public:
   size_t size() const { return InstList.size(); }
   bool empty() const { return InstList.empty(); }
 
-  void print(std::ostream& OS) const;
+  void print(raw_ostream& OS) const;
 };
 
 } // namespace ir

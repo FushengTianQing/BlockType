@@ -8,5 +8,6 @@
 #include "blocktype/IR/ADT/SmallVector.h"
 #include "blocktype/IR/ADT/StringMap.h"
 #include "blocktype/IR/ADT/StringRef.h"
+#include "blocktype/IR/ADT/raw_ostream.h"
 
 #endif // BLOCKTYPE_IR_ADT_H

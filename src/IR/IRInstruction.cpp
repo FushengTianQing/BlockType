@@ -47,7 +47,7 @@ void IRInstruction::eraseFromParent() {
   }
 }
 
-void IRInstruction::print(std::ostream& OS) const {
+void IRInstruction::print(raw_ostream& OS) const {
   static const char* OpcodeNames[] = {
     "ret", "br", "condbr", "switch", "invoke", "unreachable", "resume",
     "", "", "", "", "", "", "", "", "",

@@ -119,7 +119,7 @@ public:
   unsigned getNumUses() const { return static_cast<unsigned>(UseList.size()); }
   void addUse(Use* U) { UseList.push_back(U); }
   void removeUse(Use* U);
-  virtual void print(std::ostream& OS) const = 0;
+  virtual void print(raw_ostream& OS) const = 0;
 };
 
 class User : public IRValue {

@@ -86,10 +86,9 @@ SmallVector<IRBasicBlock*, 4> IRBasicBlock::getPredecessors() const {
   if (!Parent) return Preds;
   for (auto& BB : Parent->getBasicBlocks()) {
     if (BB.get() == this) continue;
-    auto* Term = BB->getTerminator();
-    if (!Term) continue;
-    for (unsigned i = 0; i < Term->getNumSuccessors(); ++i) {
-      if (Term->getSuccessor(i) == this) {
+    SmallVector<IRBasicBlock*, 4> Succs = BB->getSuccessors();
+    for (auto* S : Succs) {
+      if (S == this) {
         Preds.push_back(BB.get());
         break;
       }
@@ -102,13 +101,10 @@ SmallVector<IRBasicBlock*, 4> IRBasicBlock::getSuccessors() const {
   SmallVector<IRBasicBlock*, 4> Succs;
   auto* Term = getTerminator();
   if (!Term) return Succs;
-  for (unsigned i = 0; i < Term->getNumSuccessors(); ++i) {
-    Succs.push_back(Term->getSuccessor(i));
-  }
   return Succs;
 }
 
-void IRBasicBlock::print(std::ostream& OS) const {
+void IRBasicBlock::print(raw_ostream& OS) const {
   OS << Name << ":\n";
   for (auto& Inst : InstList) {
     OS << "  ";

@@ -33,7 +33,7 @@ enum class IRFeature : uint32_t {
 class IRMetadata {
 public:
   virtual ~IRMetadata() = default;
-  virtual void print(std::ostream& OS) const = 0;
+  virtual void print(raw_ostream& OS) const = 0;
 };
 
 class IRFunctionDecl {
@@ -141,7 +141,7 @@ public:
   uint32_t getRequiredFeatures() const { return RequiredFeatures; }
   void addRequiredFeature(IRFeature F) { RequiredFeatures |= static_cast<uint32_t>(F); }
 
-  void print(std::ostream& OS) const;
+  void print(raw_ostream& OS) const;
 };
 
 } // namespace ir

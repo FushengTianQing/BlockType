@@ -175,7 +175,7 @@ public:
     return std::to_string(getZExtValue());
   }
 
-  void print(std::ostream& OS) const {
+  void print(raw_ostream& OS) const {
     OS << toString(10, true);
   }
 };
@@ -252,7 +252,7 @@ public:
     return std::to_string(Val);
   }
 
-  void print(std::ostream& OS) const { OS << toString(); }
+  void print(raw_ostream& OS) const { OS << toString(); }
 };
 
 class IRConstant : public IRValue {
@@ -274,7 +274,7 @@ public:
   int64_t getSExtValue() const { return Value.getSExtValue(); }
   bool isZero() const { return Value.isZero(); }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantInt; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantFP : public IRConstant {
@@ -287,14 +287,14 @@ public:
   bool isZero() const { return Value.isZero(); }
   bool isNaN() const { return Value.isNaN(); }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantFloat; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantNull : public IRConstant {
 public:
   explicit IRConstantNull(IRType* Ty) : IRConstant(ValueKind::ConstantNull, Ty, 0) {}
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantNull; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantUndef : public IRConstant {
@@ -304,14 +304,14 @@ public:
   explicit IRConstantUndef(IRType* Ty) : IRConstant(ValueKind::ConstantUndef, Ty, 0) {}
   static IRConstantUndef* get(IRContext& Ctx, IRType* Ty);
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantUndef; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantAggregateZero : public IRConstant {
 public:
   explicit IRConstantAggregateZero(IRType* Ty) : IRConstant(ValueKind::ConstantAggregateZero, Ty, 0) {}
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantAggregateZero; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantStruct : public IRConstant {
@@ -322,7 +322,7 @@ public:
     : IRConstant(ValueKind::ConstantStruct, Ty, 0), Elements(std::move(Elems)) {}
   ArrayRef<IRConstant*> getElements() const { return Elements; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantStruct; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantArray : public IRConstant {
@@ -333,7 +333,7 @@ public:
     : IRConstant(ValueKind::ConstantArray, Ty, 0), Elements(std::move(Elems)) {}
   ArrayRef<IRConstant*> getElements() const { return Elements; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantArray; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantFunctionRef : public IRConstant {
@@ -343,7 +343,7 @@ public:
   explicit IRConstantFunctionRef(IRFunction* F);
   IRFunction* getFunction() const { return Func; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantFunctionRef; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 class IRConstantGlobalRef : public IRConstant {
@@ -353,7 +353,7 @@ public:
   explicit IRConstantGlobalRef(IRGlobalVariable* G);
   IRGlobalVariable* getGlobal() const { return Global; }
   static bool classof(const IRValue* V) { return V->getValueKind() == ValueKind::ConstantGlobalRef; }
-  void print(std::ostream& OS) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 } // namespace ir

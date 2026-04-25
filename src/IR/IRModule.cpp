@@ -97,7 +97,7 @@ void IRModule::addMetadata(std::unique_ptr<IRMetadata> M) {
   Metadata.push_back(std::move(M));
 }
 
-void IRModule::print(std::ostream& OS) const {
+void IRModule::print(raw_ostream& OS) const {
   if (!TargetTriple.empty()) OS << "target triple = \"" << TargetTriple << "\"\n";
   if (!DataLayoutStr.empty()) OS << "target datalayout = \"" << DataLayoutStr << "\"\n";
   for (auto& GV : Globals) {
