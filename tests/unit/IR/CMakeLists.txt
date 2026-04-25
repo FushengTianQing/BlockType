@@ -13,6 +13,7 @@ add_executable(blocktype-ir-test
   IRErrorCodeTest.cpp
   IRPassesTest.cpp
   IRContractTest.cpp
+  IRFFITest.cpp
 )
 
 target_link_libraries(blocktype-ir-test
