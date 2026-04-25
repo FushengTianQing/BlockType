@@ -20,7 +20,7 @@ target_include_directories(blocktype-ir
 )
 
 target_link_libraries(blocktype-ir
-  PRIVATE
+  PUBLIC
     blocktype-basic
 )
 
