@@ -18,6 +18,8 @@ add_library(blocktype-ir
   DialectLoweringPass.cpp
   IRDialect.cpp
   IRTelemetry.cpp
+  IRDebugMetadata.cpp
+  IRDebugInfo.cpp
   TargetLayout.cpp
   raw_ostream.cpp
 )

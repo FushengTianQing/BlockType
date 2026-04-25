@@ -25,5 +25,23 @@
     "content": "请审查 Task A-F4：IRInstruction 添加 Optional DbgInfo 字段。\n\n**规划文档**：`docs/plan/多前端后端重构方案/17-AI-Coder-任务流-PhaseA-AF4-优化版.md`\n\n## 审查范围\n\n| 操作 | 文件路径 | 行数 |\n|------|----------|------|\n| 新增 | `include/blocktype/IR/IRDebugFwd.h` | 17 行 |\n| 修改 | `include/blocktype/IR/IRInstruction.h` | 64 行（原 52 行） |\n| 修改 | `tests/unit/IR/IRBuilderTest.cpp` | 末尾新增测试用例 |\n\n## 审查检查项\n\n1. `IRDebugFwd.h`：命名空间 `blocktype::ir::debug`，空占位结构体 `IRInstructionDebugInfo`\n2. `IRInstruction.h`：\n   - 添加 `#include <optional>` 和 `#include \"blocktype/IR/IRDebugFwd.h\"`\n   - 字段 `std::optional<debug::IRInstructionDebugInfo> DbgInfo;` 在 private 区域\n   - 三个 getter/setter：`setDebugInfo`、`getDebugInfo`（返回指针或 nullptr）、`hasDebugInfo`\n   - 现有接口签名未变\n3. 构造函数无需修改（std::optional 默认构造）\n4. 测试用例覆盖 V1（默认无 DbgInfo）和 V2（设置/获取 DbgInfo）\n5. 所有现有测试通过（58 个 IR 测试 + 988 全量测试）\n\n## dev-tester-2 报告的测试结果\n- 全量编译零错误零警告\n- IR 测试 58/58 通过\n- 全量 985/988（3 个 pre-existing 失败）\n\n## 通信纪律\n仅读取你自己的收件箱文件（code-auditor-2.json），禁止读取其他成员的配置文件。",
     "timestamp": "2026-04-25T05:55:57.709Z",
     "read": true
+  },
+  {
+    "id": "msg-1777097802960-2s5szp",
+    "from": "team-lead",
+    "to": "code-auditor-2",
+    "type": "message",
+    "content": "## 审查任务：A-F5 IRDebugMetadata 基础类型定义 + 调试信息升级\n\n### 背景\ntask-planner 完成 A-F5 优化版文档（931 行，9 章），dev-tester-2 完成实现。请对照文档逐项审查。\n\n### 红线 Checklist\n(1) 架构优先 — 两套调试信息体系共存，不破坏现有架构\n(2) 多前端多后端自由组合 — 不引入前后端耦合\n(3) 渐进式改造 — 新增文件为主，不改变现有接口\n(4) 现有功能不退化 — 所有现有测试必须通过\n(5) 接口抽象优先 — DebugMetadata + DebugInfoEmitter 抽象基类\n(6) IR 中间层解耦 — 仅涉及 IR 层调试信息\n\n### 设计偏差（dev-tester-2 报告）\n文档推荐 DebugMetadata 继承 IRMetadata，但发现头文件循环依赖。改用方案 B：DebugMetadata 为独立基类，接口完全一致。\n\n### 产出文件（9 个操作）\n\n| 操作 | 文件 |\n|------|------|\n| 新增 | `include/blocktype/IR/IRDebugMetadata.h`（185 行） |\n| 新增 | `include/blocktype/IR/IRDebugInfo.h`（116 行） |\n| 新增 | `src/IR/IRDebugMetadata.cpp`（48 行） |\n| 新增 | `src/IR/IRDebugInfo.cpp`（8 行） |\n| 新增 | `tests/unit/IR/IRDebugInfoTest.cpp`（247 行，9 个测试） |\n| 修改 | `include/blocktype/IR/IRDebugFwd.h` — 改为纯前向声明 |\n| 修改 | `include/blocktype/IR/IRInstruction.h` — include 改为 IRDebugInfo.h |\n| 修改 | `src/IR/CMakeLists.txt` — 添加 2 个源文件 |\n| 修改 | `tests/unit/IR/CMakeLists.txt` — 添加测试文件 |\n\n### dev-tester-2 报告的测试结果\n- 全量编译：零错误零警告\n- IR 测试：67 个全部通过（含 9 个新增 DebugInfoTest）\n- 红线 6 项全部达标\n\n### 规划文档\n`/Users/yuan/Documents/BlockType/docs/plan/多前端后端重构方案/18-AI-Coder-任务流-PhaseA-AF5-优化版.md`（931 行，9 章）\n\n### 审查要求\n1. 逐项验证所有类型定义是否与文档一致\n2. 验证设计偏差（DebugMetadata 独立基类）是否合理\n3. 检查 IRDebugFwd.h 改为前向声明后的完整性\n4. 检查 IRInstruction.h include 变更的正确性\n5. 检查测试覆盖是否充分（V1~V8）\n6. 输出结构化审查报告",
+    "timestamp": "2026-04-25T06:16:42.960Z",
+    "read": true
+  },
+  {
+    "id": "msg-1777097808850-acb4d3",
+    "from": "team-lead",
+    "to": "code-auditor-2",
+    "type": "message",
+    "content": "请审查 Task A-F5：IRDebugMetadata 基础类型定义 + 调试信息升级。\n\n**规划文档**：`docs/plan/多前端后端重构方案/18-AI-Coder-任务流-PhaseA-AF5-优化版.md`\n\n## 审查范围（9 个文件操作）\n\n| 操作 | 文件路径 | 行数 |\n|------|----------|------|\n| 新增 | `include/blocktype/IR/IRDebugMetadata.h` | 185 行 |\n| 新增 | `include/blocktype/IR/IRDebugInfo.h` | 116 行 |\n| 新增 | `src/IR/IRDebugMetadata.cpp` | 48 行 |\n| 新增 | `src/IR/IRDebugInfo.cpp` | 8 行（占位） |\n| 修改 | `include/blocktype/IR/IRDebugFwd.h` | 改为纯前向声明 |\n| 修改 | `include/blocktype/IR/IRInstruction.h` | include 改为 IRDebugInfo.h |\n| 修改 | `src/IR/CMakeLists.txt` | 添加 2 个源文件 |\n| 新增 | `tests/unit/IR/IRDebugInfoTest.cpp` | 247 行，9 个测试 |\n| 修改 | `tests/unit/IR/CMakeLists.txt` | 添加测试文件 |\n\n## 关键设计偏差（dev-tester-2 报告）\n\n**文档推荐**：`DebugMetadata` 继承 `IRMetadata`（方案 A）\n**实际实现**：`DebugMetadata` 为独立基类（方案 B）\n\n**原因**：头文件循环依赖：\n`IRModule.h` → `IRFunction.h` → `IRBasicBlock.h` → `IRInstruction.h` → `IRDebugInfo.h` → `IRDebugMetadata.h` → `IRModule.h`\n\n方案 B 使 `IRDebugMetadata.h` 仅 include `ADT.h`，不 include `IRModule.h`，打断循环。接口完全一致（virtual dtor + virtual print）。后续可通过 adapter 模式存入 `IRModule::Metadata`。\n\n## 审查检查项\n\n1. SourceLocation 结构体（Filename/Line/Column + isValid）\n2. DebugMetadata 独立基类（DebugKind 枚举 + classof + virtual print/dtor）\n3. DICompileUnit（SourceFile/Producer/Language + print）\n4. DIType（Name/SizeInBits/AlignInBits + print）\n5. DISubprogram（Name/Unit/Linkage + print）\n6. DILocation（Line/Column/Scope + print）\n7. debug::IRInstructionDebugInfo 完整版（Location/Subprogram/Artificial/Inlined/InlinedAt/TypeKind）\n8. debug::DebugInfoEmitter 抽象基类（4 个纯虚函数）\n9. debug::DIType 与 ir::DIType 共存不冲突\n10. IRDebugFwd.h 改为纯前向声明\n11. IRInstruction.h include 从 IRDebugFwd.h 改为 IRDebugInfo.h\n12. 循环依赖是否确实解决\n13. 所有现有测试通过（67 个 IR 测试）\n14. 方案 B 是否可接受（vs 方案 A）\n\n## dev-tester-2 报告的测试结果\n- 全量编译零错误零警告\n- IR 测试 67/67 通过（含 9 个新增 DebugInfo 测试）\n\n## 通信纪律\n仅读取你自己的收件箱文件（code-auditor-2.json），禁止读取其他成员的配置文件。",
+    "timestamp": "2026-04-25T06:16:48.850Z",
+    "read": true
   }
 ]

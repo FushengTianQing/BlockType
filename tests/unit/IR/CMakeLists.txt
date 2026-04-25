@@ -4,6 +4,7 @@ add_executable(blocktype-ir-test
   IRDialectTest.cpp
   IRSerializerTest.cpp
   IRTelemetryTest.cpp
+  IRDebugInfoTest.cpp
   IRVerifierTest.cpp
 )
 

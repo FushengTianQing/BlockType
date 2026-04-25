@@ -7,7 +7,7 @@
 #include <string_view>
 
 #include "blocktype/IR/ADT.h"
-#include "blocktype/IR/IRDebugFwd.h"
+#include "blocktype/IR/IRDebugInfo.h"
 #include "blocktype/IR/IRType.h"
 #include "blocktype/IR/IRValue.h"
 
