@@ -142,3 +142,27 @@ target_include_directories(IREmitExprTest
 )
 
 gtest_discover_tests(IREmitExprTest)
+
+# IREmitStmt unit test (GTest)
+
+add_executable(IREmitStmtTest
+  IREmitStmtTest.cpp
+)
+
+target_link_libraries(IREmitStmtTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    blocktype-ast
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(IREmitStmtTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(IREmitStmtTest)

@@ -8,6 +8,7 @@ add_library(blocktypeFrontend
   IRTypeMapper.cpp
   ASTToIRConverter.cpp
   IREmitExpr.cpp
+  IREmitStmt.cpp
 )
 
 target_include_directories(blocktypeFrontend

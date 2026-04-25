@@ -147,6 +147,9 @@ public:
 
   // === Accessors for sub-emitters ===
 
+  IREmitExpr* getExprEmitter() { return ExprEmitter_; }
+  IREmitStmt* getStmtEmitter() { return StmtEmitter_; }
+
   ir::IRBuilder& getBuilder() { return *Builder_; }
   ir::IRModule* getModule() const { return TheModule_.get(); }
   IRTypeMapper& getTypeMapper() { return *TypeMapper_; }

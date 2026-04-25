@@ -40,6 +40,12 @@ public:
   IRInstruction* createInvoke(IRFunction* Callee, ArrayRef<IRValue*> Args,
                                IRBasicBlock* NormalBB, IRBasicBlock* UnwindBB);
 
+  //===--- Switch / Unreachable ---===//
+
+  IRInstruction* createSwitch(IRValue* Cond, IRBasicBlock* DefaultBB,
+                               unsigned NumCases = 0);
+  IRInstruction* createUnreachable();
+
   IRInstruction* createAdd(IRValue* LHS, IRValue* RHS, StringRef Name = "");
   IRInstruction* createSub(IRValue* LHS, IRValue* RHS, StringRef Name = "");
   IRInstruction* createMul(IRValue* LHS, IRValue* RHS, StringRef Name = "");

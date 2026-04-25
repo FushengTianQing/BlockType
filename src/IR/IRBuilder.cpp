@@ -92,6 +92,25 @@ IRInstruction* IRBuilder::createInvoke(IRFunction* Callee, ArrayRef<IRValue*> Ar
   return insertHelper(std::move(I));
 }
 
+//===--- Switch / Unreachable ---===//
+
+IRInstruction* IRBuilder::createSwitch(IRValue* Cond, IRBasicBlock* DefaultBB,
+                                        unsigned NumCases) {
+  auto* DefaultRef = IRCtx.create<IRBasicBlockRef>(DefaultBB);
+  auto I = std::make_unique<IRInstruction>(Opcode::Switch, Cond->getType(), 0,
+                                            dialect::DialectID::Core, "switch");
+  I->addOperand(Cond);
+  I->addOperand(DefaultRef);
+  (void)NumCases;
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createUnreachable() {
+  auto I = std::make_unique<IRInstruction>(Opcode::Unreachable,
+                                            TypeCtx.getVoidType(), 0);
+  return insertHelper(std::move(I));
+}
+
 IRInstruction* IRBuilder::createAdd(IRValue* LHS, IRValue* RHS, StringRef Name) {
   auto I = std::make_unique<IRInstruction>(Opcode::Add, LHS->getType(), 0, dialect::DialectID::Core, Name);
   I->addOperand(LHS);

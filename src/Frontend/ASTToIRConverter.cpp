@@ -144,17 +144,15 @@ ir::IRFunction* ASTToIRConverter::emitFunction(FunctionDecl* FD) {
     }
 
     // Delegate body emission to IREmitStmt (B.6)
-    // For B.4 framework: if body is a CompoundStmt, handle directly
     if (auto* CS = llvm::dyn_cast<CompoundStmt>(Body)) {
       for (Stmt* S : CS->getBody()) {
-        // TODO: Delegate to StmtEmitter_->emit(S) in B.6
-        // For now, skip statement emission
-        (void)S;
+        StmtEmitter_->Emit(S);
       }
     }
 
-    // Ensure terminator: if the last instruction is not a terminator, add ret
-    ir::IRInstruction* Term = EntryBB->getTerminator();
+    // Ensure terminator: check the current insert block (not necessarily the last BB)
+    ir::IRBasicBlock* CurBB = Builder_->getInsertBlock();
+    ir::IRInstruction* Term = CurBB ? CurBB->getTerminator() : nullptr;
     if (!Term) {
       if (RetTy->isVoid()) {
         Builder_->createRetVoid();
