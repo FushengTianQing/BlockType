@@ -60,7 +60,7 @@ class IRGlobalVariable {
   IRConstant* Initializer = nullptr;
   unsigned Alignment = 0;
   bool IsConstant = false;
-  std::string Section;
+  StringRef Section;
   unsigned AddressSpace = 0;
 
 public:

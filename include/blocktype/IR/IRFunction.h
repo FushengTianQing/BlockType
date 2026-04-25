@@ -46,7 +46,7 @@ class IRFunction {
   std::list<std::unique_ptr<IRBasicBlock>> BasicBlocks;
   FunctionAttrs Attrs = 0;
   unsigned Alignment = 0;
-  std::string Section;
+  StringRef Section;
 
 public:
   IRFunction(IRModule* M, StringRef N, IRFunctionType* T,
