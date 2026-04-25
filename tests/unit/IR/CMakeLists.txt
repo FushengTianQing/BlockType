@@ -1,5 +1,6 @@
 add_executable(blocktype-ir-test
   IRBuilderTest.cpp
+  IRVerifierTest.cpp
 )
 
 target_link_libraries(blocktype-ir-test

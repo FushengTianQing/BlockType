@@ -8,9 +8,11 @@ add_library(blocktype-ir
   IRFunction.cpp
   IRInstruction.cpp
   IRModule.cpp
+  IRPass.cpp
   IRType.cpp
   IRTypeContext.cpp
   IRValue.cpp
+  IRVerifier.cpp
   TargetLayout.cpp
   raw_ostream.cpp
 )
