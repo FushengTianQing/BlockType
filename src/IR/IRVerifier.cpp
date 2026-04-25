@@ -549,6 +549,20 @@ bool VerifierPass::verifyCmpOp(const IRInstruction& I) {
     if (Res && (!Res->isInteger() || static_cast<IRIntegerType*>(Res)->getBitWidth() != 1))
       reportError(VerificationCategory::InstructionLevel, "FCmp result must be i1");
   }
+  // 验证 predicate 值合法
+  if (Op == Opcode::ICmp) {
+    auto V = I.getPredicate();
+    if (V > 9) {  // ICmpPred 范围: 0~9 (EQ~SLE)
+      reportError(VerificationCategory::InstructionLevel,
+                  "ICmp predicate value " + std::to_string(V) + " out of range [0, 9]");
+    }
+  } else { // FCmp
+    auto V = I.getPredicate();
+    if (V > 15) {  // FCmpPred 范围: 0~15 (False~True)
+      reportError(VerificationCategory::InstructionLevel,
+                  "FCmp predicate value " + std::to_string(V) + " out of range [0, 15]");
+    }
+  }
   return !HasErrors;
 }
 

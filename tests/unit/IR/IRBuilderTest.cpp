@@ -157,6 +157,43 @@ TEST(IRBuilderTest, ComparisonOps) {
   EXPECT_EQ(FCmp->getOpcode(), Opcode::FCmp);
 }
 
+TEST(IRBuilderTest, ICmpPredicateStorage) {
+  IRContext IRCtx;
+  IRTypeContext& Ctx = IRCtx.getTypeContext();
+  IRModule Mod("test", Ctx);
+  auto* FTy = Ctx.getFunctionType(Ctx.getInt32Ty(), {});
+  auto* F = Mod.getOrInsertFunction("icmp_pred", FTy);
+  auto* Entry = F->addBasicBlock("entry");
+  IRBuilder Builder(IRCtx);
+  Builder.setInsertPoint(Entry);
+  auto* A = Builder.getInt32(1);
+  auto* B = Builder.getInt32(2);
+  auto* ICmpSGT = Builder.createICmp(ICmpPred::SGT, A, B, "sgt");
+  EXPECT_EQ(ICmpSGT->getICmpPredicate(), ICmpPred::SGT);
+  EXPECT_EQ(ICmpSGT->getPredicate(), static_cast<uint8_t>(ICmpPred::SGT));
+
+  auto* ICmpULE = Builder.createICmp(ICmpPred::ULE, A, B, "ule");
+  EXPECT_EQ(ICmpULE->getICmpPredicate(), ICmpPred::ULE);
+}
+
+TEST(IRBuilderTest, FCmpPredicateStorage) {
+  IRContext IRCtx;
+  IRTypeContext& Ctx = IRCtx.getTypeContext();
+  IRModule Mod("test", Ctx);
+  auto* FTy = Ctx.getFunctionType(Ctx.getInt32Ty(), {});
+  auto* F = Mod.getOrInsertFunction("fcmp_pred", FTy);
+  auto* Entry = F->addBasicBlock("entry");
+  IRBuilder Builder(IRCtx);
+  Builder.setInsertPoint(Entry);
+  auto* A = Builder.getInt32(1);
+  auto* B = Builder.getInt32(2);
+  auto* FCmpUNO = Builder.createFCmp(FCmpPred::UNO, A, B, "uno");
+  EXPECT_EQ(FCmpUNO->getFCmpPredicate(), FCmpPred::UNO);
+
+  auto* FCmpTrue = Builder.createFCmp(FCmpPred::True, A, B, "always");
+  EXPECT_EQ(FCmpTrue->getFCmpPredicate(), FCmpPred::True);
+}
+
 TEST(IRBuilderTest, MemoryOps) {
   IRContext IRCtx;
   IRTypeContext& Ctx = IRCtx.getTypeContext();

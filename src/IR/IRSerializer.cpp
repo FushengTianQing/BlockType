@@ -174,6 +174,40 @@ static const char* fcmpPredToText(FCmpPred P) {
   return "unknown";
 }
 
+static ICmpPred textToICmpPred(StringRef S) {
+  if (S == "eq")  return ICmpPred::EQ;
+  if (S == "ne")  return ICmpPred::NE;
+  if (S == "ugt") return ICmpPred::UGT;
+  if (S == "uge") return ICmpPred::UGE;
+  if (S == "ult") return ICmpPred::ULT;
+  if (S == "ule") return ICmpPred::ULE;
+  if (S == "sgt") return ICmpPred::SGT;
+  if (S == "sge") return ICmpPred::SGE;
+  if (S == "slt") return ICmpPred::SLT;
+  if (S == "sle") return ICmpPred::SLE;
+  return ICmpPred::EQ; // fallback
+}
+
+static FCmpPred textToFCmpPred(StringRef S) {
+  if (S == "false") return FCmpPred::False;
+  if (S == "oeq")   return FCmpPred::OEQ;
+  if (S == "ogt")   return FCmpPred::OGT;
+  if (S == "oge")   return FCmpPred::OGE;
+  if (S == "olt")   return FCmpPred::OLT;
+  if (S == "ole")   return FCmpPred::OLE;
+  if (S == "one")   return FCmpPred::ONE;
+  if (S == "ord")   return FCmpPred::ORD;
+  if (S == "uno")   return FCmpPred::UNO;
+  if (S == "ueq")   return FCmpPred::UEQ;
+  if (S == "ugt")   return FCmpPred::UGT;
+  if (S == "uge")   return FCmpPred::UGE;
+  if (S == "ult")   return FCmpPred::ULT;
+  if (S == "ule")   return FCmpPred::ULE;
+  if (S == "une")   return FCmpPred::UNE;
+  if (S == "true")  return FCmpPred::True;
+  return FCmpPred::False; // fallback
+}
+
 static std::string valueToString(const IRValue* V) {
   if (!V) return "<null>";
   switch (V->getValueKind()) {
@@ -298,15 +332,13 @@ static void writeInstructionText(const IRInstruction& I, raw_ostream& OS,
        << " " << valueToString(I.getOperand(0)) << " to " << typeToString(I.getType());
     break;
   case Opcode::ICmp:
-    // TODO: IRInstruction does not store the predicate — createICmp/FCmp
-    // accept a Pred parameter but discard it. Once IRInstruction gains
-    // predicate support, use icmpPredToText() here.
-    OS << "icmp eq " << typeToString(I.getOperand(0)->getType()) << " "
+    OS << "icmp " << icmpPredToText(I.getICmpPredicate()) << " "
+       << typeToString(I.getOperand(0)->getType()) << " "
        << valueToString(I.getOperand(0)) << ", " << valueToString(I.getOperand(1));
     break;
   case Opcode::FCmp:
-    // TODO: Same as ICmp — use fcmpPredToText() once predicates are stored.
-    OS << "fcmp oeq " << typeToString(I.getOperand(0)->getType()) << " "
+    OS << "fcmp " << fcmpPredToText(I.getFCmpPredicate()) << " "
+       << typeToString(I.getOperand(0)->getType()) << " "
        << valueToString(I.getOperand(0)) << ", " << valueToString(I.getOperand(1));
     break;
   case Opcode::Call: {
@@ -677,6 +709,14 @@ bool IRWriter::writeBitcode(const IRModule& M, raw_ostream& OS) {
       for (auto& I : BB->getInstList()) {
         writeLE16(ModuleData, static_cast<uint16_t>(I->getOpcode()));
         ModuleData.push_back(static_cast<char>(I->getDialect()));
+        // 写入比较谓词（ICmp/FCmp 各 1 字节，其他指令写 0）
+        {
+          auto Op = I->getOpcode();
+          if (Op == Opcode::ICmp || Op == Opcode::FCmp)
+            ModuleData.push_back(static_cast<char>(I->getPredicate()));
+          else
+            ModuleData.push_back(0);
+        }
         writeTypeRecord(ModuleData, I->getType(), SW);
         auto IRef = SW.getRef(I->getName());
         writeLE32(ModuleData, IRef.first);
@@ -1495,8 +1535,8 @@ public:
             }
             case Opcode::ICmp: {
               // icmp <pred> <type> <lhs>, <rhs>
-              auto PredStr = readIdent(); // skip predicate
-              (void)PredStr;
+              auto PredStr = readIdent();
+              auto Pred = textToICmpPred(PredStr);
               skipWS();
               auto* Ty = parseType();
               skipWS();
@@ -1506,6 +1546,26 @@ public:
               skipWS();
               auto [R, __] = parseValueRef(ValMap, BBMap, F);
               auto I = std::make_unique<IRInstruction>(Opcode::ICmp, TCtx.getInt1Ty(), 0, dialect::DialectID::Core, InstName);
+              I->setPredicate(static_cast<uint8_t>(Pred));
+              if (L) I->addOperand(L);
+              if (R) I->addOperand(R);
+              Inst = BB->push_back(std::move(I));
+              break;
+            }
+            case Opcode::FCmp: {
+              // fcmp <pred> <type> <lhs>, <rhs>
+              auto PredStr = readIdent();
+              auto FPred = textToFCmpPred(PredStr);
+              skipWS();
+              auto* Ty = parseType();
+              skipWS();
+              auto [L, _] = parseValueRef(ValMap, BBMap, F);
+              skipWS();
+              if (peek() == ',') advance();
+              skipWS();
+              auto [R, __] = parseValueRef(ValMap, BBMap, F);
+              auto I = std::make_unique<IRInstruction>(Opcode::FCmp, TCtx.getInt1Ty(), 0, dialect::DialectID::Core, InstName);
+              I->setPredicate(static_cast<uint8_t>(FPred));
               if (L) I->addOperand(L);
               if (R) I->addOperand(R);
               Inst = BB->push_back(std::move(I));
@@ -1762,7 +1822,7 @@ public:
           readStrFromTable(TableStart, TableSize); // bb name
           auto NumInsts = readU32();
           for (uint32_t ii = 0; ii < NumInsts; ++ii) {
-            readU16(); readU8(); // opcode, dialect
+            readU16(); readU8(); readU8(); // opcode, dialect, predicate
             readType(TableStart, TableSize); // result type
             readStrFromTable(TableStart, TableSize); // inst name
             auto NumOps = readU32();
@@ -1801,7 +1861,7 @@ public:
         BBs.push_back({BB, NInsts});
         // Skip instruction data
         for (uint32_t ii = 0; ii < NInsts; ++ii) {
-          readU16(); readU8(); // opcode, dialect
+          readU16(); readU8(); readU8(); // opcode, dialect, predicate
           readType(TableStart, TableSize);
           readStrFromTable(TableStart, TableSize); // name
           auto NOps = readU32();
@@ -1839,6 +1899,7 @@ public:
           if (!hasBytes(4)) break;
           auto Op = static_cast<Opcode>(readU16());
           readU8(); // dialect
+          auto PredByte = readU8(); // predicate byte
           auto* ResTy = readType(TableStart, TableSize);
           auto InstName = readStrFromTable(TableStart, TableSize);
           auto NumOps = readU32();
@@ -1938,6 +1999,8 @@ public:
 
           auto Inst = std::make_unique<IRInstruction>(Op, ResTy, 0,
               dialect::DialectID::Core, InstName);
+          if (Op == Opcode::ICmp || Op == Opcode::FCmp)
+            Inst->setPredicate(PredByte);
           for (auto* O : Operands) if (O) Inst->addOperand(O);
           auto* RawInst = BB->push_back(std::move(Inst));
           AllInsts.push_back(RawInst);

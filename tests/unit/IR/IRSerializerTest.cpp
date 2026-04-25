@@ -207,3 +207,111 @@ TEST(SerializerTest, GlobalVariableRoundTrip) {
   ASSERT_NE(Parsed, nullptr);
   EXPECT_NE(Parsed->getGlobalVariable("g_counter"), nullptr);
 }
+
+// ============================================================================
+// ICmp predicate round-trip (text format)
+// ============================================================================
+
+TEST(SerializerTest, ICmpPredicateRoundTrip) {
+  IRContext Ctx;
+  auto& TCtx = Ctx.getTypeContext();
+  IRModule M("icmp_rt", TCtx, "x86_64-unknown-linux-gnu");
+
+  auto* FTy = TCtx.getFunctionType(TCtx.getInt32Ty(), {TCtx.getInt32Ty(), TCtx.getInt32Ty()});
+  auto* F = M.getOrInsertFunction("cmp_sgt", FTy);
+  auto* Entry = F->addBasicBlock("entry");
+  IRBuilder Builder(Ctx);
+  Builder.setInsertPoint(Entry);
+  auto* A = Builder.getInt32(1);
+  auto* B = Builder.getInt32(2);
+  auto* ICmp = Builder.createICmp(ICmpPred::SGT, A, B, "cmp");
+  Builder.createRet(ICmp);
+
+  // Text round-trip
+  std::string Text;
+  raw_string_ostream OS(Text);
+  IRWriter::writeText(M, OS);
+  EXPECT_NE(Text.find("icmp sgt"), std::string::npos);
+
+  auto Parsed = IRReader::parseText(StringRef(Text), TCtx);
+  ASSERT_NE(Parsed, nullptr);
+  auto* PF = Parsed->getFunction("cmp_sgt");
+  ASSERT_NE(PF, nullptr);
+  auto* PEntry = PF->getEntryBlock();
+  ASSERT_NE(PEntry, nullptr);
+  for (auto& I : PEntry->getInstList()) {
+    if (I->getOpcode() == Opcode::ICmp) {
+      EXPECT_EQ(I->getICmpPredicate(), ICmpPred::SGT);
+      break;
+    }
+  }
+
+  // Binary round-trip
+  std::string Binary;
+  raw_string_ostream BOS(Binary);
+  IRWriter::writeBitcode(M, BOS);
+  SerializationDiagnostic Diag;
+  auto BinParsed = IRReader::parseBitcode(StringRef(Binary.data(), Binary.size()), TCtx, &Diag);
+  ASSERT_NE(BinParsed, nullptr) << Diag.Message;
+  auto* BF = BinParsed->getFunction("cmp_sgt");
+  ASSERT_NE(BF, nullptr);
+  for (auto& I : BF->getEntryBlock()->getInstList()) {
+    if (I->getOpcode() == Opcode::ICmp) {
+      EXPECT_EQ(I->getICmpPredicate(), ICmpPred::SGT);
+      break;
+    }
+  }
+}
+
+// ============================================================================
+// FCmp predicate round-trip (text format)
+// ============================================================================
+
+TEST(SerializerTest, FCmpPredicateRoundTrip) {
+  IRContext Ctx;
+  auto& TCtx = Ctx.getTypeContext();
+  IRModule M("fcmp_rt", TCtx, "x86_64-unknown-linux-gnu");
+
+  auto* FTy = TCtx.getFunctionType(TCtx.getInt32Ty(), {TCtx.getInt32Ty(), TCtx.getInt32Ty()});
+  auto* F = M.getOrInsertFunction("fcmp_uno", FTy);
+  auto* Entry = F->addBasicBlock("entry");
+  IRBuilder Builder(Ctx);
+  Builder.setInsertPoint(Entry);
+  auto* A = Builder.getInt32(1);
+  auto* B = Builder.getInt32(2);
+  auto* FCmp = Builder.createFCmp(FCmpPred::UNO, A, B, "cmp");
+  Builder.createRet(FCmp);
+
+  // Text round-trip
+  std::string Text;
+  raw_string_ostream OS(Text);
+  IRWriter::writeText(M, OS);
+  EXPECT_NE(Text.find("fcmp uno"), std::string::npos);
+
+  auto Parsed = IRReader::parseText(StringRef(Text), TCtx);
+  ASSERT_NE(Parsed, nullptr);
+  auto* PF = Parsed->getFunction("fcmp_uno");
+  ASSERT_NE(PF, nullptr);
+  for (auto& I : PF->getEntryBlock()->getInstList()) {
+    if (I->getOpcode() == Opcode::FCmp) {
+      EXPECT_EQ(I->getFCmpPredicate(), FCmpPred::UNO);
+      break;
+    }
+  }
+
+  // Binary round-trip
+  std::string Binary;
+  raw_string_ostream BOS(Binary);
+  IRWriter::writeBitcode(M, BOS);
+  SerializationDiagnostic Diag;
+  auto BinParsed = IRReader::parseBitcode(StringRef(Binary.data(), Binary.size()), TCtx, &Diag);
+  ASSERT_NE(BinParsed, nullptr) << Diag.Message;
+  auto* BF = BinParsed->getFunction("fcmp_uno");
+  ASSERT_NE(BF, nullptr);
+  for (auto& I : BF->getEntryBlock()->getInstList()) {
+    if (I->getOpcode() == Opcode::FCmp) {
+      EXPECT_EQ(I->getFCmpPredicate(), FCmpPred::UNO);
+      break;
+    }
+  }
+}

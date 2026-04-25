@@ -6,6 +6,44 @@
 namespace blocktype {
 namespace ir {
 
+static const char* icmpPredToText(ICmpPred P) {
+  switch (P) {
+  case ICmpPred::EQ:  return "eq";
+  case ICmpPred::NE:  return "ne";
+  case ICmpPred::UGT: return "ugt";
+  case ICmpPred::UGE: return "uge";
+  case ICmpPred::ULT: return "ult";
+  case ICmpPred::ULE: return "ule";
+  case ICmpPred::SGT: return "sgt";
+  case ICmpPred::SGE: return "sge";
+  case ICmpPred::SLT: return "slt";
+  case ICmpPred::SLE: return "sle";
+  }
+  return "unknown";
+}
+
+static const char* fcmpPredToText(FCmpPred P) {
+  switch (P) {
+  case FCmpPred::False: return "false";
+  case FCmpPred::OEQ:   return "oeq";
+  case FCmpPred::OGT:   return "ogt";
+  case FCmpPred::OGE:   return "oge";
+  case FCmpPred::OLT:   return "olt";
+  case FCmpPred::OLE:   return "ole";
+  case FCmpPred::ONE:   return "one";
+  case FCmpPred::ORD:   return "ord";
+  case FCmpPred::UNO:   return "uno";
+  case FCmpPred::UEQ:   return "ueq";
+  case FCmpPred::UGT:   return "ugt";
+  case FCmpPred::UGE:   return "uge";
+  case FCmpPred::ULT:   return "ult";
+  case FCmpPred::ULE:   return "ule";
+  case FCmpPred::UNE:   return "une";
+  case FCmpPred::True:  return "true";
+  }
+  return "unknown";
+}
+
 bool IRInstruction::isTerminator() const {
   switch (Op) {
   case Opcode::Ret:
@@ -81,6 +119,12 @@ void IRInstruction::print(raw_ostream& OS) const {
   const char* Name = (Idx < sizeof(OpcodeNames) / sizeof(OpcodeNames[0]) && OpcodeNames[Idx][0])
                      ? OpcodeNames[Idx] : "unknown";
   OS << "%" << getValueID() << " = " << Name;
+  // 输出比较谓词
+  if (Op == Opcode::ICmp) {
+    OS << " " << icmpPredToText(getICmpPredicate());
+  } else if (Op == Opcode::FCmp) {
+    OS << " " << fcmpPredToText(getFCmpPredicate());
+  }
   if (getNumOperands() > 0) {
     OS << " ";
     for (unsigned i = 0; i < getNumOperands(); ++i) {

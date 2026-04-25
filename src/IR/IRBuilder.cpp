@@ -120,6 +120,7 @@ IRInstruction* IRBuilder::createNeg(IRValue* V, StringRef Name) {
 
 IRInstruction* IRBuilder::createICmp(ICmpPred Pred, IRValue* LHS, IRValue* RHS, StringRef Name) {
   auto I = std::make_unique<IRInstruction>(Opcode::ICmp, TypeCtx.getInt1Ty(), 0, dialect::DialectID::Core, Name);
+  I->setPredicate(static_cast<uint8_t>(Pred));
   I->addOperand(LHS);
   I->addOperand(RHS);
   return insertHelper(std::move(I));
@@ -127,6 +128,7 @@ IRInstruction* IRBuilder::createICmp(ICmpPred Pred, IRValue* LHS, IRValue* RHS, 
 
 IRInstruction* IRBuilder::createFCmp(FCmpPred Pred, IRValue* LHS, IRValue* RHS, StringRef Name) {
   auto I = std::make_unique<IRInstruction>(Opcode::FCmp, TypeCtx.getInt1Ty(), 0, dialect::DialectID::Core, Name);
+  I->setPredicate(static_cast<uint8_t>(Pred));
   I->addOperand(LHS);
   I->addOperand(RHS);
   return insertHelper(std::move(I));

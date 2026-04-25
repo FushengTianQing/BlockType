@@ -302,3 +302,33 @@ TEST(VerifierTest, AssertModeDeath) {
   VerifierPass VP; // No diagnostics collector → assert mode
   EXPECT_DEATH(VP.run(M), "Verifier assertion failure");
 }
+
+// ============================================================================
+// Invalid ICmp predicate value
+// ============================================================================
+
+TEST(VerifierTest, InvalidICmpPredicate) {
+  IRContext Ctx;
+  IRTypeContext& TCtx = Ctx.getTypeContext();
+  IRModule M("bad_pred", TCtx);
+
+  auto* FTy = TCtx.getFunctionType(TCtx.getInt32Ty(), {TCtx.getInt32Ty(), TCtx.getInt32Ty()});
+  auto* F = M.getOrInsertFunction("bad_pred", FTy);
+  auto* Entry = F->addBasicBlock("entry");
+  IRBuilder Builder(Ctx);
+  Builder.setInsertPoint(Entry);
+  auto* ICmp = Builder.createICmp(ICmpPred::EQ, Builder.getInt32(1), Builder.getInt32(2), "cmp");
+  // 手动设置非法 predicate 值
+  ICmp->setPredicate(200);  // 超出 ICmpPred 范围
+  Builder.createRet(ICmp);
+
+  SmallVector<VerificationDiagnostic, 32> Errors;
+  VerifierPass VP(&Errors);
+  bool OK = VP.run(M);
+  EXPECT_FALSE(OK);
+  bool hasPredError = false;
+  for (auto& E : Errors) {
+    if (E.Message.find("predicate") != std::string::npos) hasPredError = true;
+  }
+  EXPECT_TRUE(hasPredError);
+}
