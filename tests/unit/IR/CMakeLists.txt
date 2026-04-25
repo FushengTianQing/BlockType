@@ -1,5 +1,6 @@
 add_executable(blocktype-ir-test
   IRBuilderTest.cpp
+  IRSerializerTest.cpp
   IRVerifierTest.cpp
 )
 

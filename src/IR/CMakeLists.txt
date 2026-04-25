@@ -9,6 +9,7 @@ add_library(blocktype-ir
   IRInstruction.cpp
   IRModule.cpp
   IRPass.cpp
+  IRSerializer.cpp
   IRType.cpp
   IRTypeContext.cpp
   IRValue.cpp
