@@ -14,8 +14,9 @@ add_library(blocktype-ir
   IRTypeContext.cpp
   IRValue.cpp
   IRVerifier.cpp
-  IRDialect.cpp
+  BackendCapability.cpp
   DialectLoweringPass.cpp
+  IRDialect.cpp
   TargetLayout.cpp
   raw_ostream.cpp
 )
