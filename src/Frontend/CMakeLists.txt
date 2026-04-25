@@ -10,6 +10,11 @@ add_library(blocktypeFrontend
   IREmitExpr.cpp
   IREmitStmt.cpp
   IRMangler.cpp
+  IREmitCXXMain.cpp
+  IREmitCXXLayout.cpp
+  IREmitCXXCtorDtor.cpp
+  IREmitCXXVTable.cpp
+  IREmitCXXInherit.cpp
 )
 
 target_include_directories(blocktypeFrontend

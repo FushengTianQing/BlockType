@@ -206,16 +206,16 @@ ir::IRGlobalVariable* ASTToIRConverter::emitGlobalVar(VarDecl* VD) {
 
 void ASTToIRConverter::convertCXXConstructor(CXXConstructorDecl* Ctor,
                                               ir::IRFunction* IRFn) {
-  // TODO: B.9 (IREmitCXX) implementation
-  (void)Ctor;
-  (void)IRFn;
+  if (CXXEmitter_) {
+    CXXEmitter_->EmitCXXConstructor(Ctor, IRFn);
+  }
 }
 
 void ASTToIRConverter::convertCXXDestructor(CXXDestructorDecl* Dtor,
                                              ir::IRFunction* IRFn) {
-  // TODO: B.9 (IREmitCXX) implementation
-  (void)Dtor;
-  (void)IRFn;
+  if (CXXEmitter_) {
+    CXXEmitter_->EmitCXXDestructor(Dtor, IRFn);
+  }
 }
 
 ir::IRValue* ASTToIRConverter::convertCXXConstructExpr(CXXConstructExpr* CCE) {

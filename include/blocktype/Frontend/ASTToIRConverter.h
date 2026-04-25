@@ -151,6 +151,7 @@ public:
 
   IREmitExpr* getExprEmitter() { return ExprEmitter_; }
   IREmitStmt* getStmtEmitter() { return StmtEmitter_; }
+  IREmitCXX* getCxxEmitter() { return CXXEmitter_; }
   IRMangler* getMangler() const { return Mangler_; }
 
   ir::IRBuilder& getBuilder() { return *Builder_; }
