@@ -6,6 +6,7 @@ add_executable(blocktype-ir-test
   IRTelemetryTest.cpp
   IRDebugInfoTest.cpp
   IRVerifierTest.cpp
+  IRDiagnosticTest.cpp
 )
 
 target_link_libraries(blocktype-ir-test

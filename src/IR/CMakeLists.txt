@@ -22,6 +22,7 @@ add_library(blocktype-ir
   IRDebugInfo.cpp
   TargetLayout.cpp
   raw_ostream.cpp
+  IRDiagnostic.cpp
 )
 
 target_include_directories(blocktype-ir

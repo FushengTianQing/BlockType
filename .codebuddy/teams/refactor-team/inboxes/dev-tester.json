@@ -1,0 +1,11 @@
+[
+  {
+    "id": "msg-1777099630494-qilcv6",
+    "from": "team-lead",
+    "to": "dev-tester",
+    "type": "message",
+    "content": "## 开发任务：A-F6 StructuredDiagnostic 基础结构定义\n\n### 规划文档\n`/Users/yuan/Documents/BlockType/docs/plan/多前端后端重构方案/19-AI-Coder-任务流-PhaseA-AF6-优化版.md`\n\n请严格按照文档中的**完整头文件**、**完整实现**、**完整测试**代码执行。文档包含可直接复制的代码。\n\n### 产出文件\n\n| 操作 | 文件路径 |\n|------|----------|\n| 新增 | `include/blocktype/IR/IRDiagnostic.h` |\n| 新增 | `src/IR/IRDiagnostic.cpp` |\n| 新增 | `tests/unit/IR/IRDiagnosticTest.cpp` |\n| 修改 | `src/IR/CMakeLists.txt` — 添加 `IRDiagnostic.cpp` |\n| 修改 | `tests/unit/IR/CMakeLists.txt` — 添加 `IRDiagnosticTest.cpp` |\n\n### 关键设计决策（planner 结论）\n\n1. **IRErrorCode → DiagnosticCode**：定义 `diag::DiagnosticCode : uint32_t`（0xGGNN 编码），不越界定义 A-F10 的类型\n2. **SourceLocation**：使用 `ir::SourceLocation`（Filename+Line+Column）\n3. **DenseMap Key**：Pimpl 内部用 `DenseMap<uint16_t, bool>` + `static_cast`\n4. **SmallVector**：完整限定 `ir::SmallVector`\n5. **命名空间**：`blocktype::diag`，文件放 `IR/` 目录\n6. **字段访问**：`struct` + public 字段 + getter\n\n### 特别注意\n- `isGroupEnabled()` const 方法中不能用 `DenseMap::operator[]`，必须用 `find()` 模式\n- `DiagnosticGroupManager` 使用 Pimpl，已 delete 拷贝构造/赋值\n- 所有 6 条红线 Checklist 必须确认通过\n\n### 红线 Checklist\n(1) 架构优先 — 诊断系统独立于前端和后端\n(2) 多前端多后端自由组合 — 不引入前后端耦合\n(3) 渐进式改造 — 新增文件为主，不改变现有接口\n(4) 现有功能不退化 — 所有现有测试必须通过\n(5) 接口抽象优先 — StructuredDiagEmitter 抽象基类\n(6) IR 中间层解耦 — 诊断信息属于 IR 层\n\n### 完成后回报内容\n1. 修改文件清单（含行数）\n2. 编译结果（零错误零警告）\n3. 测试结果（IR 测试全部通过 + 新增测试数量）\n4. 红线 Checklist 逐项确认\n5. 如有设计偏差，详细说明原因",
+    "timestamp": "2026-04-25T06:47:10.494Z",
+    "read": true
+  }
+]
