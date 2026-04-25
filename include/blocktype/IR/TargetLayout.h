@@ -26,6 +26,12 @@ public:
   uint64_t getTypeSizeInBits(IRType* T) const;
   uint64_t getTypeAlignInBits(IRType* T) const;
   uint64_t getPointerSizeInBits() const { return PointerSize * 8; }
+  uint64_t getIntSizeInBits() const { return IntSize * 8; }
+  uint64_t getLongSizeInBits() const { return LongSize * 8; }
+  uint64_t getLongLongSizeInBits() const { return LongLongSize * 8; }
+  uint64_t getFloatSizeInBits() const { return FloatSize * 8; }
+  uint64_t getDoubleSizeInBits() const { return DoubleSize * 8; }
+  uint64_t getLongDoubleSizeInBits() const { return LongDoubleSize * 8; }
   bool isLittleEndian() const { return IsLittleEndian; }
 
   static std::unique_ptr<TargetLayout> Create(StringRef Triple);

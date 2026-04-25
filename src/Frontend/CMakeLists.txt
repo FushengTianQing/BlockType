@@ -1,10 +1,11 @@
-# Frontend library (CompilerInstance, CompilerInvocation, FrontendBase, FrontendRegistry)
+# Frontend library (CompilerInstance, CompilerInvocation, FrontendBase, FrontendRegistry, IRTypeMapper)
 
 add_library(blocktypeFrontend
   CompilerInvocation.cpp
   CompilerInstance.cpp
   FrontendBase.cpp
   FrontendRegistry.cpp
+  IRTypeMapper.cpp
 )
 
 target_include_directories(blocktypeFrontend

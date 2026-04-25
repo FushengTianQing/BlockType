@@ -70,3 +70,27 @@ target_include_directories(FrontendRegistryTest
 )
 
 gtest_discover_tests(FrontendRegistryTest)
+
+# IRTypeMapper unit test (GTest)
+
+add_executable(IRTypeMapperTest
+  IRTypeMapperTest.cpp
+)
+
+target_link_libraries(IRTypeMapperTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    blocktype-ast
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(IRTypeMapperTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(IRTypeMapperTest)
