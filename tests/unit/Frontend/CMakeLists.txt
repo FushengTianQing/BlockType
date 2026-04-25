@@ -24,3 +24,26 @@ target_include_directories(InfrastructureSharingTest
 add_test(NAME InfrastructureSharingTest
   COMMAND InfrastructureSharingTest
 )
+
+# FrontendBase unit test (GTest)
+
+add_executable(FrontendBaseTest
+  FrontendBaseTest.cpp
+)
+
+target_link_libraries(FrontendBaseTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(FrontendBaseTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(FrontendBaseTest)
