@@ -12,6 +12,7 @@
 #include "blocktype/Frontend/IREmitStmt.h"
 #include "blocktype/Frontend/IREmitCXX.h"
 #include "blocktype/Frontend/IRConstantEmitter.h"
+#include "blocktype/Frontend/IRMangler.h"
 
 #include "blocktype/IR/IRConstant.h"
 #include "blocktype/IR/IRModule.h"
@@ -35,14 +36,15 @@ ASTToIRConverter::~ASTToIRConverter() {
   delete StmtEmitter_;
   delete CXXEmitter_;
   delete ConstEmitter_;
+  delete Mangler_;
 }
 
 void ASTToIRConverter::initializeEmitters() {
-  // Sub-emitters are stubs for now. B.5-B.9 will provide real implementations.
   ExprEmitter_ = new IREmitExpr(*this);
   StmtEmitter_ = new IREmitStmt(*this);
   CXXEmitter_ = new IREmitCXX(*this);
   ConstEmitter_ = new IRConstantEmitter(*this);
+  Mangler_ = new IRMangler(Layout_);
 }
 
 //===----------------------------------------------------------------------===//

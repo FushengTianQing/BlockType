@@ -40,6 +40,7 @@ class IREmitExpr;
 class IREmitStmt;
 class IREmitCXX;
 class IRConstantEmitter;
+class IRMangler;
 
 /// ASTToIRConverter - Drives the top-level conversion from AST to IR.
 ///
@@ -84,6 +85,7 @@ class ASTToIRConverter {
   IREmitStmt* StmtEmitter_ = nullptr;
   IREmitCXX* CXXEmitter_ = nullptr;
   IRConstantEmitter* ConstEmitter_ = nullptr;
+  IRMangler* Mangler_ = nullptr;
 
 public:
   /// Construct an ASTToIRConverter.
@@ -149,6 +151,7 @@ public:
 
   IREmitExpr* getExprEmitter() { return ExprEmitter_; }
   IREmitStmt* getStmtEmitter() { return StmtEmitter_; }
+  IRMangler* getMangler() const { return Mangler_; }
 
   ir::IRBuilder& getBuilder() { return *Builder_; }
   ir::IRModule* getModule() const { return TheModule_.get(); }

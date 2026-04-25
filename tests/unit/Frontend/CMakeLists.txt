@@ -166,3 +166,27 @@ target_include_directories(IREmitStmtTest
 )
 
 gtest_discover_tests(IREmitStmtTest)
+
+# IRMangler unit test (GTest)
+
+add_executable(IRManglerTest
+  IRManglerTest.cpp
+)
+
+target_link_libraries(IRManglerTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    blocktype-ast
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(IRManglerTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(IRManglerTest)
