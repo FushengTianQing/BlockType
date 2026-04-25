@@ -14,23 +14,23 @@
 namespace blocktype {
 namespace ir {
 
-class IRArgument {
-  IRType* ParamType;
-  std::string Name;
+class IRArgument : public IRValue {
   unsigned ArgNo;
   unsigned Attrs = 0;
 
 public:
   IRArgument(IRType* T, unsigned No, StringRef N = "")
-    : ParamType(T), Name(N.str()), ArgNo(No) {}
+    : IRValue(ValueKind::Argument, T, No, N), ArgNo(No) {}
 
-  IRType* getType() const { return ParamType; }
-  StringRef getName() const { return Name; }
   unsigned getArgNo() const { return ArgNo; }
   bool hasAttr(unsigned A) const { return (Attrs & A) != 0; }
   void addAttr(unsigned A) { Attrs |= A; }
 
-  void print(raw_ostream& OS) const;
+  static bool classof(const IRValue* V) {
+    return V->getValueKind() == ValueKind::Argument;
+  }
+
+  void print(raw_ostream& OS) const override;
 };
 
 class IRModule;

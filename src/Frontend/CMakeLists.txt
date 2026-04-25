@@ -7,6 +7,7 @@ add_library(blocktypeFrontend
   FrontendRegistry.cpp
   IRTypeMapper.cpp
   ASTToIRConverter.cpp
+  IREmitExpr.cpp
 )
 
 target_include_directories(blocktypeFrontend

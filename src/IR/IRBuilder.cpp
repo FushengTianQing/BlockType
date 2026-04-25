@@ -118,6 +118,127 @@ IRInstruction* IRBuilder::createNeg(IRValue* V, StringRef Name) {
   return createSub(Zero, V, Name);
 }
 
+//===--- Integer Division / Remainder ---===//
+
+IRInstruction* IRBuilder::createSDiv(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::SDiv, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createUDiv(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::UDiv, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createSRem(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::SRem, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createURem(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::URem, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+//===--- Bitwise Operations ---===//
+
+IRInstruction* IRBuilder::createAnd(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::And, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createOr(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::Or, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createXor(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::Xor, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createNot(IRValue* V, StringRef Name) {
+  // Not = XOR with all-ones constant. Use IRCtx to allocate the constant.
+  auto* Ty = static_cast<IRIntegerType*>(V->getType());
+  auto* AllOnes = IRCtx.create<IRConstantInt>(Ty, static_cast<uint64_t>(-1));
+  return createXor(V, AllOnes, Name);
+}
+
+//===--- Shift Operations ---===//
+
+IRInstruction* IRBuilder::createShl(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::Shl, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createLShr(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::LShr, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createAShr(IRValue* LHS, IRValue* RHS, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::AShr, LHS->getType(), 0, dialect::DialectID::Core, Name);
+  I->addOperand(LHS);
+  I->addOperand(RHS);
+  return insertHelper(std::move(I));
+}
+
+//===--- Type Conversions ---===//
+
+IRInstruction* IRBuilder::createSIToFP(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::SIToFP, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createUIToFP(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::UIToFP, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createFPToSI(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::FPToSI, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createFPToUI(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::FPToUI, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createPtrToInt(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::PtrToInt, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
+IRInstruction* IRBuilder::createIntToPtr(IRValue* V, IRType* DestTy, StringRef Name) {
+  auto I = std::make_unique<IRInstruction>(Opcode::IntToPtr, DestTy, 0, dialect::DialectID::Core, Name);
+  I->addOperand(V);
+  return insertHelper(std::move(I));
+}
+
 IRInstruction* IRBuilder::createICmp(ICmpPred Pred, IRValue* LHS, IRValue* RHS, StringRef Name) {
   auto I = std::make_unique<IRInstruction>(Opcode::ICmp, TypeCtx.getInt1Ty(), 0, dialect::DialectID::Core, Name);
   I->setPredicate(static_cast<uint8_t>(Pred));

@@ -128,9 +128,20 @@ ir::IRFunction* ASTToIRConverter::emitFunction(FunctionDecl* FD) {
     clearLocalScope();
 
     // Emit parameters as allocas
-    // TODO: Parameter emission requires IRArgument → IRValue bridge (B.6)
-    // For B.4, parameter allocas are deferred to when sub-emitters are real.
-    // The mapping from ParmVarDecl → alloca will be done in B.6.
+    // IRArgument now inherits IRValue (B.5), so createStore works.
+    // Map each ParmVarDecl to an alloca, and store the argument value into it.
+    for (unsigned i = 0; i < FD->getNumParams(); ++i) {
+      ParmVarDecl* PVD = FD->getParamDecl(i);
+      ir::IRType* ParamTy = TypeMapper_->mapType(PVD->getType());
+      auto PName = PVD->getName();
+      ir::IRValue* Alloca = Builder_->createAlloca(ParamTy,
+        ir::StringRef(PName.data(), PName.size()));
+      setDeclValue(PVD, Alloca);
+
+      // Store the argument into the alloca
+      ir::IRArgument* Arg = IRFn->getArg(i);
+      Builder_->createStore(Arg, Alloca);
+    }
 
     // Delegate body emission to IREmitStmt (B.6)
     // For B.4 framework: if body is a CompoundStmt, handle directly

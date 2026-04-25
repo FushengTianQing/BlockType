@@ -45,6 +45,35 @@ public:
   IRInstruction* createMul(IRValue* LHS, IRValue* RHS, StringRef Name = "");
   IRInstruction* createNeg(IRValue* V, StringRef Name = "");
 
+  //===--- Integer Division / Remainder ---===//
+
+  IRInstruction* createSDiv(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createUDiv(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createSRem(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createURem(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+
+  //===--- Bitwise Operations ---===//
+
+  IRInstruction* createAnd(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createOr(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createXor(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createNot(IRValue* V, StringRef Name = "");
+
+  //===--- Shift Operations ---===//
+
+  IRInstruction* createShl(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createLShr(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+  IRInstruction* createAShr(IRValue* LHS, IRValue* RHS, StringRef Name = "");
+
+  //===--- Type Conversions ---===//
+
+  IRInstruction* createSIToFP(IRValue* V, IRType* DestTy, StringRef Name = "");
+  IRInstruction* createUIToFP(IRValue* V, IRType* DestTy, StringRef Name = "");
+  IRInstruction* createFPToSI(IRValue* V, IRType* DestTy, StringRef Name = "");
+  IRInstruction* createFPToUI(IRValue* V, IRType* DestTy, StringRef Name = "");
+  IRInstruction* createPtrToInt(IRValue* V, IRType* DestTy, StringRef Name = "");
+  IRInstruction* createIntToPtr(IRValue* V, IRType* DestTy, StringRef Name = "");
+
   IRInstruction* createICmp(ICmpPred Pred, IRValue* LHS, IRValue* RHS, StringRef Name = "");
   IRInstruction* createFCmp(FCmpPred Pred, IRValue* LHS, IRValue* RHS, StringRef Name = "");
 

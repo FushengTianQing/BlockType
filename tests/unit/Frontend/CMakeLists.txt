@@ -118,3 +118,27 @@ target_include_directories(ASTToIRConverterTest
 )
 
 gtest_discover_tests(ASTToIRConverterTest)
+
+# IREmitExpr unit test (GTest)
+
+add_executable(IREmitExprTest
+  IREmitExprTest.cpp
+)
+
+target_link_libraries(IREmitExprTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    blocktype-ast
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(IREmitExprTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(IREmitExprTest)

@@ -8,11 +8,11 @@ namespace blocktype {
 namespace ir {
 
 void IRArgument::print(raw_ostream& OS) const {
-  if (!Name.empty()) {
-    OS << Name;
+  if (!getName().empty()) {
+    OS << getName();
   }
-  if (ParamType) {
-    OS << " : " << ParamType->toString();
+  if (getType()) {
+    OS << " : " << getType()->toString();
   }
 }
 
