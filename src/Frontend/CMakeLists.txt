@@ -16,6 +16,8 @@ add_library(blocktypeFrontend
   IREmitCXXVTable.cpp
   IREmitCXXInherit.cpp
   IRConstantEmitter.cpp
+  CppFrontend.cpp
+  CppFrontendRegistration.cpp
 )
 
 target_include_directories(blocktypeFrontend

@@ -238,3 +238,27 @@ target_include_directories(IRConstantEmitterTest
 )
 
 gtest_discover_tests(IRConstantEmitterTest)
+
+# CppFrontend unit test (GTest)
+
+add_executable(CppFrontendTest
+  CppFrontendTest.cpp
+)
+
+target_link_libraries(CppFrontendTest
+  PRIVATE
+    blocktypeFrontend
+    blocktype-basic
+    blocktype-ir
+    blocktype-ast
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(CppFrontendTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(CppFrontendTest)
