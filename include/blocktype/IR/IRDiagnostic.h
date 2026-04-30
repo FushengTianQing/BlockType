@@ -2,6 +2,7 @@
 #define BLOCKTYPE_IR_IRDIAGNOSTIC_H
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "blocktype/IR/ADT.h"
@@ -86,6 +87,21 @@ struct StructuredDiagnostic {
   std::string Message;
   ir::SourceLocation Loc;
   ir::SmallVector<std::string, 4> Notes;
+  
+  // === B-F6 新增字段 ===
+  std::string Category;                              // 诊断类别
+  std::string FlagName;                              // 命令行标志名（如 "ir"）
+  
+  // FixIt 提示
+  struct FixItHint {
+    std::string Replacement;
+    std::string Description;
+  };
+  ir::SmallVector<FixItHint, 2> FixIts;
+  
+  // IR 相关信息（可选）
+  std::optional<uint8_t> IRRelatedDialect;  // dialect::DialectID
+  std::optional<uint8_t> IRRelatedOpcode;   // Opcode
 
   // 虚析构函数，使结构体成为多态类型，支持 dynamic_cast
   virtual ~StructuredDiagnostic() = default;
@@ -116,6 +132,47 @@ class StructuredDiagEmitter {
 public:
   virtual ~StructuredDiagEmitter() = default;
   virtual void emit(const StructuredDiagnostic& D) = 0;
+};
+
+// ============================================================
+// TextDiagEmitter — 文本格式诊断发射器
+// ============================================================
+
+class TextDiagEmitter : public StructuredDiagEmitter {
+  ir::raw_ostream& OS;
+  bool ColorsEnabled;
+
+public:
+  explicit TextDiagEmitter(ir::raw_ostream& OS, bool Colors = false)
+    : OS(OS), ColorsEnabled(Colors) {}
+
+  void emit(const StructuredDiagnostic& D) override;
+
+private:
+  void emitLevel(ir::raw_ostream& OS, DiagnosticLevel L);
+  void emitLocation(ir::raw_ostream& OS, const ir::SourceLocation& Loc);
+  void emitNotes(ir::raw_ostream& OS, const ir::SmallVector<std::string, 4>& Notes);
+  void emitFixIts(ir::raw_ostream& OS, const ir::SmallVector<StructuredDiagnostic::FixItHint, 2>& FixIts);
+};
+
+// ============================================================
+// JSONDiagEmitter — JSON 格式诊断发射器
+// ============================================================
+
+class JSONDiagEmitter : public StructuredDiagEmitter {
+  ir::raw_ostream& OS;
+  bool PrettyPrint;
+
+public:
+  explicit JSONDiagEmitter(ir::raw_ostream& OS, bool Pretty = false)
+    : OS(OS), PrettyPrint(Pretty) {}
+
+  void emit(const StructuredDiagnostic& D) override;
+
+private:
+  void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, ir::StringRef Value, bool Last);
+  void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, unsigned Value, bool Last);
+  void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, bool Value, bool Last);
 };
 
 // ============================================================
