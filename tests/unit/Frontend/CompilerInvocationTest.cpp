@@ -147,3 +147,39 @@ TEST(CompilerInvocationPipelineTest, FromStringRoundTripDefaults) {
   EXPECT_FALSE(Restored.isFrontendExplicitlySet());
   EXPECT_FALSE(Restored.isBackendExplicitlySet());
 }
+
+// ============================================================
+// T7: --freproducible-build option parsing
+// ============================================================
+
+TEST(CompilerInvocationPipelineTest, ReproducibleBuildOption) {
+  CompilerInvocation CI;
+  const char* Args[] = {"blocktype", "--freproducible-build", "test.cpp"};
+  EXPECT_TRUE(CI.parseCommandLine(3, Args));
+  EXPECT_TRUE(CI.ReproducibleBuild);
+}
+
+TEST(CompilerInvocationPipelineTest, ReproducibleBuildDefaultFalse) {
+  CompilerInvocation CI;
+  const char* Args[] = {"blocktype", "test.cpp"};
+  EXPECT_TRUE(CI.parseCommandLine(2, Args));
+  EXPECT_FALSE(CI.ReproducibleBuild);
+}
+
+// ============================================================
+// T8: --fir-integrity-check option parsing
+// ============================================================
+
+TEST(CompilerInvocationPipelineTest, IRIntegrityCheckOption) {
+  CompilerInvocation CI;
+  const char* Args[] = {"blocktype", "--fir-integrity-check", "test.cpp"};
+  EXPECT_TRUE(CI.parseCommandLine(3, Args));
+  EXPECT_TRUE(CI.IRIntegrityCheck);
+}
+
+TEST(CompilerInvocationPipelineTest, IRIntegrityCheckDefaultFalse) {
+  CompilerInvocation CI;
+  const char* Args[] = {"blocktype", "test.cpp"};
+  EXPECT_TRUE(CI.parseCommandLine(2, Args));
+  EXPECT_FALSE(CI.IRIntegrityCheck);
+}

@@ -429,6 +429,18 @@ bool CompilerInvocation::parseCommandLine(int Argc, const char *const *Argv) {
       continue;
     }
 
+    // Phase E-F5: --freproducible-build (enable deterministic/reproducible build mode)
+    if (Arg == "--freproducible-build") {
+      ReproducibleBuild = true;
+      continue;
+    }
+
+    // Phase E-F6: --fir-integrity-check (enable IR integrity verification)
+    if (Arg == "--fir-integrity-check") {
+      IRIntegrityCheck = true;
+      continue;
+    }
+
     // Unknown option: skip (might be handled by the driver layer)
   }
 

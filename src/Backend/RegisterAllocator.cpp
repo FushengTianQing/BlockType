@@ -20,7 +20,7 @@ bool TargetRegisterInfo::isCallerSaved(unsigned Reg) const {
 
 unsigned TargetRegisterInfo::getRegClass(unsigned Reg) const {
   auto It = RegClassMap_.find(Reg);
-  if (It != RegClassMap_.end()) return It->second;
+  if (It != RegClassMap_.end()) return (*It).second;
   return 0;  // Default register class
 }
 

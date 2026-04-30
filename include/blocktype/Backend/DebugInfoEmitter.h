@@ -32,4 +32,13 @@ public:
   bool emitCodeView(const ir::IRModule& M, ir::raw_ostream& OS) override;
 };
 
+/// CodeView 调试信息发射器（Windows 后端，stub）
+class CodeViewEmitter : public DebugInfoEmitter {
+public:
+  bool emit(const ir::IRModule& M, ir::raw_ostream& OS) override;
+  bool emitDWARF5(const ir::IRModule& M, ir::raw_ostream& OS) override;
+  bool emitDWARF4(const ir::IRModule& M, ir::raw_ostream& OS) override;
+  bool emitCodeView(const ir::IRModule& M, ir::raw_ostream& OS) override;
+};
+
 } // namespace blocktype::backend

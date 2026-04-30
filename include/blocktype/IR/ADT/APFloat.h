@@ -93,6 +93,7 @@ private:
 
     unsigned SigBits = getSignificandBits(Sem);
     unsigned ExpBits = getExponentBits(Sem);
+    (void)ExpBits;
     int32_t Bias = getExponentBias(Sem);
 
     if (RawExp == 0x7FF) {
@@ -137,6 +138,7 @@ private:
 
     unsigned SigBits = getSignificandBits(Sem);
     int32_t Bias = getExponentBias(Sem);
+    (void)Bias;
 
     uint64_t RawSig = Significand.getZExtValue();
     uint64_t DoubleSig;

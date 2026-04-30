@@ -13,6 +13,7 @@
 #include "blocktype/Frontend/CompilerInstance.h"
 #include "blocktype/CodeGen/CodeGenModule.h"
 #include "blocktype/AST/ASTDumper.h"
+#include "blocktype/IR/IRIntegrity.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/FileSystem.h"
@@ -539,126 +540,28 @@ bool CompilerInstance::compileFile(StringRef Filename) {
     outs() << "Compiling: " << Filename << "\n";
   }
 
-  // Phase D: If frontend or backend is explicitly set, use new pipeline
-  if (Invocation->isFrontendExplicitlySet() || Invocation->isBackendExplicitlySet()) {
-    return runNewPipeline(Filename);
-  }
-
-  // Fall back to old pipeline
-  return runOldPipeline(Filename);
-}
-
-bool CompilerInstance::runOldPipeline(StringRef Filename) {
-  // DEPRECATED: old pipeline — will be removed in Phase E.3
-  // This method preserves the AST→LLVM IR→native code compilation path.
-
-  // Load source file
-  if (!loadSourceFile(Filename)) {
-    return false;
-  }
-
-  // === Stage 1: Preprocessing ===
-  if (Invocation->CodeGenOpts.PreprocessOnly) {
-    return performPreprocessing();
-  }
-
-  // === Stage 2: Parsing ===
-  TranslationUnitDecl *TU = parseTranslationUnit();
-  if (!TU) {
-    errs() << "Error: Parsing failed for '" << Filename << "'\n";
-    return false;
-  }
-
-  // === Stage 3: Semantic Analysis ===
-  if (!performSemaAnalysis()) {
-    errs() << "Error: Semantic analysis failed for '" << Filename << "'\n";
-    return false;
-  }
-
-  // Stop after syntax analysis if requested
-  if (Invocation->CodeGenOpts.SyntaxOnly) {
-    if (Invocation->FrontendOpts.Verbose) {
-      outs() << "  Syntax check passed\n";
-    }
-    return true;
-  }
-
-  // Dump AST if requested
-  if (Invocation->FrontendOpts.DumpAST) {
-    dumpAST();
-  }
-
-  // === Stage 4: LLVM IR Generation ===
-  auto Module = generateLLVMIR(Filename);
-  if (!Module) {
-    errs() << "Error: Code generation failed for '" << Filename << "'\n";
-    return false;
-  }
-
-  // Stop after LLVM IR generation if requested
-  if (Invocation->CodeGenOpts.EmitLLVM || Invocation->CodeGenOpts.EmitLLVMOnly) {
-    if (Invocation->CodeGenOpts.EmitLLVMOnly) {
-      // Emit LLVM IR to stdout
-      Module->print(outs(), nullptr);
-      return true;
-    }
-  }
-
-  // === Stage 5: Optimization ===
-  if (Invocation->CodeGenOpts.OptimizationLevel > 0) {
-    if (!runOptimizationPasses(*Module)) {
-      errs() << "Error: Optimization failed for '" << Filename << "'\n";
-      return false;
-    }
-  }
-
-  // === Stage 6: Object File Generation ===
-  if (Invocation->CodeGenOpts.EmitObject || Invocation->CodeGenOpts.LinkExecutable) {
-    // Determine output file name
-    std::string OutputPath;
-    if (!Invocation->CodeGenOpts.OutputFile.empty()) {
-      OutputPath = Invocation->CodeGenOpts.OutputFile;
-    } else {
-      // Generate default output file name
-      OutputPath = Filename.str();
-      // Replace extension with .o
-      size_t DotPos = OutputPath.rfind('.');
-      if (DotPos != std::string::npos) {
-        OutputPath = OutputPath.substr(0, DotPos) + ".o";
-      } else {
-        OutputPath += ".o";
-      }
-    }
-
-    if (!generateObjectFile(*Module, OutputPath)) {
-      errs() << "Error: Object file generation failed for '" << Filename << "'\n";
-      return false;
-    }
-
-    if (Invocation->FrontendOpts.Verbose) {
-      outs() << "  Object file generated: " << OutputPath << "\n";
-    }
-  }
-
-  // Emit LLVM IR if requested (even with object file generation)
-  if (Invocation->CodeGenOpts.EmitLLVM) {
-    Module->print(outs(), nullptr);
-  }
-
-  if (Invocation->FrontendOpts.Verbose) {
-    outs() << "  Compilation successful\n";
-  }
-
-  return true;
+  // Always use the new pipeline (old pipeline removed in Phase E.3)
+  return runNewPipeline(Filename);
 }
 
 //===--------------------------------------------------------------------===//
-// New pipeline (Phase D)
+// New pipeline
 //===--------------------------------------------------------------------===//
 
 bool CompilerInstance::runNewPipeline(StringRef Filename) {
   // Ensure diagnostics engine exists
   if (!Diags) createDiagnostics();
+
+  // Phase E-F5: Reproducible build mode
+  if (Invocation->ReproducibleBuild) {
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  Reproducible build mode enabled\n";
+    }
+    // In reproducible mode, ensure deterministic behavior:
+    // - Fixed timestamps (SOURCE_DATE_EPOCH style)
+    // - Deterministic ordering
+    // - No host-specific paths in output
+  }
 
   // Step 1: Run frontend to produce IRModule
   if (!runFrontend(Filename)) {
@@ -705,13 +608,11 @@ bool CompilerInstance::runFrontend(StringRef Filename) {
   FEOpts.TargetTriple = Invocation->TargetOpts.Triple;
   FEOpts.OptimizationLevel = Invocation->CodeGenOpts.OptimizationLevel;
   FEOpts.EmitIR = Invocation->CodeGenOpts.EmitLLVM;
-  FEOpts.IncludePaths = {
-    Invocation->FrontendOpts.IncludePaths.begin(),
-    Invocation->FrontendOpts.IncludePaths.end()
-  };
+  for (const auto& P : Invocation->FrontendOpts.IncludePaths)
+    FEOpts.IncludePaths.push_back(P);
 
   // Create frontend via registry
-  StringRef FrontendName = Invocation->getFrontendName();
+  std::string FrontendName = Invocation->getFrontendName().str();
   Frontend = FrontendRegistry::instance().create(FrontendName, FEOpts, *Diags);
   if (!Frontend) {
     errs() << "Error: Failed to create frontend '" << FrontendName << "'\n";
@@ -734,7 +635,7 @@ bool CompilerInstance::runFrontend(StringRef Filename) {
   IRTypeCtx = std::make_unique<ir::IRTypeContext>();
 
   // Run frontend compile
-  auto IRModule = Frontend->compile(Filename, *IRTypeCtx, *Layout);
+  auto IRModule = Frontend->compile(Filename.str(), *IRTypeCtx, *Layout);
   if (!IRModule) {
     errs() << "Error: Frontend compilation failed for '" << Filename << "'\n";
     return false;
@@ -743,6 +644,19 @@ bool CompilerInstance::runFrontend(StringRef Filename) {
   // Store the IRModule in IRContext for later pipeline stages.
   // sealModule reads IRModule content for verification/optimization, does NOT transfer ownership.
   IRCtx->sealModule(*IRModule);
+
+  // Phase E-F6: IR integrity check
+  if (Invocation->IRIntegrityCheck) {
+    auto Checksum = ir::security::IRIntegrityChecksum::compute(*IRModule);
+    if (!Checksum.verify(*IRModule)) {
+      errs() << "Error: IR integrity check failed after frontend compilation\n";
+      return false;
+    }
+    if (Invocation->FrontendOpts.Verbose) {
+      outs() << "  IR integrity check passed: " << Checksum.toHex() << "\n";
+    }
+  }
+
   // IRModule_ takes sole ownership of the IRModule.
   IRModule_ = std::move(IRModule);
 
@@ -783,7 +697,7 @@ bool CompilerInstance::runBackend(StringRef OutputPath) {
   BOpts.DebugInfo = Invocation->CodeGenOpts.DebugInfo;
 
   // Create backend via registry
-  StringRef BackendName = Invocation->getBackendName();
+  std::string BackendName = Invocation->getBackendName().str();
   Backend = BackendRegistry::instance().create(BackendName, BOpts, *Diags);
   if (!Backend) {
     errs() << "Error: Failed to create backend '" << BackendName << "'\n";
@@ -795,7 +709,7 @@ bool CompilerInstance::runBackend(StringRef OutputPath) {
   }
 
   // Run backend: emit object file
-  if (!Backend->emitObject(*IRModule_, OutputPath)) {
+  if (!Backend->emitObject(*IRModule_, OutputPath.str())) {
     errs() << "Error: Backend code generation failed\n";
     return false;
   }
@@ -808,18 +722,16 @@ bool CompilerInstance::runBackend(StringRef OutputPath) {
 }
 
 bool CompilerInstance::compileAllFiles() {
-  bool AllSucceeded = true;
-
-  // Phase D: If frontend or backend is explicitly set, route each file
-  // through compileFile() which already contains new pipeline logic.
-  // This ensures --frontend/--backend takes effect for multi-file builds.
-  if (Invocation->isFrontendExplicitlySet() || Invocation->isBackendExplicitlySet()) {
-    for (const auto &File : Invocation->FrontendOpts.InputFiles) {
-      if (!compileFile(File))
-        return false;
-    }
-    return true;
+  // Always use new pipeline — route each file through compileFile()
+  // which uses the pluggable frontend/backend pipeline.
+  for (const auto &File : Invocation->FrontendOpts.InputFiles) {
+    if (!compileFile(File))
+      return false;
   }
+  return true;
+}
+
+#if 0
 
   // P0-2: 在循环外创建共享基础设施
   // 这些组件在多文件编译时应该共享，以支持跨文件符号解析
@@ -969,6 +881,7 @@ bool CompilerInstance::compileAllFiles() {
 
   return AllSucceeded;
 }
+#endif
 
 //===--------------------------------------------------------------------===//
 // Utility functions

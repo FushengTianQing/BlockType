@@ -1,6 +1,7 @@
 #include "blocktype/IR/IRCache.h"
 #include "blocktype/IR/IRModule.h"
 #include "blocktype/IR/IRTypeContext.h"
+#include "blocktype/IR/IRSerializer.h"
 
 #include <algorithm>
 #include <chrono>
@@ -260,9 +261,18 @@ void CompilationCacheManager::disable() { Storage_.reset(); Enabled_ = false; }
 bool CompilationCacheManager::isEnabled() const { return Enabled_; }
 
 std::optional<std::unique_ptr<ir::IRModule>>
-CompilationCacheManager::lookupIR(const CacheKey&, ir::IRTypeContext&) {
-  // TODO: 用 IRReader::parseBitcode 反序列化
-  return std::nullopt;
+CompilationCacheManager::lookupIR(const CacheKey& Key, ir::IRTypeContext& Ctx) {
+  if (!Enabled_ || !Storage_) return std::nullopt;
+  auto E = Storage_->lookup(Key);
+  if (!E || E->IRData.empty()) return std::nullopt;
+
+  // Deserialize IR from cached bitcode data
+  ir::SerializationDiagnostic Diag;
+  auto M = ir::IRReader::parseBitcode(
+      ir::StringRef(reinterpret_cast<const char*>(E->IRData.data()), E->IRData.size()),
+      Ctx, &Diag);
+  if (!M) return std::nullopt;
+  return M;
 }
 
 std::optional<std::vector<uint8_t>>
@@ -273,9 +283,21 @@ CompilationCacheManager::lookupObject(const CacheKey& Key) {
   return std::move(E->ObjectData);
 }
 
-bool CompilationCacheManager::storeIR(const CacheKey&, const ir::IRModule&) {
-  // TODO: 用 IRWriter::writeBitcode 序列化
-  return false;
+bool CompilationCacheManager::storeIR(const CacheKey& Key, const ir::IRModule& M) {
+  if (!Enabled_ || !Storage_) return false;
+
+  // Serialize IR to bitcode
+  std::string Bitcode;
+  ir::raw_string_ostream OS(Bitcode);
+  if (!ir::IRWriter::writeBitcode(M, OS)) return false;
+
+  CacheEntry E;
+  E.Key = Key;
+  E.IRData.assign(Bitcode.begin(), Bitcode.end());
+  E.IRSize = Bitcode.size();
+  E.IRVersion = ir::IRFormatVersion::Current();
+  E.Timestamp = (uint64_t)std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return Storage_->store(Key, E);
 }
 
 bool CompilationCacheManager::storeObject(const CacheKey& Key, ir::ArrayRef<uint8_t> Data) {

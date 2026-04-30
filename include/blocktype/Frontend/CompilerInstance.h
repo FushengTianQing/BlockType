@@ -293,9 +293,8 @@ private:
   /// \returns true if reading succeeded, false otherwise.
   bool readFileContent(StringRef Filename, std::string &Content);
 
-  // === New pipeline methods (Phase D) ===
+  // === Pipeline methods ===
   bool runNewPipeline(StringRef Filename);
-  bool runOldPipeline(StringRef Filename);
   bool runFrontend(StringRef Filename);
   bool runIRPipeline();
   bool runBackend(StringRef OutputPath);

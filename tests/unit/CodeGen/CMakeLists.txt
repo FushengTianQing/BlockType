@@ -29,6 +29,8 @@ target_compile_features(blocktype-codegen-test PUBLIC cxx_std_23)
 
 target_link_libraries(blocktype-codegen-test
   blocktypeFrontend
+  blocktypeBackend
+  blocktype-ir
   blocktype-codegen
   blocktype-sema
   blocktype-ast

@@ -1,4 +1,10 @@
-//===--- D3FallbackTest.cpp - Fallback pipeline tests -*- C++ -*-===//
+//===--- D3FallbackTest.cpp - Pipeline routing tests -*- C++ -*-===//
+//
+// Phase E.3: Old pipeline fallback has been removed.
+// All compilations now go through the new pluggable pipeline.
+// This test verifies the routing logic is gone and new pipeline is default.
+//
+//===----------------------------------------------------------------------===//
 
 #include <gtest/gtest.h>
 
@@ -8,60 +14,46 @@
 using namespace blocktype;
 
 // ============================================================
-// Fallback routing logic tests
+// Verify old pipeline is removed: compileFile always uses new pipeline
 // ============================================================
 
-TEST(D3Fallback, DefaultInvocationUsesOldPipeline) {
-  // When neither --frontend nor --backend is specified,
-  // isFrontendExplicitlySet() and isBackendExplicitlySet() are false,
-  // so compileFile() should route to runOldPipeline().
+TEST(D3Fallback, DefaultInvocationUsesNewPipeline) {
+  // Even without --frontend/--backend, the new pipeline is used.
   CompilerInvocation CI;
   EXPECT_FALSE(CI.isFrontendExplicitlySet());
   EXPECT_FALSE(CI.isBackendExplicitlySet());
-  // Routing decision: should use old pipeline
+  // Defaults are "cpp" frontend and "llvm" backend.
+  EXPECT_EQ(CI.getFrontendName(), "cpp");
+  EXPECT_EQ(CI.getBackendName(), "llvm");
 }
 
-TEST(D3Fallback, ExplicitFrontendUsesNewPipeline) {
-  // When only --frontend is specified, new pipeline is used
+TEST(D3Fallback, ExplicitFrontendOverrides) {
   CompilerInvocation CI;
   CI.setFrontendName("cpp");
   EXPECT_TRUE(CI.isFrontendExplicitlySet());
-  // Routing decision: should use new pipeline
+  EXPECT_EQ(CI.getFrontendName(), "cpp");
 }
 
-TEST(D3Fallback, ExplicitBackendUsesNewPipeline) {
-  // When only --backend is specified, new pipeline is used
+TEST(D3Fallback, ExplicitBackendOverrides) {
   CompilerInvocation CI;
   CI.setBackendName("llvm");
   EXPECT_TRUE(CI.isBackendExplicitlySet());
-  // Routing decision: should use new pipeline
+  EXPECT_EQ(CI.getBackendName(), "llvm");
 }
 
-TEST(D3Fallback, BothExplicitUsesNewPipeline) {
-  // When both are specified, new pipeline is used
+TEST(D3Fallback, BothExplicitOverrides) {
   CompilerInvocation CI;
   CI.setFrontendName("cpp");
   CI.setBackendName("llvm");
   EXPECT_TRUE(CI.isFrontendExplicitlySet());
   EXPECT_TRUE(CI.isBackendExplicitlySet());
-  // Routing decision: should use new pipeline
 }
 
-TEST(D3Fallback, UseNewPipelineFlagForcesNewPipeline) {
-  // --use-new-pipeline forces both ExplicitlySet flags
-  CompilerInvocation CI;
-  const char* Args[] = {"blocktype", "--use-new-pipeline", "test.cpp"};
-  EXPECT_TRUE(CI.parseCommandLine(3, Args));
-  EXPECT_TRUE(CI.isFrontendExplicitlySet());
-  EXPECT_TRUE(CI.isBackendExplicitlySet());
-  // Routing decision: should use new pipeline
-}
-
-TEST(D3Fallback, ParseCommandLineWithoutFlagsUsesOldPipeline) {
+TEST(D3Fallback, ParseCommandLineDefaults) {
   CompilerInvocation CI;
   const char* Args[] = {"blocktype", "test.cpp"};
   EXPECT_TRUE(CI.parseCommandLine(2, Args));
-  EXPECT_FALSE(CI.isFrontendExplicitlySet());
-  EXPECT_FALSE(CI.isBackendExplicitlySet());
-  // Routing decision: should use old pipeline
+  // Default frontend/backend names are set even without explicit flags
+  EXPECT_EQ(CI.getFrontendName(), "cpp");
+  EXPECT_EQ(CI.getBackendName(), "llvm");
 }

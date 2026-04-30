@@ -52,6 +52,7 @@ add_executable(LLVMBackendRegistrationTest
 
 target_link_libraries(LLVMBackendRegistrationTest
   PRIVATE
+    blocktypeFrontend
     blocktypeBackend
     blocktype-basic
     blocktype-ir
@@ -158,3 +159,26 @@ target_include_directories(DebugInfoEmitterTest
 )
 
 gtest_discover_tests(DebugInfoEmitterTest)
+
+# CodeView debug info emitter unit test (GTest) — Phase E-F8
+
+add_executable(CodeViewEmitterTest
+  CodeViewEmitterTest.cpp
+)
+
+target_link_libraries(CodeViewEmitterTest
+  PRIVATE
+    blocktypeBackend
+    blocktype-basic
+    blocktype-ir
+    ${LLVM_LIBS}
+    GTest::gtest
+    GTest::gtest_main
+)
+
+target_include_directories(CodeViewEmitterTest
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+gtest_discover_tests(CodeViewEmitterTest)

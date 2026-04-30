@@ -24,7 +24,7 @@ public:
     (void)F; (void)Opts; (void)OS;
     return true;
   }
-  bool emitModule(const ir::SmallVectorImpl<TargetFunction>& Functions,
+  bool emitModule(const ir::SmallVector<TargetFunction, 16>& Functions,
                   const BackendOptions& Opts, ir::raw_ostream& OS) override {
     (void)Functions; (void)Opts; (void)OS;
     return true;

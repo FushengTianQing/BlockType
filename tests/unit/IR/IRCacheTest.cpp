@@ -136,27 +136,43 @@ TEST(IRCacheTest, ManagerObjectStoreLookup) {
   rmDir(D);
 }
 
-// V13: CompilationCacheManager lookupIR stub
-TEST(IRCacheTest, ManagerLookupIRStub) {
+// V13: CompilationCacheManager lookupIR with storeIR round-trip
+TEST(IRCacheTest, ManagerLookupIRRoundTrip) {
   std::string D = makeTempDir();
   CompilationCacheManager Mgr;
   Mgr.enable(D, 1<<20);
   CacheOptions O; auto K = CacheKey::compute("ir_test", O);
   ir::IRTypeContext Ctx;
-  EXPECT_FALSE(Mgr.lookupIR(K, Ctx).has_value());
+  ir::IRModule M("test_module", Ctx);
+
+  // Store
+  ASSERT_TRUE(Mgr.storeIR(K, M));
+
+  // Lookup
+  auto Found = Mgr.lookupIR(K, Ctx);
+  ASSERT_TRUE(Found.has_value());
+  EXPECT_NE(Found->get(), nullptr);
+  EXPECT_EQ((*Found)->getName(), "test_module");
   Mgr.disable();
   rmDir(D);
 }
 
-// V14: CompilationCacheManager storeIR stub
-TEST(IRCacheTest, ManagerStoreIRStub) {
+// V14: CompilationCacheManager storeIR round-trip
+TEST(IRCacheTest, ManagerStoreIRRoundTrip) {
   std::string D = makeTempDir();
   CompilationCacheManager Mgr;
   Mgr.enable(D, 1<<20);
   CacheOptions O; auto K = CacheKey::compute("ir_store", O);
   ir::IRTypeContext Ctx;
-  ir::IRModule M("test", Ctx);
-  EXPECT_FALSE(Mgr.storeIR(K, M));
+  ir::IRModule M("store_test", Ctx);
+
+  // Store and verify
+  ASSERT_TRUE(Mgr.storeIR(K, M));
+
+  // Read back and verify name matches
+  auto Found = Mgr.lookupIR(K, Ctx);
+  ASSERT_TRUE(Found.has_value());
+  EXPECT_EQ((*Found)->getName(), "store_test");
   Mgr.disable();
   rmDir(D);
 }

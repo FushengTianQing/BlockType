@@ -171,6 +171,35 @@ static cl::opt<bool> ContractsDisabled(
   cl::cat(BlockTypeCategory)
 );
 
+// Phase D/E: Pluggable pipeline options
+static cl::opt<std::string> FrontendOption(
+  "frontend",
+  cl::desc("Frontend name (default: cpp)"),
+  cl::value_desc("name"),
+  cl::init("cpp"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<std::string> BackendOption(
+  "backend",
+  cl::desc("Backend name (default: llvm)"),
+  cl::value_desc("name"),
+  cl::init("llvm"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<bool> ReproducibleBuild(
+  "freproducible-build",
+  cl::desc("Enable reproducible/deterministic build mode"),
+  cl::cat(BlockTypeCategory)
+);
+
+static cl::opt<bool> IRIntegrityCheckOption(
+  "fir-integrity-check",
+  cl::desc("Enable IR integrity verification after frontend compilation"),
+  cl::cat(BlockTypeCategory)
+);
+
 // 创建 AI 编排器
 std::unique_ptr<AIOrchestrator> createAIOrchestrator(const CompilerInvocation &CI) {
   AIConfig Config;
@@ -303,6 +332,16 @@ std::shared_ptr<CompilerInvocation> createCompilerInvocation() {
 
   // Set default target triple
   CI->setDefaultTargetTriple();
+
+  // Pipeline options
+  if (FrontendOption != "cpp") {
+    CI->setFrontendName(FrontendOption);
+  }
+  if (BackendOption != "llvm") {
+    CI->setBackendName(BackendOption);
+  }
+  CI->ReproducibleBuild = ReproducibleBuild;
+  CI->IRIntegrityCheck = IRIntegrityCheckOption;
   
   return CI;
 }
@@ -344,6 +383,8 @@ int main(int argc, char *argv[]) {
     outs() << "\nCompilation Options:\n";
     outs() << "  --std=<version>      C++ standard version (11, 14, 17, 20, 23, 26, default: 26)\n";
     outs() << "  --target=<triple>    Target triple for code generation\n";
+    outs() << "  --frontend=<name>    Frontend name (default: cpp)\n";
+    outs() << "  --backend=<name>     Backend name (default: llvm)\n";
     outs() << "  -o <file>            Output file\n";
     outs() << "  --ast-dump           Dump AST after parsing\n";
     outs() << "  --emit-llvm          Emit LLVM IR\n";

@@ -57,7 +57,7 @@ struct DetailedStructuredDiagnostic : public StructuredDiagnostic {
   std::string FlagName;
 
   // FixIt 提示列表
-  ir::SmallVector<FixItHint, 2> FixIts;
+  ir::SmallVector<diag::FixItHint, 2> FixIts;
 
   // 带位置的详细说明（替代基类 Notes 的纯字符串）
   ir::SmallVector<DiagnosticNote, 4> DetailedNotes;

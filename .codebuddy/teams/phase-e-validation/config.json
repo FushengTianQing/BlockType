@@ -1,27 +1,22 @@
 {
-  "name": "phase-d-fixes",
+  "name": "phase-e-validation",
   "leadAgentId": "b163a1141b554befba9725ccc38ba588",
   "workspacePath": "/Users/yuan/Documents/BlockType",
-  "createdAt": "2026-04-30T09:44:11.626Z",
+  "createdAt": "2026-04-30T11:04:01.687Z",
   "options": {
     "workspacePath": "/Users/yuan/Documents/BlockType",
     "isAutoTeam": false
   },
   "members": [
     {
-      "memberId": "team-lead@phase-d-fixes",
+      "memberId": "team-lead@phase-e-validation",
       "name": "team-lead",
       "role": "Team Lead - coordinates the team and interacts with the user"
     },
     {
-      "memberId": "dev-tester@phase-d-fixes",
+      "memberId": "dev-tester@phase-e-validation",
       "name": "dev-tester",
-      "role": "Phase D P2/P3 修复"
-    },
-    {
-      "memberId": "auditor@phase-d-fixes",
-      "name": "auditor",
-      "role": "审查 P2/P3 修复"
+      "role": "Dev-tester 实现 Phase E"
     }
   ],
   "isAutoTeam": false

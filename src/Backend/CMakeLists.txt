@@ -11,6 +11,7 @@ add_library(blocktypeBackend
   GreedyRegAlloc.cpp
   BasicRegAlloc.cpp
   DWARF5Emitter.cpp
+  CodeViewEmitter.cpp
 )
 
 target_include_directories(blocktypeBackend

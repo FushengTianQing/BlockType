@@ -252,6 +252,10 @@ public:
   bool FrontendExplicitlySet = false;
   /// Whether --backend was explicitly specified.
   bool BackendExplicitlySet = false;
+  /// Whether --freproducible-build was specified.
+  bool ReproducibleBuild = false;
+  /// Whether --fir-integrity-check was specified.
+  bool IRIntegrityCheck = false;
 
 public:
   CompilerInvocation() = default;

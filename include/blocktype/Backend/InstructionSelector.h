@@ -2,6 +2,7 @@
 #include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRValue.h"       // ir::Opcode
 #include "blocktype/IR/IRType.h"        // ir::dialect::DialectID
+#include "blocktype/IR/IRInstruction.h" // ir::IRInstruction
 #include <string>
 
 namespace blocktype::backend {

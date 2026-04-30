@@ -16,7 +16,7 @@ public:
                     ir::raw_ostream& OS) = 0;
 
   /// 发射整个模块的目标代码
-  virtual bool emitModule(const ir::SmallVectorImpl<TargetFunction>& Functions,
+  virtual bool emitModule(const ir::SmallVector<TargetFunction, 16>& Functions,
                           const BackendOptions& Opts,
                           ir::raw_ostream& OS) = 0;
 };
