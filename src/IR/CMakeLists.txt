@@ -30,6 +30,7 @@ add_library(blocktype-ir
   IRContract.cpp
   IRFFI.cpp
   IREquivalenceChecker.cpp
+  PassInvariantChecker.cpp
 )
 
 target_include_directories(blocktype-ir
