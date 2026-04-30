@@ -47,25 +47,50 @@ public:
   bool isEnabled() const { return Enabled; }
 
   class PhaseGuard {
-    TelemetryCollector& Collector;
+    TelemetryCollector* Collector_ = nullptr;
     CompilationPhase Phase;
     std::string Detail;
-    uint64_t StartNs;
-    size_t MemoryBefore;
+    uint64_t StartNs = 0;
+    size_t MemoryBefore = 0;
     bool Failed = false;
     bool MovedFrom_ = false;
   public:
+    PhaseGuard() = default;
     PhaseGuard(TelemetryCollector& C, CompilationPhase P, StringRef D);
     ~PhaseGuard();
     PhaseGuard(const PhaseGuard&) = delete;
     PhaseGuard& operator=(const PhaseGuard&) = delete;
     PhaseGuard(PhaseGuard&& Other) noexcept
-      : Collector(Other.Collector), Phase(Other.Phase),
+      : Collector_(Other.Collector_), Phase(Other.Phase),
         Detail(std::move(Other.Detail)), StartNs(Other.StartNs),
         MemoryBefore(Other.MemoryBefore), Failed(Other.Failed) {
       Other.MovedFrom_ = true;
     }
-    PhaseGuard& operator=(PhaseGuard&&) = delete;
+    PhaseGuard& operator=(PhaseGuard&& Other) noexcept {
+      if (this != &Other && !MovedFrom_) {
+        // Destroy current guard first
+        if (Collector_ && Collector_->isEnabled() && !MovedFrom_) {
+          CompilationEvent E;
+          E.Phase = Phase;
+          E.Detail = Detail;
+          E.StartNs = StartNs;
+          E.EndNs = TelemetryCollector::getCurrentTimeNs();
+          E.MemoryBefore = MemoryBefore;
+          E.MemoryAfter = TelemetryCollector::getCurrentMemoryUsage();
+          E.Success = !Failed;
+          Collector_->Events.push_back(std::move(E));
+        }
+      }
+      Collector_ = Other.Collector_;
+      Phase = Other.Phase;
+      Detail = std::move(Other.Detail);
+      StartNs = Other.StartNs;
+      MemoryBefore = Other.MemoryBefore;
+      Failed = Other.Failed;
+      MovedFrom_ = false;
+      Other.MovedFrom_ = true;
+      return *this;
+    }
     void markFailed() { Failed = true; }
   };
 

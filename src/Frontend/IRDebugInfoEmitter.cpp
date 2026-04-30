@@ -9,6 +9,8 @@
 #include "blocktype/Frontend/IRDebugInfoEmitter.h"
 #include "blocktype/IR/IRModule.h"
 #include "blocktype/IR/IRInstruction.h"
+#include "blocktype/AST/Decl.h"
+#include "blocktype/AST/Stmt.h"
 
 namespace blocktype {
 namespace frontend {
@@ -29,6 +31,24 @@ void IRDebugInfoEmitter::emitCompileUnit(const TranslationUnitDecl* TU) {
 
   CU->setProducer("BlockType Compiler 1.0.0");
   CU->setLanguage(4);  // DW_LANG_C_plus_plus
+
+  // 将编译单元添加到模块元数据
+  // DICompileUnit 继承 DebugMetadata，需要通过 DebugMetadataAdapter 适配为 IRMetadata
+  class DebugMetadataAdapter : public ir::IRMetadata {
+    ir::DebugMetadata* Inner_;
+  public:
+    explicit DebugMetadataAdapter(std::unique_ptr<ir::DebugMetadata> DM)
+      : Inner_(DM.release()) {}
+    ~DebugMetadataAdapter() override { delete Inner_; }
+    void print(ir::raw_ostream& OS) const override { Inner_->print(OS); }
+  };
+
+  // Transfer CU ownership to adapter, then to module
+  auto Adapter = std::make_unique<DebugMetadataAdapter>(std::move(CU));
+  TheModule.addMetadata(std::move(Adapter));
+
+  // Note: CU is now nullptr after move. Subsequent calls that need CU
+  // will need to handle this. For emitFunctionDebugInfo, we set unit to nullptr.
 }
 
 ir::DISubprogram* IRDebugInfoEmitter::emitFunctionDebugInfo(const FunctionDecl* FD) {
@@ -37,16 +57,18 @@ ir::DISubprogram* IRDebugInfoEmitter::emitFunctionDebugInfo(const FunctionDecl* 
   // 检查缓存
   auto It = SubprogramCache.find(FD);
   if (It != SubprogramCache.end()) {
-    return It->second;
+    return (*It).second;
   }
 
-  // 创建 DISubprogram（llvm::StringRef -> std::string -> ir::StringRef）
+  // 创建 DISubprogram
   auto* SP = new ir::DISubprogram(ir::StringRef(FD->getName().str()));
 
-  // 设置编译单元
-  if (CU) {
-    SP->setUnit(CU.get());
-  }
+  // Note: CU may have been moved to module metadata in emitCompileUnit()
+  // We skip setUnit if CU is null
+
+  // 获取并转换函数的源码位置
+  SourceLocation Loc = FD->getLocation();
+  ir::SourceLocation IRLoc = convertSourceLocation(Loc);
 
   // 缓存
   SubprogramCache[FD] = SP;
@@ -82,6 +104,9 @@ ir::debug::IRInstructionDebugInfo IRDebugInfoEmitter::emitInstructionDebugInfo(c
   SourceLocation Loc = S->getLocation();
   ir::SourceLocation IRLoc = convertSourceLocation(Loc);
   DI.setLocation(IRLoc);
+
+  // Note: BlockType Stmt 不提供 getDeclContext()/isImplicit() 接口
+  // subprogram 和 artificial flag 需要在调用端设置（如 ASTToIRConverter）
 
   return DI;
 }

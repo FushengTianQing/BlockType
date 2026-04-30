@@ -8,26 +8,36 @@
 namespace blocktype {
 namespace ir {
 
+// Forward declarations
+class IRValue;
+class IRInstruction;
+class IRBasicBlock;
+class IRFunction;
+
 /// 不变量类型枚举
 enum class InvariantKind : uint8_t {
   // SSA 不变量
   SSA_SingleDefinition    = 0,
-  SSA_Dominance           = 2,
-  SSA_PhiNodeConsistency  = 3,
-  
+  SSA_Dominance           = 1,
+  SSA_PhiNodeConsistency  = 2,
+
   // 类型不变量
   Type_Completeness       = 10,
   Type_Consistency        = 11,
   Type_FunctionSignature  = 12,
-  
+
   // 控制流不变量
   CF_SingleTerminator     = 20,
   CF_EntryBlock           = 21,
   CF_Reachability         = 22,
-  
+
   // 内存不变量
   Mem_DefUseChain         = 30,
   Mem_AllocaOwner         = 31,
+
+  // 数据不变量
+  Data_NoUndef            = 40,
+  Data_ConstantFoldable   = 41,
 };
 
 /// 不变量检查结果
@@ -48,8 +58,8 @@ class PassInvariantChecker : public Pass {
   bool FailFast = false;
 
 public:
-  explicit PassInvariantChecker(bool Before = true, bool After = true, bool Fast = false)
-    : CheckBefore(Before), CheckAfter(After), FailFast(Fast) {}
+  explicit PassInvariantChecker(bool Before = true, bool After = true, bool FailFast = false)
+    : CheckBefore(Before), CheckAfter(After), FailFast(FailFast) {}
 
   StringRef getName() const override { return "invariant-checker"; }
 
@@ -64,8 +74,16 @@ public:
 
   // === 单个不变量检查 ===
   bool checkSingleDefinition(const IRFunction& Fn);
+  bool checkDominance(const IRFunction& Fn);
+  bool checkPhiNodeConsistency(const IRFunction& Fn);
+  bool checkTypeCompleteness(const IRModule& M);
+  bool checkTypeConsistency(const IRModule& M);
+  bool checkFunctionSignature(const IRModule& M);
   bool checkSingleTerminator(const IRFunction& Fn);
   bool checkEntryBlock(const IRFunction& Fn);
+  bool checkReachability(const IRFunction& Fn);
+  bool checkDefUseChain(const IRModule& M);
+  bool checkAllocaOwner(const IRFunction& Fn);
 
   // === 结果查询 ===
   const SmallVector<InvariantViolation, 16>& getViolations() const { return Violations; }

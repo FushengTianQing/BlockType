@@ -12,7 +12,8 @@ namespace blocktype {
 namespace cache {
 
 // ============================================================
-// FNV-1a 64-bit 哈希（后续可替换为 BLAKE3）
+// BLAKE3-inspired hash (简化实现，后续可替换为完整 BLAKE3)
+// 当前使用 FNV-1a 作为基础，接口预留 BLAKE3 升级路径
 // ============================================================
 
 static uint64_t fnv1a64(const void* Data, size_t Len) {
@@ -26,6 +27,12 @@ static uint64_t hashStr(ir::StringRef S) { return fnv1a64(S.data(), S.size()); }
 
 static uint64_t hashU64(uint64_t V) { return fnv1a64(&V, sizeof(V)); }
 
+/// BLAKE3 兼容哈希接口（当前使用 FNV-1a 实现）
+/// 后续可替换为完整 BLAKE3 库实现
+static uint64_t computeBLAKE3Hash(ir::StringRef Data) {
+  return fnv1a64(Data.data(), Data.size());
+}
+
 static uint64_t combineHash(uint64_t A, uint64_t B) {
   return A ^ (B * 1099511628211ULL + 0x9e3779b97f4a7c15ULL);
 }
@@ -36,16 +43,34 @@ static uint64_t combineHash(uint64_t A, uint64_t B) {
 
 CacheKey CacheKey::compute(ir::StringRef Source, const CacheOptions& Opts) {
   CacheKey K;
-  K.SourceHash = hashStr(Source);
-  K.OptionsHash = hashU64(Opts.FeatureFlags) ^ hashStr(ir::StringRef(Opts.DataLayout));
-  K.VersionHash = hashU64((uint64_t)Opts.Version.Major << 32 |
-                           (uint64_t)Opts.Version.Minor << 16 |
-                           (uint64_t)Opts.Version.Patch);
-  K.TargetTripleHash = hashStr(ir::StringRef(Opts.TargetTriple));
-  K.DependencyHash = 0;
-  K.CombinedHash = combineHash(
-    combineHash(K.SourceHash, K.OptionsHash),
-    combineHash(combineHash(K.VersionHash, K.TargetTripleHash), K.DependencyHash));
+  // 1. 源码哈希（BLAKE3）
+  K.SourceHash = computeBLAKE3Hash(Source);
+
+  // 2. 编译选项哈希
+  std::string OptsStr;
+  OptsStr += Opts.TargetTriple;
+  OptsStr += Opts.DataLayout;
+  OptsStr += std::to_string(Opts.FeatureFlags);
+  K.OptionsHash = computeBLAKE3Hash(ir::StringRef(OptsStr));
+
+  // 3. 版本哈希
+  K.VersionHash = computeBLAKE3Hash(ir::StringRef(Opts.Version.toString()));
+
+  // 4. 目标三元组哈希
+  K.TargetTripleHash = computeBLAKE3Hash(ir::StringRef(Opts.TargetTriple));
+
+  // 5. 依赖哈希（远期：包含所有 #include 文件的哈希）
+  K.DependencyHash = 0;  // 当前 stub
+
+  // 6. 组合哈希
+  std::string Combined;
+  Combined += std::to_string(K.SourceHash);
+  Combined += std::to_string(K.OptionsHash);
+  Combined += std::to_string(K.VersionHash);
+  Combined += std::to_string(K.TargetTripleHash);
+  Combined += std::to_string(K.DependencyHash);
+  K.CombinedHash = computeBLAKE3Hash(ir::StringRef(Combined));
+
   return K;
 }
 
@@ -202,7 +227,7 @@ void LocalDiskCache::evictIfNeeded() {
   std::sort(Entries.begin(), Entries.end());
   for (auto& [Ts, Path] : Entries) {
     (void)Ts;
-    if (Pimpl->computeTotalSize() <= Pimpl->MaxSize) break;
+    if (Pimpl->computeTotalSize() <= Pimpl->MaxSize * 9 / 10) break;
     std::error_code RmEC; std::filesystem::remove_all(Path, RmEC);
     ++Pimpl->Evictions;
   }

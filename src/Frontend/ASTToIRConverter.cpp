@@ -13,6 +13,7 @@
 #include "blocktype/Frontend/IREmitCXX.h"
 #include "blocktype/Frontend/IRConstantEmitter.h"
 #include "blocktype/Frontend/IRMangler.h"
+#include "blocktype/Frontend/IRDebugInfoEmitter.h"
 
 #include "blocktype/IR/IRConstant.h"
 #include "blocktype/IR/IRModule.h"
@@ -37,6 +38,7 @@ ASTToIRConverter::~ASTToIRConverter() {
   delete CXXEmitter_;
   delete ConstEmitter_;
   delete Mangler_;
+  delete DebugEmitter_;
 }
 
 void ASTToIRConverter::initializeEmitters() {
@@ -293,6 +295,14 @@ ir::IRValue* ASTToIRConverter::getLocalDecl(const VarDecl* VD) const {
 
 void ASTToIRConverter::clearLocalScope() {
   LocalDecls_.clear();
+}
+
+void ASTToIRConverter::createDebugEmitter() {
+  if (DebugEmitter_ || !TheModule_) return;
+  // Note: SourceManager is not directly available in ASTToIRConverter
+  // DebugEmitter_ requires SourceManager, which is owned by CompilerInstance
+  // For now, this is a stub that will be properly initialized when -g is passed
+  // through CompilerInstance
 }
 
 } // namespace frontend

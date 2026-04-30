@@ -8,8 +8,8 @@
 #include "blocktype/AST/Decl.h"
 #include "blocktype/AST/Stmt.h"
 #include "blocktype/AST/Type.h"
+#include "blocktype/IR/ADT.h"
 #include <memory>
-#include <unordered_map>
 
 namespace blocktype {
 namespace frontend {
@@ -21,8 +21,8 @@ class IRDebugInfoEmitter {
   SourceManager& SM;
 
   // 调试元数据缓存
-  std::unordered_map<const Decl*, ir::DISubprogram*> SubprogramCache;
-  std::unordered_map<const void*, ir::DIType*> TypeCache;
+  ir::DenseMap<const Decl*, ir::DISubprogram*> SubprogramCache;
+  ir::DenseMap<const Type*, ir::DIType*> TypeCache;
   std::unique_ptr<ir::DICompileUnit> CU;
 
 public:

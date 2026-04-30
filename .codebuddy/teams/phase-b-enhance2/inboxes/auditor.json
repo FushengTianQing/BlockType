@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": "shutdown-1777520050432",
+    "from": "team-lead",
+    "to": "auditor",
+    "type": "shutdown_request",
+    "content": "{\"type\":\"shutdown_request\",\"request_id\":\"shutdown-1777520050432\",\"reason\":\"审查完成，感谢。\",\"from\":\"team-lead\",\"timestamp\":\"2026-04-30T03:34:10.432Z\"}",
+    "timestamp": "2026-04-30T03:34:10.432Z",
+    "read": true
+  },
+  {
+    "id": "shutdown-1777521907211",
+    "from": "team-lead",
+    "to": "auditor",
+    "type": "shutdown_request",
+    "content": "{\"type\":\"shutdown_request\",\"request_id\":\"shutdown-1777521907211\",\"reason\":\"复审通过，感谢。\",\"from\":\"team-lead\",\"timestamp\":\"2026-04-30T04:05:07.211Z\"}",
+    "timestamp": "2026-04-30T04:05:07.211Z",
+    "read": true
+  }
+]

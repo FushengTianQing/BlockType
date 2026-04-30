@@ -42,6 +42,8 @@ class IREmitCXX;
 class IRConstantEmitter;
 class IRMangler;
 
+class IRDebugInfoEmitter;
+
 /// ASTToIRConverter - Drives the top-level conversion from AST to IR.
 ///
 /// Responsibilities:
@@ -86,6 +88,9 @@ class ASTToIRConverter {
   IREmitCXX* CXXEmitter_ = nullptr;
   IRConstantEmitter* ConstEmitter_ = nullptr;
   IRMangler* Mangler_ = nullptr;
+
+  /// Debug info emitter (optional, created when -g is enabled)
+  IRDebugInfoEmitter* DebugEmitter_ = nullptr;
 
 public:
   /// Construct an ASTToIRConverter.
@@ -173,6 +178,17 @@ public:
 
   /// Clear local scope state (called between function bodies).
   void clearLocalScope();
+
+  // === Debug info interface ===
+
+  /// Create debug info emitter
+  void createDebugEmitter();
+
+  /// Check if debug info is enabled
+  bool hasDebugInfo() const { return DebugEmitter_ != nullptr; }
+
+  /// Get debug info emitter
+  IRDebugInfoEmitter* getDebugEmitter() { return DebugEmitter_; }
 
 private:
   /// Initialize sub-emitters. Called at the start of convert().

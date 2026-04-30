@@ -40,15 +40,15 @@ static const char* getPhaseName(CompilationPhase P) {
 // ============================================================
 
 TelemetryCollector::PhaseGuard::PhaseGuard(TelemetryCollector& C, CompilationPhase P, StringRef D)
-  : Collector(C), Phase(P), Detail(D.str()),
+  : Collector_(&C), Phase(P), Detail(D.str()),
     StartNs(getCurrentTimeNs()),
     MemoryBefore(getCurrentMemoryUsage()) {
 }
 
 TelemetryCollector::PhaseGuard::~PhaseGuard() {
-  if (MovedFrom_) return;
+  if (MovedFrom_ || !Collector_) return;
   
-  if (Collector.Enabled) {
+  if (Collector_->Enabled) {
     CompilationEvent E;
     E.Phase = Phase;
     E.Detail = Detail;
@@ -57,7 +57,7 @@ TelemetryCollector::PhaseGuard::~PhaseGuard() {
     E.MemoryBefore = MemoryBefore;
     E.MemoryAfter = getCurrentMemoryUsage();
     E.Success = !Failed;
-    Collector.Events.push_back(std::move(E));
+    Collector_->Events.push_back(std::move(E));
   }
 }
 

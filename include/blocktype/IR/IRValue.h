@@ -60,6 +60,86 @@ enum class Opcode : uint16_t {
   MetaCold         = 211,
 };
 
+/// 获取 Opcode 的字符串名称
+inline const char* getOpcodeName(Opcode O) {
+  switch (O) {
+    case Opcode::Ret: return "Ret";
+    case Opcode::Br: return "Br";
+    case Opcode::CondBr: return "CondBr";
+    case Opcode::Switch: return "Switch";
+    case Opcode::Invoke: return "Invoke";
+    case Opcode::Unreachable: return "Unreachable";
+    case Opcode::Resume: return "Resume";
+    case Opcode::Add: return "Add";
+    case Opcode::Sub: return "Sub";
+    case Opcode::Mul: return "Mul";
+    case Opcode::UDiv: return "UDiv";
+    case Opcode::SDiv: return "SDiv";
+    case Opcode::URem: return "URem";
+    case Opcode::SRem: return "SRem";
+    case Opcode::FAdd: return "FAdd";
+    case Opcode::FSub: return "FSub";
+    case Opcode::FMul: return "FMul";
+    case Opcode::FDiv: return "FDiv";
+    case Opcode::FRem: return "FRem";
+    case Opcode::Shl: return "Shl";
+    case Opcode::LShr: return "LShr";
+    case Opcode::AShr: return "AShr";
+    case Opcode::And: return "And";
+    case Opcode::Or: return "Or";
+    case Opcode::Xor: return "Xor";
+    case Opcode::Alloca: return "Alloca";
+    case Opcode::Load: return "Load";
+    case Opcode::Store: return "Store";
+    case Opcode::GEP: return "GEP";
+    case Opcode::Memcpy: return "Memcpy";
+    case Opcode::Memset: return "Memset";
+    case Opcode::Trunc: return "Trunc";
+    case Opcode::ZExt: return "ZExt";
+    case Opcode::SExt: return "SExt";
+    case Opcode::FPTrunc: return "FPTrunc";
+    case Opcode::FPExt: return "FPExt";
+    case Opcode::FPToSI: return "FPToSI";
+    case Opcode::FPToUI: return "FPToUI";
+    case Opcode::SIToFP: return "SIToFP";
+    case Opcode::UIToFP: return "UIToFP";
+    case Opcode::PtrToInt: return "PtrToInt";
+    case Opcode::IntToPtr: return "IntToPtr";
+    case Opcode::BitCast: return "BitCast";
+    case Opcode::ICmp: return "ICmp";
+    case Opcode::FCmp: return "FCmp";
+    case Opcode::Call: return "Call";
+    case Opcode::Phi: return "Phi";
+    case Opcode::Select: return "Select";
+    case Opcode::ExtractValue: return "ExtractValue";
+    case Opcode::InsertValue: return "InsertValue";
+    case Opcode::ExtractElement: return "ExtractElement";
+    case Opcode::InsertElement: return "InsertElement";
+    case Opcode::ShuffleVector: return "ShuffleVector";
+    case Opcode::DbgDeclare: return "DbgDeclare";
+    case Opcode::DbgValue: return "DbgValue";
+    case Opcode::DbgLabel: return "DbgLabel";
+    case Opcode::FFICall: return "FFICall";
+    case Opcode::FFICheck: return "FFICheck";
+    case Opcode::FFICoerce: return "FFICoerce";
+    case Opcode::FFIUnwind: return "FFIUnwind";
+    case Opcode::AtomicLoad: return "AtomicLoad";
+    case Opcode::AtomicStore: return "AtomicStore";
+    case Opcode::AtomicRMW: return "AtomicRMW";
+    case Opcode::AtomicCmpXchg: return "AtomicCmpXchg";
+    case Opcode::Fence: return "Fence";
+    case Opcode::DynamicCast: return "DynamicCast";
+    case Opcode::VtableDispatch: return "VtableDispatch";
+    case Opcode::RTTITypeid: return "RTTITypeid";
+    case Opcode::TargetIntrinsic: return "TargetIntrinsic";
+    case Opcode::MetaInlineAlways: return "MetaInlineAlways";
+    case Opcode::MetaInlineNever: return "MetaInlineNever";
+    case Opcode::MetaHot: return "MetaHot";
+    case Opcode::MetaCold: return "MetaCold";
+  }
+  return "Unknown";
+}
+
 enum class ICmpPred : uint8_t {
   EQ = 0, NE = 1, UGT = 2, UGE = 3, ULT = 4, ULE = 5, SGT = 6, SGE = 7, SLT = 8, SLE = 9,
 };

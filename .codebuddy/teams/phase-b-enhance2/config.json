@@ -2,7 +2,7 @@
   "name": "phase-b-enhance2",
   "leadAgentId": "c2f8a699216e4e3db24b4e440f2e1a7c",
   "workspacePath": "/Users/yuan/Documents/BlockType",
-  "createdAt": "2026-04-30T01:22:02.404Z",
+  "createdAt": "2026-04-30T03:25:32.411Z",
   "options": {
     "workspacePath": "/Users/yuan/Documents/BlockType",
     "isAutoTeam": false
@@ -12,21 +12,6 @@
       "memberId": "team-lead@phase-b-enhance2",
       "name": "team-lead",
       "role": "Team Lead - coordinates the team and interacts with the user"
-    },
-    {
-      "memberId": "planner@phase-b-enhance2",
-      "name": "planner",
-      "role": "B-F5~B-F10 任务流文档"
-    },
-    {
-      "memberId": "dev-tester@phase-b-enhance2",
-      "name": "dev-tester",
-      "role": "B-F5~B-F10 开发+测试"
-    },
-    {
-      "memberId": "auditor@phase-b-enhance2",
-      "name": "auditor",
-      "role": "B-F5~B-F10 审计"
     }
   ],
   "isAutoTeam": false

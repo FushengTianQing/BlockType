@@ -65,6 +65,19 @@ inline DialectCapability Cranelift() {
 } // namespace BackendDialectCaps
 
 } // namespace dialect
+
+/// 获取 DialectID 的字符串名称
+inline const char* getDialectName(dialect::DialectID D) {
+  switch (D) {
+    case dialect::DialectID::Core:     return "Core";
+    case dialect::DialectID::Cpp:      return "Cpp";
+    case dialect::DialectID::Target:   return "Target";
+    case dialect::DialectID::Debug:    return "Debug";
+    case dialect::DialectID::Metadata: return "Metadata";
+  }
+  return "Unknown";
+}
+
 } // namespace ir
 } // namespace blocktype
 

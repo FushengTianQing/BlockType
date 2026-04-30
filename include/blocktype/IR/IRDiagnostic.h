@@ -7,6 +7,8 @@
 
 #include "blocktype/IR/ADT.h"
 #include "blocktype/IR/IRDebugMetadata.h"
+#include "blocktype/IR/IRValue.h"
+#include "blocktype/IR/IRDialect.h"
 
 namespace blocktype {
 namespace diag {
@@ -94,19 +96,24 @@ struct StructuredDiagnostic {
   // === B-F6 新增字段 ===
   std::string Category;                              // 诊断类别
   std::string FlagName;                              // 命令行标志名（如 "ir"）
-  
+  ir::SmallVector<ir::SourceRange, 4> Ranges;        // 源码范围
+  ir::SmallVector<ir::SourceRange, 2> RelatedLocs;   // 相关位置
+
   // FixIt 提示
   struct FixItHint {
+    ir::SourceRange Range;
     std::string Replacement;
     std::string Description;
   };
   ir::SmallVector<FixItHint, 2> FixIts;
   
-  // IR 相关信息（可选）
-  std::optional<uint8_t> IRRelatedDialect;  // dialect::DialectID
-  std::optional<uint8_t> IRRelatedOpcode;   // Opcode
+  // IR 相关信息
+  std::optional<ir::dialect::DialectID> IRRelatedDialect;
+  std::optional<ir::Opcode> IRRelatedOpcode;
 
-  // 虚析构函数，使结构体成为多态类型，支持 dynamic_cast
+  // Note: virtual destructor retained because DetailedStructuredDiagnostic
+  // (in Frontend/StructuredDiagnostic.h) inherits from this struct and uses
+  // dynamic_cast, requiring a polymorphic base.
   virtual ~StructuredDiagnostic() = default;
 
   DiagnosticLevel getLevel() const { return Level; }
@@ -154,6 +161,7 @@ public:
 private:
   void emitLevel(ir::raw_ostream& OS, DiagnosticLevel L);
   void emitLocation(ir::raw_ostream& OS, const ir::SourceLocation& Loc);
+  void emitMessage(ir::raw_ostream& OS, ir::StringRef Msg);
   void emitNotes(ir::raw_ostream& OS, const ir::SmallVector<std::string, 4>& Notes);
   void emitFixIts(ir::raw_ostream& OS, const ir::SmallVector<StructuredDiagnostic::FixItHint, 2>& FixIts);
 };
@@ -176,6 +184,22 @@ private:
   void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, ir::StringRef Value, bool Last);
   void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, unsigned Value, bool Last);
   void emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, bool Value, bool Last);
+};
+
+// ============================================================
+// SARIFDiagEmitter — SARIF 格式诊断发射器
+// ============================================================
+
+class SARIFDiagEmitter : public StructuredDiagEmitter {
+  ir::raw_ostream& OS;
+
+public:
+  explicit SARIFDiagEmitter(ir::raw_ostream& OS) : OS(OS) {}
+
+  void emit(const StructuredDiagnostic& D) override;
+
+  /// 发射完整的 SARIF 报告（包含所有诊断）
+  void emitSARIFReport(const ir::SmallVector<StructuredDiagnostic, 16>& Diags);
 };
 
 // ============================================================

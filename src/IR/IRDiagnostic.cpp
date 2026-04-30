@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <string>
 
+// Ensure getDialectName and getOpcodeName are available
+// (defined inline in IRDialect.h and IRValue.h)
+
 namespace blocktype {
 namespace diag {
 
@@ -159,8 +162,17 @@ std::string StructuredDiagnostic::toText() const {
 
 class DiagnosticGroupManager::Impl {
 public:
-  ir::DenseMap<uint16_t, bool> Overrides;
-  bool AllEnabled = true;
+  ir::DenseMap<DiagnosticGroup, bool> EnabledGroups;
+
+  Impl() {
+    // 默认启用所有组
+    EnabledGroups[DiagnosticGroup::TypeMapping] = true;
+    EnabledGroups[DiagnosticGroup::InstructionValidation] = true;
+    EnabledGroups[DiagnosticGroup::IRVerification] = true;
+    EnabledGroups[DiagnosticGroup::BackendCodegen] = true;
+    EnabledGroups[DiagnosticGroup::FFIBinding] = true;
+    EnabledGroups[DiagnosticGroup::Serialization] = true;
+  }
 };
 
 DiagnosticGroupManager::DiagnosticGroupManager()
@@ -171,29 +183,34 @@ DiagnosticGroupManager::~DiagnosticGroupManager() {
 }
 
 void DiagnosticGroupManager::enableGroup(DiagnosticGroup G) {
-  Pimpl->Overrides[static_cast<uint16_t>(G)] = true;
+  Pimpl->EnabledGroups[G] = true;
 }
 
 void DiagnosticGroupManager::disableGroup(DiagnosticGroup G) {
-  Pimpl->Overrides[static_cast<uint16_t>(G)] = false;
+  Pimpl->EnabledGroups[G] = false;
 }
 
 bool DiagnosticGroupManager::isGroupEnabled(DiagnosticGroup G) const {
-  uint16_t Key = static_cast<uint16_t>(G);
-  auto It = Pimpl->Overrides.find(Key);
-  if (It != Pimpl->Overrides.end())
-    return (*It).second;
-  return Pimpl->AllEnabled;
+  auto It = Pimpl->EnabledGroups.find(G);
+  return It != Pimpl->EnabledGroups.end() && (*It).second;
 }
 
 void DiagnosticGroupManager::enableAll() {
-  Pimpl->Overrides.clear();
-  Pimpl->AllEnabled = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::TypeMapping] = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::InstructionValidation] = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::IRVerification] = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::BackendCodegen] = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::FFIBinding] = true;
+  Pimpl->EnabledGroups[DiagnosticGroup::Serialization] = true;
 }
 
 void DiagnosticGroupManager::disableAll() {
-  Pimpl->Overrides.clear();
-  Pimpl->AllEnabled = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::TypeMapping] = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::InstructionValidation] = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::IRVerification] = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::BackendCodegen] = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::FFIBinding] = false;
+  Pimpl->EnabledGroups[DiagnosticGroup::Serialization] = false;
 }
 
 // ============================================================
@@ -205,7 +222,7 @@ void TextDiagEmitter::emit(const StructuredDiagnostic& D) {
   OS << ": ";
   emitLevel(OS, D.getLevel());
   OS << ": ";
-  OS << D.getMessage();
+  emitMessage(OS, D.getMessage());
 
   if (!D.FlagName.empty()) {
     OS << " [-W" << D.FlagName << "]";
@@ -244,6 +261,10 @@ void TextDiagEmitter::emitLevel(ir::raw_ostream& OS, DiagnosticLevel L) {
       case DiagnosticLevel::Fatal:   OS << "fatal error"; break;
     }
   }
+}
+
+void TextDiagEmitter::emitMessage(ir::raw_ostream& OS, ir::StringRef Msg) {
+  OS << Msg;
 }
 
 void TextDiagEmitter::emitNotes(ir::raw_ostream& OS, const ir::SmallVector<std::string, 4>& Notes) {
@@ -289,11 +310,11 @@ void JSONDiagEmitter::emit(const StructuredDiagnostic& D) {
 
   // IR-related info
   if (D.IRRelatedDialect.has_value()) {
-    OS << "\"ir_dialect\": " << static_cast<unsigned>(*D.IRRelatedDialect) << ", ";
+    emitJSONField(OS, "ir_dialect", ir::getDialectName(*D.IRRelatedDialect), false);
   }
 
   if (D.IRRelatedOpcode.has_value()) {
-    OS << "\"ir_opcode\": " << static_cast<unsigned>(*D.IRRelatedOpcode) << ", ";
+    emitJSONField(OS, "ir_opcode", ir::getOpcodeName(*D.IRRelatedOpcode), false);
   }
 
   // notes
@@ -337,6 +358,65 @@ void JSONDiagEmitter::emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, unsi
 void JSONDiagEmitter::emitJSONField(ir::raw_ostream& OS, ir::StringRef Key, bool Value, bool Last) {
   OS << "\"" << Key << "\": " << (Value ? "true" : "false");
   if (!Last) OS << ", ";
+}
+
+// ============================================================
+// SARIFDiagEmitter 实现
+// ============================================================
+
+void SARIFDiagEmitter::emit(const StructuredDiagnostic& D) {
+  OS << "{";
+  OS << "\"ruleId\": \"" << getDiagnosticCodeName(D.getCode()) << "\", ";
+  OS << "\"level\": \"" << getDiagnosticLevelName(D.getLevel()) << "\", ";
+  OS << "\"message\": { \"text\": \"" << escapeJSON(D.getMessage()) << "\" }, ";
+
+  // Location
+  OS << "\"locations\": [{";
+  OS << "\"physicalLocation\": {";
+  OS << "\"artifactLocation\": { \"uri\": \"" << escapeJSON(D.getLocation().Filename) << "\" }, ";
+  OS << "\"region\": { \"startLine\": " << D.getLocation().Line
+     << ", \"startColumn\": " << D.getLocation().Column << " }";
+  OS << "}";
+  OS << "}]";
+
+  // Related locations
+  if (!D.RelatedLocs.empty()) {
+    OS << ", \"relatedLocations\": [";
+    for (size_t i = 0; i < D.RelatedLocs.size(); ++i) {
+      const auto& RL = D.RelatedLocs[i];
+      OS << "{ \"physicalLocation\": {";
+      OS << "\"artifactLocation\": { \"uri\": \"" << escapeJSON(RL.Begin.Filename) << "\" }, ";
+      OS << "\"region\": { \"startLine\": " << RL.Begin.Line
+         << ", \"startColumn\": " << RL.Begin.Column << " }";
+      OS << "} }";
+      if (i < D.RelatedLocs.size() - 1) OS << ", ";
+    }
+    OS << "]";
+  }
+
+  OS << "}\n";
+  OS.flush();
+}
+
+void SARIFDiagEmitter::emitSARIFReport(const ir::SmallVector<StructuredDiagnostic, 16>& Diags) {
+  OS << "{\n";
+  OS << "  \"version\": \"2.1.0\",\n";
+  OS << "  \"$schema\": \"https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json\",\n";
+  OS << "  \"runs\": [{\n";
+  OS << "    \"tool\": { \"driver\": { \"name\": \"BlockType\", \"version\": \"1.0.0\" } },\n";
+  OS << "    \"results\": [\n";
+
+  for (size_t i = 0; i < Diags.size(); ++i) {
+    OS << "      ";
+    emit(Diags[i]);
+    // Strip trailing newline from emit() for JSON array formatting
+    if (i < Diags.size() - 1) OS << ",";
+  }
+
+  OS << "    ]\n";
+  OS << "  }]\n";
+  OS << "}\n";
+  OS.flush();
 }
 
 } // namespace diag

@@ -187,6 +187,11 @@ TranslationUnitDecl *CompilerInstance::parseTranslationUnit() {
     return nullptr;
   }
 
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::Frontend, "parse");
+  }
+
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "  Parsing...\n";
   }
@@ -195,6 +200,9 @@ TranslationUnitDecl *CompilerInstance::parseTranslationUnit() {
 
   if (ParserPtr->hasErrors() || Diags->hasErrorOccurred()) {
     setError();
+    if (Telemetry && Telemetry->isEnabled()) {
+      Guard.markFailed();
+    }
     return nullptr;
   }
 
@@ -207,10 +215,19 @@ bool CompilerInstance::performSemaAnalysis() {
     return false;
   }
 
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::Frontend, "sema");
+  }
+
   // Perform post-parse diagnostics
   SemaPtr->DiagnoseUnusedDecls(CurrentTU);
 
-  return !hasErrors();
+  bool OK = !hasErrors();
+  if (!OK && Telemetry && Telemetry->isEnabled()) {
+    Guard.markFailed();
+  }
+  return OK;
 }
 
 bool CompilerInstance::performPreprocessing() {
@@ -249,6 +266,11 @@ std::unique_ptr<llvm::Module> CompilerInstance::generateLLVMIR(StringRef ModuleN
     return nullptr;
   }
 
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::IRGeneration, "ir-gen");
+  }
+
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "  Generating LLVM IR...\n";
   }
@@ -265,11 +287,22 @@ std::unique_ptr<llvm::Module> CompilerInstance::generateLLVMIR(StringRef ModuleN
   CGM.EmitTranslationUnit(CurrentTU);
 
   // Transfer ownership of the Module from CGM to the caller
-  return CGM.releaseModule();
+  auto Mod = CGM.releaseModule();
+
+  if (!Mod && Telemetry && Telemetry->isEnabled()) {
+    Guard.markFailed();
+  }
+
+  return Mod;
 }
 
 bool CompilerInstance::runOptimizationPasses(llvm::Module &Module) {
   unsigned OptLevel = Invocation->CodeGenOpts.OptimizationLevel;
+
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::IROptimization, "opt");
+  }
 
   // O0: no optimization
   if (OptLevel == 0) {
@@ -315,6 +348,11 @@ bool CompilerInstance::runOptimizationPasses(llvm::Module &Module) {
 }
 
 bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef OutputPath) {
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::BackendCodegen, "codegen");
+  }
+
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "  Generating object file: " << OutputPath << "\n";
   }
@@ -442,6 +480,11 @@ bool CompilerInstance::generateObjectFile(llvm::Module &Module, StringRef Output
 
 bool CompilerInstance::linkExecutable(const std::vector<std::string> &ObjectFiles,
                                       StringRef OutputPath) {
+  telemetry::TelemetryCollector::PhaseGuard Guard;
+  if (Telemetry && Telemetry->isEnabled()) {
+    Guard = Telemetry->scopePhase(telemetry::CompilationPhase::Linking, "link");
+  }
+
   if (Invocation->FrontendOpts.Verbose) {
     outs() << "  Linking executable: " << OutputPath << "\n";
   }

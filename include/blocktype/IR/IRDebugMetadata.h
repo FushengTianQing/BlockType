@@ -29,6 +29,17 @@ struct SourceLocation {
 };
 
 // ============================================================
+// SourceRange — 源码范围
+// ============================================================
+
+struct SourceRange {
+  SourceLocation Begin;
+  SourceLocation End;
+
+  bool isValid() const { return Begin.isValid() && End.isValid(); }
+};
+
+// ============================================================
 // DebugMetadata — 调试元数据基类
 // ============================================================
 
