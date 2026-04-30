@@ -20,6 +20,7 @@ add_library(blocktypeFrontend
   CppFrontendRegistration.cpp
   PluginManager.cpp
   StructuredDiagnostic.cpp
+  IRDebugInfoEmitter.cpp
 )
 
 target_include_directories(blocktypeFrontend
