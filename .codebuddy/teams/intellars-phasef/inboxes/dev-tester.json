@@ -1,0 +1,20 @@
+[
+  {
+    "id": "msg-1777578266592-8igulw",
+    "from": "team-lead",
+    "to": "dev-tester",
+    "type": "message",
+    "content": "## 审查结果：REJECTED — 需要修复\n\nAuditor 完成了独立审查，发现 4 个阻塞级问题 + 多个非阻塞问题。请按以下优先级修复所有问题。\n\n---\n\n### 阻塞级问题（必须修复）\n\n**1. F-07 编译错误：函数名不匹配**\n- 文件：`src/IR/IRStatistics.cpp`\n- 问题：第 74 行定义了 `computeInstComplexity(Opcode Op)`，但第 120 行调用 `getInstructionComplexity(Op)` — 函数名不匹配，无法编译\n- 修复：统一函数名为 `computeInstComplexity`（或改为 `getInstructionComplexity`），确保定义和调用一致\n\n**2. F-07 JSON 字段名大小写错误**\n- 文件：`src/IR/IRStatistics.cpp` 的 `toJSON()` 方法\n- 问题：输出 `\"numFunctions\"` (camelCase)，但 spec 验收测试 `JSON.find(\"NumFunctions\")` 使用 PascalCase\n- 修复：所有 JSON 字段名改为 PascalCase：`\"NumFunctions\"`, `\"NumBasicBlocks\"`, `\"NumInstructions\"` 等，与 spec 字段名完全一致\n\n**3. F-10 repr(C) 映射错误**\n- 文件：`src/Backend/FFIRustMapper.cpp`\n- 问题：`repr(C)` 结构体返回 `Ctx.getOpaqueType()` 即 IROpaqueType，但 spec 验收测试要求 `isa<ir::IRStructType>(Ty)` 为 true\n- 修复：`repr(C)` 结构体应返回 `IRStructType`。如果 IRStructType 构造需要字段列表而当前仅有类型名，可使用空的字段列表创建：`Ctx.getStructType(SmallVector<ir::IRType*, 16>{})` 或等效方式。请先检查 `IRTypeContext` 中是否有创建空 StructType 的方法。\n\n**4. F-10 repr(Rust) 映射错误**\n- 文件：`src/Backend/FFIRustMapper.cpp`\n- 问题：`repr(Rust)` 结构体返回 `nullptr`，但 spec 表格明确写了映射为 `IROpaqueType`，验收测试 `assert(isa<ir::IROpaqueType>(Ty2))`\n- 修复：`repr(Rust)` 应返回 `Ctx.getOpaqueType()` 并输出警告（不是返回 nullptr）\n\n---\n\n### 非阻塞但需修复的问题\n\n**5. F-03：DeclRuleEngine 无头文件**\n- 问题：整个 class 定义在 .cpp 内部，外部代码无法引用 DeclRuleEngine 类型\n- 修复：创建 `include/blocktype/Backend/DeclRuleEngine.h`，将 class 声明移到头文件\n\n**6. F-04：ISLEParser 代码重复 + loadISLERulesFromFile 空实现**\n- 问题：DeclRuleEngine.cpp 和 ISLEParser.cpp 各有一套 parseISLERule/tokenize 实现；loadISLERulesFromFile 的 Selector 参数被 `(void)Selector;` 丢弃\n- 修复：让 DeclRuleEngine.cpp 中的 loadRules() 调用 ISLEParser.cpp 中的解析函数，消除重复代码。loadISLERulesFromFile 应通过 dynamic_cast 或模板将规则实际添加到 Selector\n\n**7. F-10/F-11：未继承 FFITypeMapper 基类**\n- 问题：spec 设计意图是通过 FFITypeMapper 基类交互，但 FFIRustMapper 和 FFIWasmMapper 都是独立 class\n- 修复：让 FFIRustMapper 和 FFIWasmMapper 继承 `ffi::FFITypeMapper`（定义在 `include/blocktype/IR/IRFFI.h`），请先读取该头文件了解基类接口\n\n**8. F-01：额外的公共方法**\n- 差异：QueryResult 添加了默认构造函数和 getKind()；QueryContext 添加了 allocateQueryID()\n- 这些在实际使用中有价值，auditor 标注为 LOW，可以保留但需要确认与 spec 兼容\n\n---\n\n### 已知预审差异（planner 已确认，无需修复）\n\n- F-02：FNV-1a 替代 XXHash64（功能等价，可接受）\n\n---\n\n### 修复顺序建议\n\n1. 先修 F-07 编译错误（阻塞编译）\n2. 再修 F-07 JSON 字段名\n3. 修 F-10 repr(C)/repr(Rust) 映射\n4. 修 F-03 头文件\n5. 修 F-04 代码重复\n6. 修 F-10/F-11 继承 FFITypeMapper\n\n修复完成后发送交付报告给 main。",
+    "timestamp": "2026-04-30T19:44:26.592Z",
+    "read": true
+  },
+  {
+    "id": "shutdown-1777578738933",
+    "from": "team-lead",
+    "to": "dev-tester",
+    "type": "shutdown_request",
+    "content": "{\"type\":\"shutdown_request\",\"request_id\":\"shutdown-1777578738933\",\"reason\":\"所有修复已通过审查，工作完成，请关闭。\",\"from\":\"team-lead\",\"timestamp\":\"2026-04-30T19:52:18.933Z\"}",
+    "timestamp": "2026-04-30T19:52:18.933Z",
+    "read": false
+  }
+]

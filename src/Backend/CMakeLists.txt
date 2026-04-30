@@ -12,6 +12,10 @@ add_library(blocktypeBackend
   BasicRegAlloc.cpp
   DWARF5Emitter.cpp
   CodeViewEmitter.cpp
+  DeclRuleEngine.cpp
+  ISLEParser.cpp
+  FFIRustMapper.cpp
+  FFIWasmMapper.cpp
 )
 
 target_include_directories(blocktypeBackend

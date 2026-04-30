@@ -1,22 +1,22 @@
 {
-  "name": "phase-e-validation",
+  "name": "intellars-phasee-p2p3",
   "leadAgentId": "b163a1141b554befba9725ccc38ba588",
   "workspacePath": "/Users/yuan/Documents/BlockType",
-  "createdAt": "2026-04-30T11:04:01.687Z",
+  "createdAt": "2026-04-30T11:53:47.538Z",
   "options": {
     "workspacePath": "/Users/yuan/Documents/BlockType",
     "isAutoTeam": false
   },
   "members": [
     {
-      "memberId": "team-lead@phase-e-validation",
+      "memberId": "team-lead@intellars-phasee-p2p3",
       "name": "team-lead",
       "role": "Team Lead - coordinates the team and interacts with the user"
     },
     {
-      "memberId": "dev-tester@phase-e-validation",
+      "memberId": "dev-tester@intellars-phasee-p2p3",
       "name": "dev-tester",
-      "role": "Dev-tester 实现 Phase E"
+      "role": "Fix P2/P3 issues"
     }
   ],
   "isAutoTeam": false

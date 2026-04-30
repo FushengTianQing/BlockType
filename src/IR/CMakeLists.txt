@@ -31,6 +31,10 @@ add_library(blocktype-ir
   IRFFI.cpp
   IREquivalenceChecker.cpp
   PassInvariantChecker.cpp
+  DependencyGraph.cpp
+  QueryContext.cpp
+  IRStatistics.cpp
+  AIAutoTuner.cpp
 )
 
 target_include_directories(blocktype-ir
