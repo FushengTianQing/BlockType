@@ -53,7 +53,7 @@ SymbolicExecutor ──ref──→ const IRModule&（分析目标）
 IRSigner ──owns──→ Ed25519 密钥对
 IRSigner ──ref──→ IRSerializer&（签名附加到序列化输出）
 
-DistributedCache ──ref──→ RemoteCache&（远程缓存后端）
+DistributedCache ──ref──→ IRRemoteCacheClient&（远程缓存后端）
 DistributedCache ──owns──→ ConsistentHash Ring
 ```
 
@@ -404,6 +404,14 @@ assert(Engine.getNumRules() > 0);
 
 ### Task F-05：PluginManager IR Pass 插件注册
 
+> **Spec 修复说明（2026-05-01）**：原 spec 定义的 PluginManager 接口（instance() 单例、
+> loadPlugin(StringRef)、unloadPlugin(StringRef)等）与现有代码
+> `include/blocktype/Frontend/PluginManager.h` 中 `blocktype::plugin::PluginManager` 完全不同。
+> 现有 PluginManager 使用 registerPlugin(unique_ptr\<CompilerPlugin\>)、unregisterPlugin(StringRef)
+> 等方法，无单例、无 loadPlugin。
+> 本修复基于现有接口进行扩展：在现有 PluginManager 上新增 Pass 注册回调（PassCreatorFn）
+> 和 PassManager 关联功能，不破坏已有接口。
+
 #### 依赖
 
 - C-F1（PluginManager 基础框架）
@@ -412,33 +420,93 @@ assert(Engine.getNumRules() > 0);
 
 | 操作 | 文件路径 |
 |------|----------|
-| 修改 | `src/IR/IRPlugin.cpp` |
+| 修改 | `include/blocktype/Frontend/PluginManager.h` |
+| 修改 | `src/Frontend/PluginManager.cpp` |
 
-#### 必须实现的接口
+#### 必须实现的接口（在现有 plugin::PluginManager 上扩展）
 
 ```cpp
+namespace blocktype::plugin {
+
+/// Pass 工厂函数类型
+using PassCreatorFn = std::function<std::unique_ptr<ir::Pass>()>;
+
 class PluginManager {
-  StringMap<unique_ptr<CompilerPlugin>> Plugins;
-  PassManager* PM = nullptr;
+  // === 现有成员保持不变 ===
+  ir::DenseMap<std::string, std::unique_ptr<CompilerPlugin>> LoadedPlugins;
+
+  // === 新增成员 ===
+  ir::PassManager* PM_ = nullptr;
+  ir::DenseMap<std::string, PassCreatorFn> PassCreators_;
+
 public:
-  static PluginManager& instance();
-  void setPassManager(PassManager* P) { PM = P; }
-  bool loadPlugin(StringRef Path);
-  void unloadPlugin(StringRef Name);
-  CompilerPlugin* getPlugin(StringRef Name) const;
-  SmallVector<StringRef, 4> getLoadedPlugins() const;
+  // === 现有方法保持不变 ===
+  bool registerPlugin(std::unique_ptr<CompilerPlugin> Plugin);
+  bool unregisterPlugin(ir::StringRef Name);
+  CompilerPlugin* getPlugin(ir::StringRef Name) const;
+  void registerPluginPasses(CompilerInstance& CI);
+  void listPlugins(ir::raw_ostream& OS) const;
+  size_t getPluginCount() const;
+
+  // === 新增方法 ===
+
+  /// 设置 PassManager，后续 createAndRegisterPasses 将 Pass 添加到此 PM。
+  void setPassManager(ir::PassManager* PM) { PM_ = PM; }
+
+  /// 注册一个 Pass 工厂函数。PassName 重复返回 false。
+  bool registerPassCreator(ir::StringRef PassName, PassCreatorFn Creator);
+
+  /// 查找已注册的 Pass 工厂函数。未找到返回 nullptr。
+  const PassCreatorFn* getPassCreator(ir::StringRef PassName) const;
+
+  /// 将所有已注册的 PassCreator 创建的 Pass 添加到 PassManager。
+  /// 需要先调用 setPassManager()。返回添加的 Pass 数量。
+  unsigned createAndRegisterPasses();
 };
+
+} // namespace plugin
 ```
+
+#### 实现约束
+
+1. 在现有 PluginManager.h/cpp 中添加新成员和方法，**不破坏已有接口**
+2. `registerPassCreator()` 使用 PassName 去重，重名返回 false
+3. `createAndRegisterPasses()` 遍历 PassCreators\_，对每个调用 Creator 生成 Pass 实例，
+   通过 `PM_->addPass()` 添加到管线
+4. `getPassCreator()` 返回 const 指针，不允许外部修改注册表
+5. 所有新代码在 `namespace blocktype::plugin` 中
+6. 新增头文件 include 依赖：`blocktype/IR/IRPass.h`、`blocktype/IR/IRPasses.h`
 
 #### 验收标准
 
 ```cpp
-// V1: 加载/卸载插件
-auto& PM = PluginManager::instance();
-assert(PM.loadPlugin("MyPass.so") == true);
-assert(PM.getPlugin("MyPass") != nullptr);
-PM.unloadPlugin("MyPass");
-assert(PM.getPlugin("MyPass") == nullptr);
+// V1: 设置 PassManager 并注册 Pass Creator
+plugin::PluginManager PMgr;
+ir::PassManager IRPM;
+PMgr.setPassManager(&IRPM);
+bool OK = PMgr.registerPassCreator("my-opt",
+  []() -> std::unique_ptr<ir::Pass> {
+    return std::make_unique<MyOptPass>();
+  });
+assert(OK == true);
+
+// V2: 查找 Pass Creator
+auto* Creator = PMgr.getPassCreator("my-opt");
+assert(Creator != nullptr);
+
+// V3: 重名注册失败
+bool OK2 = PMgr.registerPassCreator("my-opt",
+  []() -> std::unique_ptr<ir::Pass> { return nullptr; });
+assert(OK2 == false);
+
+// V4: 创建并注册所有 Pass
+unsigned Count = PMgr.createAndRegisterPasses();
+assert(Count == 1);
+assert(IRPM.size() == 1);
+
+// V5: 现有接口不受影响
+PMgr.registerPlugin(std::make_unique<TestPlugin>());
+assert(PMgr.getPluginCount() == 1);
 ```
 
 
@@ -451,33 +519,69 @@ assert(PM.getPlugin("MyPass") == nullptr);
 
 ### Task F-06：BTIR_PASS_PLUGIN 注册宏
 
+> **Spec 修复说明（2026-05-01）**：原宏使用 PluginManager::instance()（不存在的单例）和
+> 不存在的 registerPassCreator 签名。修复为使用 plugin::PluginManager 实例 + F-05 新增的
+> registerPassCreator(PassName, PassCreatorFn) 方法。宏改为需要显式传入 PluginManager 实例引用。
+
 #### 依赖
 
-- F-05（PluginManager）
+- F-05（PluginManager Pass 注册扩展）
+
+#### 产出文件
+
+| 操作 | 文件路径 |
+|------|----------|
+| 新增 | `include/blocktype/Frontend/PluginMacros.h` |
 
 #### 必须实现的宏
 
 ```cpp
-#define BTIR_PASS_PLUGIN(PassClass, PluginName) \
-  static void register##PassClass() { \
-    PluginManager::instance().registerPassCreator(PluginName, \
-      []() -> unique_ptr<Pass> { return make_unique<PassClass>(); }); \
-  } \
-  static bool __##PassClass##_registered = (register##PassClass(), true);
+#include "blocktype/Frontend/PluginManager.h"
+
+/// BTIR_PASS_PLUGIN — 向 PluginManager 注册一个 IR Pass 工厂。
+/// @param PassClass  Pass 子类名（必须继承 ir::Pass）
+/// @param PluginName Pass 注册名称（字符串字面量）
+/// @param PMgr       plugin::PluginManager 实例引用
+///
+/// 用法：
+///   plugin::PluginManager PMgr;
+///   BTIR_PASS_PLUGIN(MyOptPass, "my-opt", PMgr)
+///
+#define BTIR_PASS_PLUGIN(PassClass, PluginName, PMgr) \
+  static bool PassClass##_registered_ = \
+    (PMgr).registerPassCreator(PluginName, \
+      []() -> std::unique_ptr<blocktype::ir::Pass> { \
+        return std::make_unique<PassClass>(); \
+      });
 ```
 
 #### 实现约束
 
 1. 不依赖 RTTI
-2. 编译期类型检查
-3. 静态初始化注册
+2. 编译期类型检查：PassClass 必须是 `ir::Pass` 子类（由 `std::make_unique<PassClass>()` 模板推导保证）
+3. 返回 `bool` 可用于 static_assert 或条件检查
+4. 不使用全局单例，通过参数 `PMgr` 显式传入 PluginManager 实例
+5. 宏内使用 `static bool` 变量确保注册在 `main()` 之前执行（用于静态注册场景）
 
 #### 验收标准
 
 ```cpp
 // V1: 宏展开后可注册 Pass
-BTIR_PASS_PLUGIN(MyOptPass, "my-opt")
-// PluginManager::instance().getPassCreator("my-opt") != nullptr
+plugin::PluginManager PMgr;
+ir::PassManager IRPM;
+PMgr.setPassManager(&IRPM);
+BTIR_PASS_PLUGIN(MyOptPass, "my-opt", PMgr)
+const auto* Creator = PMgr.getPassCreator("my-opt");
+assert(Creator != nullptr);
+
+// V2: 注册后可创建 Pass 实例
+auto PassObj = (*Creator)();
+assert(PassObj != nullptr);
+
+// V3: 创建并执行 Pass 到 PassManager
+unsigned Count = PMgr.createAndRegisterPasses();
+assert(Count == 1);
+assert(IRPM.size() == 1);
 ```
 
 
@@ -630,63 +734,114 @@ Tuner.recordFeedback({Seq, 0.95, 100, 2048});
 
 ---
 
-### Task F-09：RemoteCache 远程缓存接口
+### Task F-09：IRRemoteCacheClient 远程缓存客户端
+
+> **Spec 修复说明（2026-05-01）**：原 spec 定义 `blocktype::ir::RemoteCache`，但
+> `include/blocktype/IR/IRCache.h` 已有 `blocktype::cache::RemoteCache`（stub 类），
+> 类名冲突。修复方案：重命名为 `IRRemoteCacheClient`，放在 `blocktype::cache` 命名空间，
+> 继承现有 `cache::CacheStorage` 抽象基类，与现有 `cache::RemoteCache` 并存不冲突。
 
 #### 依赖
 
 - E-F1（CompilationCacheManager）
+- IRCache.h（现有 CacheStorage、CacheKey、CacheEntry 类型）
 
 #### 产出文件
 
 | 操作 | 文件路径 |
 |------|----------|
-| 新增 | `include/blocktype/IR/RemoteCache.h` |
+| 新增 | `include/blocktype/IR/IRRemoteCacheClient.h` |
+| 新增 | `src/IR/IRRemoteCacheClient.cpp` |
 
 #### 必须实现的类型定义
 
 ```cpp
-namespace blocktype::ir {
+#ifndef BLOCKTYPE_IR_IRREMOTECACHECLIENT_H
+#define BLOCKTYPE_IR_IRREMOTECACHECLIENT_H
 
-class RemoteCache {
-  std::string Endpoint;
-  uint64_t TimeoutMs = 5000;
-  unsigned MaxRetries = 3;
+#include "blocktype/IR/IRCache.h"
+
+namespace blocktype {
+namespace cache {
+
+/// IRRemoteCacheClient — 增强版远程缓存客户端
+/// 继承自 CacheStorage 接口，提供 HTTPS 传输、签名验证、超时重试等功能。
+/// 与现有 RemoteCache（stub）并存，可替换使用。
+class IRRemoteCacheClient : public CacheStorage {
+  std::string Endpoint_;
+  std::string Bucket_;
+  uint64_t TimeoutMs_ = 5000;
+  unsigned MaxRetries_ = 3;
+  Stats Stats_;
+
 public:
-  explicit RemoteCache(StringRef URL);
-  optional<CacheEntry> lookup(const CacheKey& Key);
-  bool store(const CacheKey& Key, const CacheEntry& Entry);
-  bool verifySignature(const CacheEntry& Entry);
-  void setTimeout(uint64_t Ms) { TimeoutMs = Ms; }
-  void setMaxRetries(unsigned N) { MaxRetries = N; }
+  explicit IRRemoteCacheClient(ir::StringRef URL, ir::StringRef Bucket = "default");
+
+  /// CacheStorage 接口实现
+  std::optional<CacheEntry> lookup(const CacheKey& Key) override;
+  bool store(const CacheKey& Key, const CacheEntry& Entry) override;
+  Stats getStats() const override { return Stats_; }
+
+  /// 增强功能
+  bool verifySignature(const CacheEntry& Entry) const;
+  void setTimeout(uint64_t Ms) { TimeoutMs_ = Ms; }
+  void setMaxRetries(unsigned N) { MaxRetries_ = N; }
+  uint64_t getTimeout() const { return TimeoutMs_; }
+  unsigned getMaxRetries() const { return MaxRetries_; }
+  ir::StringRef getEndpoint() const { return Endpoint_; }
+  ir::StringRef getBucket() const { return Bucket_; }
 };
 
-}
+} // namespace cache
+} // namespace blocktype
+
+#endif // BLOCKTYPE_IR_IRREMOTECACHECLIENT_H
 ```
 
 #### 实现约束
 
-1. HTTPS 传输
-2. 缓存条目签名验证（防篡改）
-3. 超时和重试机制
-4. 连接失败时优雅降级（回退到本地缓存）
+1. HTTPS 传输（当前阶段为**桩实现**：lookup 返回 nullopt，store 返回 false）
+2. 缓存条目签名验证（verifySignature 桩实现：当前返回 true，预留签名验证接口）
+3. 超时和重试机制（配置接口就绪，逻辑桩实现）
+4. 连接失败时优雅降级（返回 nullopt/false，不崩溃，不抛异常）
+5. 继承 CacheStorage 接口，可被 CompilationCacheManager 的 Storage\_ 替换使用
+6. 不修改现有 IRCache.h 中的任何代码
 
 #### 验收标准
 
 ```cpp
-// V1: 远程缓存查找
-RemoteCache Cache("https://cache.example.com");
-auto Entry = Cache.lookup(Key);
-// 连接失败时返回 nullopt（不崩溃）
+// V1: 构造和配置
+cache::IRRemoteCacheClient Client("https://cache.example.com", "my-bucket");
+Client.setTimeout(3000);
+Client.setMaxRetries(5);
+assert(Client.getEndpoint() == "https://cache.example.com");
+assert(Client.getBucket() == "my-bucket");
+assert(Client.getTimeout() == 3000);
+assert(Client.getMaxRetries() == 5);
 
-// V2: 签名验证
-CacheEntry TamperedEntry;
-assert(Cache.verifySignature(TamperedEntry) == false);
+// V2: 远程查找（桩实现，连接失败返回 nullopt，不崩溃）
+cache::CacheKey Key = cache::CacheKey::compute("test", cache::CacheOptions{});
+auto Entry = Client.lookup(Key);
+// 桩实现：返回 nullopt
+
+// V3: 远程存储（桩实现，返回 false，不崩溃）
+cache::CacheEntry SomeEntry;
+bool Stored = Client.store(Key, SomeEntry);
+// 桩实现：返回 false
+
+// V4: 签名验证（桩实现）
+bool Valid = Client.verifySignature(SomeEntry);
+// 桩实现：返回 true
+
+// V5: 统计信息可访问
+auto Stats = Client.getStats();
+// Stats.Hits 和 Stats.Misses 可访问（初始均为 0）
 ```
 
 
 > ⚠️ **Git 提交提醒**：本 Task 完成后，立即执行：
 > ```bash
-> git add -A && git commit -m "feat(FGH): 完成 Task F-09：RemoteCache 远程缓存接口" && git push origin HEAD
+> git add -A && git commit -m "feat(FGH): 完成 Task F-09：IRRemoteCacheClient 远程缓存客户端" && git push origin HEAD
 > ```
 
 ---
@@ -773,37 +928,120 @@ assert(isa<ir::IRIntegerType>(Ty) && cast<ir::IRIntegerType>(Ty)->getBitWidth() 
 
 ---
 
-### Task F-12：IRFuzzer delta debugging 最小化
+### Task F-12：IRFuzzer 基础框架 + Delta Debugging 最小化
+
+> **Spec 修复说明（2026-05-01）**：原 spec 依赖 D-F8（IRFuzzer 基础），但
+> `tests/fuzz/IRFuzzer.cpp` 文件不存在，D-F8 从未实现。
+> 修复方案：将 F-12 改为自包含 task，包含 IRFuzzer 基础框架（头文件 + 实现）+ delta debugging 最小化功能。
 
 #### 依赖
 
-- D-F8（IRFuzzer 基础）
+- Phase A（IRModule、IRTypeContext 等基础 IR 类型）
 
 #### 产出文件
 
 | 操作 | 文件路径 |
 |------|----------|
-| 修改 | `tests/fuzz/IRFuzzer.cpp` |
+| 新增 | `include/blocktype/IR/IRFuzzer.h` |
+| 新增 | `src/IR/IRFuzzer.cpp` |
+| 新增 | `tests/fuzz/IRFuzzer.cpp` |
+
+#### 必须实现的类型定义
+
+```cpp
+#ifndef BLOCKTYPE_IR_IRFUZZER_H
+#define BLOCKTYPE_IR_IRFUZZER_H
+
+#include <cstdint>
+#include <functional>
+#include <vector>
+
+#include "blocktype/IR/ADT.h"
+
+namespace blocktype {
+namespace ir {
+
+/// OracleFn — 判断输入是否触发目标条件（崩溃/断言失败等）
+using OracleFn = std::function<bool(ir::ArrayRef<uint8_t>)>;
+
+/// IRFuzzer — IR 模糊测试与 Delta Debugging 工具
+class IRFuzzer {
+  unsigned MaxInputSize_ = 4096;
+  unsigned Seed_ = 42;
+
+public:
+  /// 用种子输入 + oracle 做 delta debugging 最小化。
+  /// 使用经典 DD 算法（二分递归），每次尝试移除一半输入。
+  /// 返回仍触发 oracle 的最小化输入（目标 ≤ 原始 50%）。
+  /// 如果无法最小化，返回原始输入。
+  static std::vector<uint8_t> deltaDebug(ir::ArrayRef<uint8_t> TriggeringInput,
+                                          OracleFn Oracle);
+
+  /// 随机生成一个 IR 输入字节序列（用于 fuzzing 基础框架）。
+  /// 使用确定性伪随机（基于 Seed_）。
+  std::vector<uint8_t> generateRandomInput(size_t Size);
+
+  /// 对输入进行随机变异（字节级变异）。
+  /// 变异策略：翻转随机位、替换随机字节、删除随机子序列。
+  static std::vector<uint8_t> mutate(ir::ArrayRef<uint8_t> Input, unsigned Seed);
+
+  void setMaxInputSize(unsigned N) { MaxInputSize_ = N; }
+  void setSeed(unsigned S) { Seed_ = S; }
+  unsigned getMaxInputSize() const { return MaxInputSize_; }
+  unsigned getSeed() const { return Seed_; }
+};
+
+} // namespace ir
+} // namespace blocktype
+
+#endif // BLOCKTYPE_IR_IRFUZZER_H
+```
 
 #### 实现约束
 
-1. delta debugging 最小化算法
-2. 保持触发条件（崩溃/断言失败）
-3. 结果 ≤ 原始 50%
+1. **deltaDebug 算法**：经典 DD（Delta Debugging）算法 —— 二分递归，每轮尝试移除一半输入，
+   如果 oracle 仍触发则保留较短的，否则恢复。循环直到无法进一步缩小。
+2. **保持触发条件**：最小化后的输入仍必须触发 oracle（`Oracle(Minimized) == true`）
+3. **结果目标**：最小化结果 ≤ 原始输入的 50%（如果 oracle 允许）
+4. **mutate 变异策略**：基于 Seed 的确定性变异 —— 随机翻转位、替换字节、删除子序列
+5. **generateRandomInput**：使用 Seed_ 的确定性伪随机数生成，输入大小由参数 Size 决定
+6. **不依赖外部 fuzzing 库**（如 libFuzzer/AFL），纯自包含实现
 
 #### 验收标准
 
 ```cpp
-// V1: 最小化
-auto Minimized = IRFuzzer::deltaDebug(TriggeringInput, Oracle);
+// V1: delta debugging 最小化
+// 创建 100 字节全 0x42 的输入
+auto TriggeringInput = std::vector<uint8_t>(100, 0x42);
+// Oracle: 输入长度 >= 3 且前 3 字节均为 0x42 即触发
+auto Oracle = [](ir::ArrayRef<uint8_t> Input) -> bool {
+  return Input.size() >= 3
+         && Input[0] == 0x42 && Input[1] == 0x42 && Input[2] == 0x42;
+};
+auto Minimized = ir::IRFuzzer::deltaDebug(TriggeringInput, Oracle);
 assert(Minimized.size() <= TriggeringInput.size() / 2);
-assert(Oracle(Minimized) == true);  // 仍触发
+assert(Oracle(ir::ArrayRef<uint8_t>(Minimized.data(), Minimized.size())) == true);
+
+// V2: 随机输入生成
+ir::IRFuzzer Fuzzer;
+Fuzzer.setSeed(12345);
+auto RandInput = Fuzzer.generateRandomInput(64);
+assert(RandInput.size() == 64);
+// 确定性：相同 seed 生成相同输入
+Fuzzer.setSeed(12345);
+auto RandInput2 = Fuzzer.generateRandomInput(64);
+assert(RandInput == RandInput2);
+
+// V3: 变异
+auto Mutated = ir::IRFuzzer::mutate(RandInput, 999);
+assert(Mutated.size() > 0);
+// 变异后不应与原始完全相同（大概率不同）
 ```
 
 
 > ⚠️ **Git 提交提醒**：本 Task 完成后，立即执行：
 > ```bash
-> git add -A && git commit -m "feat(FGH): 完成 Task F-12：IRFuzzer delta debugging 最小化" && git push origin HEAD
+> git add -A && git commit -m "feat(FGH): 完成 Task F-12：IRFuzzer 基础框架 + Delta Debugging 最小化" && git push origin HEAD
 > ```
 
 ---
@@ -1579,7 +1817,7 @@ assert(!Component.empty());
 
 #### 依赖
 
-- F-09（RemoteCache）
+- F-09（IRRemoteCacheClient）
 
 #### 产出文件
 
@@ -1591,11 +1829,11 @@ assert(!Component.empty());
 
 ```cpp
 class DistributedCache {
-  RemoteCache& Remote;
+  cache::IRRemoteCacheClient& Remote;
   ConsistentHash Ring;
   unsigned NumNodes = 1;
 public:
-  explicit DistributedCache(RemoteCache& R);
+  explicit DistributedCache(cache::IRRemoteCacheClient& R);
   void addNode(StringRef Endpoint);
   void removeNode(StringRef Endpoint);
   optional<CacheEntry> lookup(const CacheKey& Key);
@@ -1613,7 +1851,8 @@ public:
 
 ```cpp
 // V1: 分布式查找
-DistributedCache DC(Remote);
+cache::IRRemoteCacheClient RemoteClient("https://cache0.example.com");
+DistributedCache DC(RemoteClient);
 DC.addNode("https://cache1.example.com");
 DC.addNode("https://cache2.example.com");
 auto Entry = DC.lookup(Key);
