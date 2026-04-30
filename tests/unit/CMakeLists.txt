@@ -45,6 +45,9 @@ add_subdirectory(IR)
 # Frontend 单元测试
 add_subdirectory(Frontend)
 
+# Backend 单元测试
+add_subdirectory(Backend)
+
 # D19: Performance tests
 add_executable(PerformanceTest
   PerformanceTest.cpp

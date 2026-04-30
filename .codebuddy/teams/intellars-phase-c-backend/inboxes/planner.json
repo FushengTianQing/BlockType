@@ -1,0 +1,11 @@
+[
+  {
+    "id": "shutdown-1777525957868",
+    "from": "team-lead",
+    "to": "planner",
+    "type": "shutdown_request",
+    "content": "{\"type\":\"shutdown_request\",\"request_id\":\"shutdown-1777525957868\",\"reason\":\"审查报告和优化版 task 文件已确认完毕，感谢你的工作。请关闭。\",\"from\":\"team-lead\",\"timestamp\":\"2026-04-30T05:12:37.868Z\"}",
+    "timestamp": "2026-04-30T05:12:37.868Z",
+    "read": true
+  }
+]

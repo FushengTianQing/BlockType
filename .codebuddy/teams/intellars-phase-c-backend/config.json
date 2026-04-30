@@ -1,0 +1,28 @@
+{
+  "name": "intellars-phase-c-backend",
+  "leadAgentId": "b163a1141b554befba9725ccc38ba588",
+  "workspacePath": "/Users/yuan/Documents/BlockType",
+  "createdAt": "2026-04-30T05:01:41.469Z",
+  "options": {
+    "workspacePath": "/Users/yuan/Documents/BlockType",
+    "isAutoTeam": false
+  },
+  "members": [
+    {
+      "memberId": "team-lead@intellars-phase-c-backend",
+      "name": "team-lead",
+      "role": "Team Lead - coordinates the team and interacts with the user"
+    },
+    {
+      "memberId": "dev-tester@intellars-phase-c-backend",
+      "name": "dev-tester",
+      "role": "实现Phase C后端抽象层代码"
+    },
+    {
+      "memberId": "auditor@intellars-phase-c-backend",
+      "name": "auditor",
+      "role": "审查Phase C后端抽象层代码"
+    }
+  ],
+  "isAutoTeam": false
+}

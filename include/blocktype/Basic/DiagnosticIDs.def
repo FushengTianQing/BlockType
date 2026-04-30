@@ -256,6 +256,17 @@ DIAG(err_lambda_generic_no_auto_param, Error, \
 // Implicit Conversion Diagnostics
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Backend Diagnostics
+//===----------------------------------------------------------------------===//
+
+DIAG(err_ir_to_llvm_conversion_failed, Error, \
+  "IR to LLVM conversion failed for type or value", \
+  "IR 到 LLVM 类型/值转换失败")
+DIAG(warn_ir_opcode_not_supported, Warning, \
+  "IR opcode '%0' is not supported by the backend", \
+  "IR 操作码 '%0' 不被后端支持")
+
 DIAG(err_no_user_defined_conversion, Error, \
   "no viable user-defined conversion from '%0' to '%1'", \
   "没有可行的用户定义转换从 '%0' 到 '%1'")

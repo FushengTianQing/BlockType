@@ -1,0 +1,11 @@
+[
+  {
+    "id": "msg-1777527921195-ha7fqj",
+    "from": "team-lead",
+    "to": "dev-tester",
+    "type": "message",
+    "content": "## Auditor 审查结果：REJECTED — 需要修复\n\n你的 Phase C 实现被 Auditor 打回，发现 22 个差异。请按优先级修复所有问题。\n\n### 审查报告位置\n`docs/plan/多前端后端重构方案/PhaseC-Auditor-Report.md`\n\n请先完整阅读审查报告，了解所有差异的详细描述。\n\n---\n\n### P1 严重问题（必须修复）\n\n**C.7 调试信息架构偏离（4个差异）**：\n1. 调试信息映射错误地放在 `LLVMBackend::emitIRText()` 中，应放在 `IRToLLVMConverter::convert()` 内部\n2. 未使用 `BackendOptions.DebugInfoFormat` 控制 DWARF 版本（dwarf4/dwarf5）\n3. 未从 `ir::debug::IRInstructionDebugInfo` 转换调试信息\n4. 未使用 IR 调试类型（`ir::DICompileUnit`/`ir::DIType`/`ir::DISubprogram`/`ir::DILocation`）— 这些在 Phase A-F5 中定义\n\n**C.8 VTable/RTTI 为占位实现（3个差异）**：\n1. `DynamicCast` 仅做 `BitCast`，应实现 `__dynamic_cast` 运行时调用\n2. `VtableDispatch` 仅做 `BitCast`，应实现虚表查找+间接调用\n3. `RTTITypeid` 仅做 `BitCast`，应实现 `type_info` 全局变量查找\n\n### P2 中等问题（必须修复）\n\n1. `convertInstruction` 参数类型偏差（`IRBuilderBase&` vs spec 的 `IRBuilder<>&`）\n2. 类型转换失败和未映射 Opcode 未使用 Diags 诊断机制（用 `llvm::errs()` 代替）\n3. 4个 Opcode 空实现（ExtractValue/InsertValue/AtomicRMW/AtomicCmpXchg 仅 `break;`）\n4. `optimizeLLVMModule` 为空实现，未使用 `llvm::PassBuilder`\n5. 集成测试未放在 `tests/integration/backend/` 目录\n\n### 修复要求\n\n1. 按审查报告逐项修复所有 P1 和 P2 问题\n2. P3 问题也一并修复\n3. 修复后确保所有测试仍通过\n4. 完成后发送修复报告给 team-lead（recipient: \"main\"），列出每个差异的修复方式\n\n**注意**：修复时参考对应的优化版 task 文件和 spec 中的映射规则表。",
+    "timestamp": "2026-04-30T05:45:21.195Z",
+    "read": true
+  }
+]
