@@ -37,6 +37,12 @@ add_library(blocktype-ir
   AIAutoTuner.cpp
   IRRemoteCacheClient.cpp
   IRFuzzer.cpp
+  RedGreenMarker.cpp
+  QueryCacheSerializer.cpp
+  StableDefPath.cpp
+  ProjectionQuery.cpp
+  SymbolicExecutor.cpp
+  DiagnosticCrossRef.cpp
 )
 
 target_include_directories(blocktype-ir

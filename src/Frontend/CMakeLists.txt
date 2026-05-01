@@ -21,6 +21,9 @@ add_library(blocktypeFrontend
   PluginManager.cpp
   StructuredDiagnostic.cpp
   IRDebugInfoEmitter.cpp
+  IncrementalBuildIntegration.cpp
+  CacheStatsCollector.cpp
+  CacheCleaner.cpp
 )
 
 target_include_directories(blocktypeFrontend

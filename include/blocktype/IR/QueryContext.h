@@ -99,6 +99,7 @@ public:
   void invalidateAll();
 
   DependencyGraph& getDependencyGraph() { return DepGraph; }
+  IRTypeContext& getTypeContext() const { return TypeCtx; }
   void setTargetModule(IRModule* M) { TargetModule = M; }
   IRModule* getTargetModule() const { return TargetModule; }
   size_t getCacheSize() const { return Cache.size(); }
