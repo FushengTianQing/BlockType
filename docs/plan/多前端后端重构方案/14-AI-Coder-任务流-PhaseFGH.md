@@ -1129,7 +1129,7 @@ assert(Color2 == MarkColor::Red);
 #### 依赖
 
 - F-01（QueryContext）
-- A.7（IRSerializer）
+- A.7（IRWriter/IRReader）
 
 #### 产出文件
 
@@ -1141,6 +1141,8 @@ assert(Color2 == MarkColor::Red);
 #### 必须实现的类型定义
 
 ```cpp
+namespace blocktype::ir {
+
 class QueryCacheSerializer {
   StringRef CacheDir;
 public:
@@ -1150,6 +1152,8 @@ public:
   bool isValid(StringRef ModuleName) const;
   bool invalidate(StringRef ModuleName);
 };
+
+} // namespace blocktype::ir
 ```
 
 #### 实现约束
@@ -1157,6 +1161,8 @@ public:
 1. IRFormatVersion 兼容性检查
 2. 损坏文件优雅降级（删除并重建）
 3. 缓存文件路径：`CacheDir/ModuleName.querycache`
+4. <!-- Spec 修复：明确序列化接口 --> save 内部调用 `IRWriter::writeBitcode()` 将 QueryContext 关联的缓存数据序列化为二进制格式写入磁盘
+5. <!-- Spec 修复：明确反序列化接口 --> load 内部调用 `IRReader::parseBitcode()` 从磁盘读取二进制数据并恢复缓存
 
 #### 验收标准
 
@@ -1192,25 +1198,33 @@ assert(QC2.getCacheSize() == QC.getCacheSize());
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：uint128_t→__uint128_t, optional→std::optional, const Decl*→StableDeclId 不透明句柄避免 IR→AST 反向依赖 -->
 ```cpp
+namespace blocktype::ir {
+
+/// 不透明声明标识符，避免 IR 层直接依赖 AST 的 Decl 类型。
+using StableDeclId = uint64_t;
+
 class StableDefPath {
   std::string Path;  // 如 "std::vector::push_back"
-  uint128_t StableHash;
+  __uint128_t StableHash;
 public:
   explicit StableDefPath(StringRef P);
   StringRef getPath() const { return Path; }
-  uint128_t getStableHash() const { return StableHash; }
+  __uint128_t getStableHash() const { return StableHash; }
   bool operator==(const StableDefPath& Other) const { return StableHash == Other.StableHash; }
 };
 
 class StableIdMap {
-  DenseMap<const Decl*, StableDefPath> DeclToPath;
-  DenseMap<uint128_t, const Decl*> HashToDecl;
+  DenseMap<StableDeclId, StableDefPath> IdToPath;
+  DenseMap<__uint128_t, StableDeclId> HashToId;
 public:
-  void registerDecl(const Decl* D, StringRef Path);
-  optional<StableDefPath> lookupDecl(const Decl* D) const;
-  optional<const Decl*> lookupHash(uint128_t Hash) const;
+  void registerDecl(StableDeclId Id, StringRef Path);
+  std::optional<StableDefPath> lookupById(StableDeclId Id) const;
+  std::optional<StableDeclId> lookupByHash(__uint128_t Hash) const;
 };
+
+} // namespace blocktype::ir
 ```
 
 #### 实现约束
@@ -1218,6 +1232,7 @@ public:
 1. 稳定哈希 128 位（跨编译会话一致）
 2. 路径格式：`namespace::class::method`
 3. 哈希不受源文件位置影响
+4. <!-- Spec 修复：架构说明 --> `StableDeclId` 为不透明 `uint64_t` 句柄，由 Frontend 层负责将 `Decl*` 映射为 `StableDeclId`，IR 层不直接接触 AST 类型
 
 #### 验收标准
 
@@ -1230,6 +1245,13 @@ assert(P1.getStableHash() == P2.getStableHash());
 // V2: 不同路径不同哈希
 StableDefPath P3("std::vector::pop_back");
 assert(P1.getStableHash() != P3.getStableHash());
+
+// V3: StableIdMap 注册与查找
+StableIdMap Map;
+Map.registerDecl(1, "std::vector::push_back");
+auto Found = Map.lookupById(1);
+assert(Found.has_value());
+assert(Found->getPath() == "std::vector::push_back");
 ```
 
 
@@ -1256,15 +1278,20 @@ assert(P1.getStableHash() != P3.getStableHash());
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：补充命名空间，unique_ptr→std::unique_ptr -->
 ```cpp
+namespace blocktype::ir {
+
 class ProjectionQuery {
   QueryContext& QC;
 public:
   explicit ProjectionQuery(QueryContext& Q);
-  unique_ptr<IRModule> projectFunction(const IRModule& M, StringRef FunctionName);
+  std::unique_ptr<IRModule> projectFunction(const IRModule& M, StringRef FunctionName);
   SmallVector<IRFunction*, 16> getModifiedFunctions(const IRModule& M);
   bool canReuseCompilation(const IRFunction& F);
 };
+
+} // namespace blocktype::ir
 ```
 
 #### 实现约束
@@ -1272,6 +1299,7 @@ public:
 1. 函数级粒度增量重编译
 2. 未修改函数的编译结果可复用
 3. 全局变量修改需重编译所有引用函数
+4. <!-- Spec 修复：明确 G-01 依赖用法 --> `canReuseCompilation` 内部创建 `RedGreenMarker` 实例，调用 `tryMarkGreen` 判断函数是否可复用编译结果
 
 #### 验收标准
 
@@ -1341,20 +1369,25 @@ assert(SubModule->getFunction("main") != nullptr);
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：补充命名空间，EquivalenceResult→SymbolicEquivalenceResult 避免与 IREquivalenceChecker::EquivalenceResult 冲突 -->
 ```cpp
+namespace blocktype::ir {
+
 class SymbolicExecutor {
   unsigned MaxPaths = 1000;
   unsigned TimeoutMs = 30000;
 public:
-  struct EquivalenceResult {
+  struct SymbolicEquivalenceResult {
     bool IsEquivalent;
     std::string Counterexample;
     double PathCoverage;
   };
-  EquivalenceResult checkEquivalence(const IRFunction& F1, const IRFunction& F2);
+  SymbolicEquivalenceResult checkEquivalence(const IRFunction& F1, const IRFunction& F2);
   void setMaxPaths(unsigned N) { MaxPaths = N; }
   void setTimeout(unsigned Ms) { TimeoutMs = Ms; }
 };
+
+} // namespace blocktype::ir
 ```
 
 #### 实现约束
@@ -1362,6 +1395,7 @@ public:
 1. 路径覆盖 ≥ 80%
 2. 超时保护 ≤ 30 秒/函数
 3. 不等价时生成反例
+4. <!-- Spec 修复：明确与 IREquivalenceChecker 的关系 --> 使用 `IREquivalenceChecker::isStructurallyEquivalent()` 作为快速路径（结构等价直接返回），符号执行作为深度语义验证（处理结构不等价但语义等价的情况）
 
 #### 验收标准
 
@@ -1377,6 +1411,8 @@ assert(Result2.IsEquivalent == false);
 assert(!Result2.Counterexample.empty());
 ```
 
+<!-- Spec 修复：验收标准中 Result 类型为 SymbolicEquivalenceResult -->
+
 
 > ⚠️ **Git 提交提醒**：本 Task 完成后，立即执行：
 > ```bash
@@ -1389,7 +1425,7 @@ assert(!Result2.Counterexample.empty());
 
 #### 依赖
 
-- E-F1（CompilationCacheManager）
+- E-F1（`blocktype::cache::CompilationCacheManager`）
 
 #### 产出文件
 
@@ -1400,9 +1436,11 @@ assert(!Result2.Counterexample.empty());
 
 #### 实现约束
 
+<!-- Spec 修复：注明 CompilationCacheManager 位于 blocktype::cache 命名空间（非 blocktype::ir），需 #include "blocktype/IR/IRCache.h" -->
 1. LRU 清理策略
 2. 命中率统计
 3. 最大缓存大小可配置
+4. 引用 `blocktype::cache::CompilationCacheManager` 和 `blocktype::cache::CacheStorage::Stats`
 
 #### 验收标准
 
@@ -1428,29 +1466,87 @@ assert(!Result2.Counterexample.empty());
 
 #### 依赖
 
-- B-F6（StructuredDiagEmitter）
+- B-F6（`blocktype::diag::StructuredDiagEmitter` / `blocktype::diag::StructuredDiagnostic`）
 
 #### 产出文件
 
 | 操作 | 文件路径 |
 |------|----------|
 | 新增 | `include/blocktype/IR/DiagnosticCrossRef.h` |
+| 新增 | `src/IR/DiagnosticCrossRef.cpp` |
+
+#### 必须实现的类型定义
+
+<!-- Spec 修复：补充完整类定义，命名空间用 blocktype::diag（与 IRDiagnostic.h 一致），补充 .cpp 产出 -->
+```cpp
+namespace blocktype::diag {
+
+class DiagnosticCrossRef {
+public:
+  /// 两个诊断之间的链接关系
+  struct DiagLink {
+    const StructuredDiagnostic* Source;
+    const StructuredDiagnostic* Target;
+    std::string Relation;  // 如 "caused by"、"related to"
+  };
+
+private:
+  /// 所有已注册的诊断指针（不拥有所有权）
+  SmallVector<const StructuredDiagnostic*, 32> RegisteredDiags;
+  /// 链接关系表
+  SmallVector<DiagLink, 16> Links;
+  /// 最大链深度
+  static constexpr unsigned MaxChainDepth = 5;
+
+public:
+  DiagnosticCrossRef() = default;
+
+  /// 注册一条诊断（用于跟踪所有权）
+  void registerDiag(const StructuredDiagnostic& D);
+
+  /// 添加一条链接关系：Source → Target，附带关系描述
+  void addLink(const StructuredDiagnostic& Source,
+               const StructuredDiagnostic& Target,
+               StringRef Relation);
+
+  /// 获取从指定诊断出发的交叉引用链（BFS，深度 ≤ MaxChainDepth）
+  SmallVector<DiagLink, 8> getChain(const StructuredDiagnostic& Root) const;
+
+  /// 检测是否存在循环引用
+  bool hasCycle() const;
+
+  /// 将交叉引用链序列化为 JSON
+  std::string toJSON() const;
+};
+
+} // namespace blocktype::diag
+```
 
 #### 实现约束
 
-1. 诊断链深度 ≤ 5
-2. 循环引用检测
-3. JSON 序列化
+1. 诊断链深度 ≤ 5（`MaxChainDepth`）
+2. 循环引用检测（BFS 时记录访问集合）
+3. JSON 序列化输出格式：`{ "chain": [{ "source": ..., "target": ..., "relation": ... }] }`
+4. <!-- Spec 修复：注明依赖 blocktype::diag 命名空间 --> 依赖 `blocktype::diag::StructuredDiagnostic`（定义于 `IRDiagnostic.h`）
 
 #### 验收标准
 
 ```cpp
 // V1: 交叉引用链
-DiagnosticCrossRef Ref;
+diag::DiagnosticCrossRef Ref;
+diag::StructuredDiagnostic Diag1, Diag2, Diag3;
 Ref.addLink(Diag1, Diag2, "caused by");
 Ref.addLink(Diag2, Diag3, "related to");
 auto Chain = Ref.getChain(Diag1);
 assert(Chain.size() <= 5);
+
+// V2: 循环引用检测
+assert(!Ref.hasCycle());
+
+// V3: JSON 序列化
+std::string JSON = Ref.toJSON();
+assert(!JSON.empty());
+assert(JSON.find("\"chain\"") != std::string::npos);
 ```
 
 
