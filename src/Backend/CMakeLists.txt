@@ -16,6 +16,8 @@ add_library(blocktypeBackend
   ISLEParser.cpp
   FFIRustMapper.cpp
   FFIWasmMapper.cpp
+  FFIPythonGenerator.cpp
+  FFIWasmComponent.cpp
 )
 
 target_include_directories(blocktypeBackend

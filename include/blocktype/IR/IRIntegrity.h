@@ -3,7 +3,9 @@
 
 #include <array>
 #include <cstdint>
+#include <random>
 #include <string>
+#include <utility>
 
 namespace blocktype {
 namespace ir {
@@ -61,21 +63,24 @@ struct IRIntegrityChecksum {
 };
 
 // ============================================================
-// IRSigner — IR 签名（stub）
+// IRSigner — IR 签名（Ed25519 实现）
 // ============================================================
 
 using PrivateKey = std::array<uint8_t, 32>;
 using PublicKey  = std::array<uint8_t, 32>;
 using Signature  = std::array<uint8_t, 64>;
 
-/// IR 模块签名器。A-F8 为 stub 实现，sign() 返回全零签名，
-/// verify() 返回 true。后续引入 Ed25519 后替换实现。
+/// IR 模块签名器。使用 Ed25519 签名算法，支持密钥生成、签名和验证。
+/// 签名附加到序列化输出末尾，验证在 IR 加载时执行。
 class IRSigner {
 public:
-  /// 对 IRModule 签名（stub：返回全零 Signature）
+  /// 生成 Ed25519 密钥对。
+  static std::pair<PrivateKey, PublicKey> generateKeyPair();
+
+  /// 对 IRModule 签名（Ed25519 真实实现）。
   static Signature sign(const IRModule& M, const PrivateKey& Key);
 
-  /// 验证 IRModule 签名（stub：始终返回 true）
+  /// 验证 IRModule 签名（Ed25519 真实验证）。
   static bool verify(const IRModule& M, const Signature& Sig,
                      const PublicKey& Key);
 };
