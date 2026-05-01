@@ -1574,6 +1574,9 @@ assert(JSON.find("\"chain\"") != std::string::npos);
 #### 必须实现的类型定义
 
 ```cpp
+namespace blocktype {
+namespace ir {
+
 class AIPassRecommender {
   AIAutoTuner& Tuner;
   PassSequence DefaultBaseline;
@@ -1583,6 +1586,9 @@ public:
   void setDefaultBaseline(PassSequence Seq);
   bool isRecommendationValid(const PassSequence& Seq) const;
 };
+
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
@@ -1623,7 +1629,11 @@ assert(Rec.isRecommendationValid(Seq));
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：补充命名空间 blocktype::ir -->
 ```cpp
+namespace blocktype {
+namespace ir {
+
 class RLDataCollector {
   uint64_t MaxDataSizeBytes = 1073741824;  // 1GB
   uint64_t CurrentSizeBytes = 0;
@@ -1638,6 +1648,9 @@ public:
   uint64_t getDataSize() const { return CurrentSizeBytes; }
   bool isFull() const { return CurrentSizeBytes >= MaxDataSizeBytes; }
 };
+
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
@@ -1681,6 +1694,9 @@ assert(Collector.exportData("/tmp/rl_data.json") == true);
 #### 必须实现的类型定义
 
 ```cpp
+namespace blocktype {
+namespace ir {
+
 class AIModelIntegration {
   AIAutoTuner& Tuner;
   bool ModelLoaded = false;
@@ -1691,6 +1707,9 @@ public:
   PassSequence predict(const IRStatistics& Stats);
   void fallbackToRuleEngine();
 };
+
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
@@ -1734,24 +1753,31 @@ assert(AI.loadModel("/path/to/model") == true || AI.isModelLoaded() == false);
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：补充命名空间 blocktype::frontend -->
 ```cpp
+namespace blocktype {
+namespace frontend {
+
 class FileWatcher {
   uint64_t DebounceMs = 100;
 public:
-  using Callback = std::function<void(StringRef ChangedFile)>;
-  void watch(StringRef Path, Callback OnChange);
+  using Callback = std::function<void(ir::StringRef ChangedFile)>;
+  void watch(ir::StringRef Path, Callback OnChange);
   void stop();
 };
 
 class SmartRecompiler {
-  QueryContext& QC;
-  ProjectionQuery& PQ;
+  ir::QueryContext& QC;
+  ir::ProjectionQuery& PQ;
   FileWatcher& FW;
 public:
-  SmartRecompiler(QueryContext& Q, ProjectionQuery& P, FileWatcher& F);
-  void start(StringRef SourceDir);
+  SmartRecompiler(ir::QueryContext& Q, ir::ProjectionQuery& P, FileWatcher& F);
+  void start(ir::StringRef SourceDir);
   void stop();
 };
+
+} // namespace frontend
+} // namespace blocktype
 ```
 
 #### 实现约束
@@ -1787,43 +1813,63 @@ FW.watch("/tmp/test.cpp", [&](StringRef) { Changed = true; });
 
 #### 产出文件
 
+<!-- Spec 修复：H-05 与现有 IRIntegrity.h 中 IRSigner 冲突，改为修改现有文件，升级 stub 为真实实现 -->
 | 操作 | 文件路径 |
 |------|----------|
-| 新增 | `include/blocktype/IR/IRSigner.h` |
+| 修改 | `include/blocktype/IR/IRIntegrity.h` |
 
 #### 必须实现的类型定义
 
+在 `blocktype::ir::security` 命名空间中，**升级现有 IRSigner stub**。保持现有 static 方法签名兼容，新增密钥生成：
+
 ```cpp
+namespace blocktype {
+namespace ir {
+namespace security {
+
+// 保持现有类型别名不变
+using PrivateKey = std::array<uint8_t, 32>;
+using PublicKey  = std::array<uint8_t, 32>;
+using Signature  = std::array<uint8_t, 64>;
+
+// 升级 IRSigner：从 stub 升级为 Ed25519 真实实现
 class IRSigner {
-  std::vector<uint8_t> PrivateKey;
-  std::vector<uint8_t> PublicKey;
 public:
-  static IRSigner generateKeyPair();
-  static IRSigner fromPrivateKey(StringRef Key);
-  std::vector<uint8_t> sign(const IRModule& M);
-  bool verify(const IRModule& M, ArrayRef<uint8_t> Signature);
-  StringRef getPublicKey() const;
+  /// 生成 Ed25519 密钥对（新增）
+  static std::pair<PrivateKey, PublicKey> generateKeyPair();
+
+  /// 对 IRModule 签名（升级：从全零 stub 升级为 Ed25519 真实签名）
+  static Signature sign(const IRModule& M, const PrivateKey& Key);
+
+  /// 验证 IRModule 签名（升级：从始终返回 true 升级为真实验证）
+  static bool verify(const IRModule& M, const Signature& Sig,
+                     const PublicKey& Key);
 };
+
+} // namespace security
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
 
-1. Ed25519 签名算法
-2. 签名验证在加载时执行
+1. 使用 Ed25519 签名算法（引入第三方库或内联实现）
+2. 签名验证在 IR 加载时执行
 3. 签名附加到序列化输出末尾
+4. 保持与现有 stub 接口签名完全兼容（方法签名不变，仅升级实现）
+5. 现有调用方无需修改代码
 
 #### 验收标准
 
 ```cpp
-// V1: 签名和验证
-auto Signer = IRSigner::generateKeyPair();
-auto Sig = Signer.sign(*Module);
-assert(Signer.verify(*Module, Sig) == true);
+// V1: 密钥生成 + 签名和验证
+auto [PrivKey, PubKey] = security::IRSigner::generateKeyPair();
+auto Sig = security::IRSigner::sign(*Module, PrivKey);
+assert(security::IRSigner::verify(*Module, Sig, PubKey) == true);
 
 // V2: 篡改检测
-auto Sig2 = Signer.sign(*Module);
 // 修改 Module 后
-assert(Signer.verify(*ModifiedModule, Sig2) == false);
+assert(security::IRSigner::verify(*ModifiedModule, Sig, PubKey) == false);
 ```
 
 
@@ -1844,25 +1890,34 @@ assert(Signer.verify(*ModifiedModule, Sig2) == false);
 
 | 操作 | 文件路径 |
 |------|----------|
+| 新增 | `include/blocktype/Backend/FFIPythonGenerator.h` |
 | 新增 | `src/Backend/FFIPythonGenerator.cpp` |
 
+<!-- Spec 修复：H-06 新增头文件产出，FFITypeMapper& 改为 IRTypeContext&，补充命名空间 -->
 #### 必须实现的类型定义
 
 ```cpp
+namespace blocktype {
+namespace backend {
+
 class FFIPythonGenerator {
-  FFITypeMapper& Mapper;
+  ir::IRTypeContext& Ctx;
 public:
-  explicit FFIPythonGenerator(FFITypeMapper& M);
-  std::string generateBindings(const IRModule& M);
+  explicit FFIPythonGenerator(ir::IRTypeContext& C);
+  std::string generateBindings(const ir::IRModule& M);
+  // 内部委托 ffi::FFITypeMapper::mapToExternalType(T, "Python")
   std::string mapIRTypeToPython(ir::IRType* T);
 };
+
+} // namespace backend
+} // namespace blocktype
 ```
 
 #### 验收标准
 
 ```cpp
 // V1: 生成 Python 绑定
-FFIPythonGenerator Gen(Mapper);
+FFIPythonGenerator Gen(Ctx);
 auto Code = Gen.generateBindings(*Module);
 assert(Code.find("import ctypes") != std::string::npos);
 ```
@@ -1883,9 +1938,30 @@ assert(Code.find("import ctypes") != std::string::npos);
 
 #### 产出文件
 
+<!-- Spec 修复：H-07 补写完整类定义，新增头文件产出，补充命名空间 -->
 | 操作 | 文件路径 |
 |------|----------|
+| 新增 | `include/blocktype/Backend/FFIWasmComponent.h` |
 | 新增 | `src/Backend/FFIWasmComponent.cpp` |
+
+#### 必须实现的类型定义
+
+```cpp
+namespace blocktype {
+namespace backend {
+
+class FFIWasmComponent {
+  ir::IRTypeContext& Ctx;
+public:
+  explicit FFIWasmComponent(ir::IRTypeContext& C);
+  /// 生成 WASM Component Model 绑定代码
+  /// 内部使用 FFIWasmMapper 和 ffi::CallingConvention::WASM
+  std::string generate(const ir::IRModule& M);
+};
+
+} // namespace backend
+} // namespace blocktype
+```
 
 #### 实现约束
 
@@ -1897,6 +1973,7 @@ assert(Code.find("import ctypes") != std::string::npos);
 
 ```cpp
 // V1: WASM 组件生成
+FFIWasmComponent WasmComponent(Ctx);
 auto Component = WasmComponent.generate(*Module);
 assert(!Component.empty());
 ```
@@ -1921,25 +1998,43 @@ assert(!Component.empty());
 |------|----------|
 | 新增 | `include/blocktype/IR/DistributedCache.h` |
 
+<!-- Spec 修复：H-08 ConsistentHash 改为私有嵌套类实现，optional 改为 std::optional，补充命名空间 -->
 #### 必须实现的类型定义
 
 ```cpp
+namespace blocktype {
+namespace cache {
+
 class DistributedCache {
-  cache::IRRemoteCacheClient& Remote;
-  ConsistentHash Ring;
+  IRRemoteCacheClient& Remote;
   unsigned NumNodes = 1;
+
+  /// 内部一致性哈希环（私有嵌套类，在 .cpp 中实现）
+  class ConsistentHashRing {
+    struct Node { std::string Endpoint; uint32_t Hash; };
+    SmallVector<Node, 16> Nodes;
+  public:
+    void addNode(ir::StringRef Endpoint);
+    void removeNode(ir::StringRef Endpoint);
+    std::string getNode(ir::StringRef Key) const;
+  };
+  ConsistentHashRing Ring;
+
 public:
-  explicit DistributedCache(cache::IRRemoteCacheClient& R);
-  void addNode(StringRef Endpoint);
-  void removeNode(StringRef Endpoint);
-  optional<CacheEntry> lookup(const CacheKey& Key);
+  explicit DistributedCache(IRRemoteCacheClient& R);
+  void addNode(ir::StringRef Endpoint);
+  void removeNode(ir::StringRef Endpoint);
+  std::optional<CacheEntry> lookup(const CacheKey& Key);
   bool store(const CacheKey& Key, const CacheEntry& Entry);
 };
+
+} // namespace cache
+} // namespace blocktype
 ```
 
 #### 实现约束
 
-1. 一致性哈希分片
+1. 一致性哈希分片（ConsistentHashRing 私有嵌套类实现）
 2. 缓存条目签名验证
 3. 节点故障优雅降级
 
@@ -1947,7 +2042,7 @@ public:
 
 ```cpp
 // V1: 分布式查找
-cache::IRRemoteCacheClient RemoteClient("https://cache0.example.com");
+IRRemoteCacheClient RemoteClient("https://cache0.example.com");
 DistributedCache DC(RemoteClient);
 DC.addNode("https://cache1.example.com");
 DC.addNode("https://cache2.example.com");
@@ -1977,14 +2072,19 @@ auto Entry = DC.lookup(Key);
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：H-09 添加构造函数，StringRef BaselineDir 改为 std::string，补充命名空间 -->
 ```cpp
+namespace blocktype {
+namespace ir {
+
 class PerfRegressionDetector {
   double RegressionThreshold = 0.10;  // 10%
-  StringRef BaselineDir;
+  std::string BaselineDir;
 public:
+  explicit PerfRegressionDetector(StringRef BaselineDir = ".");
   struct RegressionReport {
     bool HasRegression;
-    StringRef Metric;
+    std::string Metric;
     double ChangePercent;
   };
   RegressionReport checkCompileTime(const IRStatistics& Current);
@@ -1992,6 +2092,9 @@ public:
   void setThreshold(double T) { RegressionThreshold = T; }
   void persistBaseline(const IRStatistics& Stats, const IRModule& M);
 };
+
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
@@ -2034,9 +2137,12 @@ if (Report.ChangePercent > 0.10) {
 
 #### 必须实现的类型定义
 
+<!-- Spec 修复：H-10 移除 IREquivalenceChecker& 成员引用（该类只有 static 方法），改为在实现中直接调用 IREquivalenceChecker::check()，补充命名空间 -->
 ```cpp
+namespace blocktype {
+namespace ir {
+
 class FormalVerifier {
-  IREquivalenceChecker& EquivChecker;
   SymbolicExecutor& SymbolicExec;
 public:
   struct VerificationResult {
@@ -2045,9 +2151,13 @@ public:
     double Coverage;
     unsigned NumPassesVerified;
   };
+  /// 内部调用 IREquivalenceChecker::check(Before, After) 验证等价性
   VerificationResult verifyPassSemantics(const IRModule& Before, const IRModule& After);
   VerificationResult verifyEndToEnd(const IRModule& M);
 };
+
+} // namespace ir
+} // namespace blocktype
 ```
 
 #### 实现约束
